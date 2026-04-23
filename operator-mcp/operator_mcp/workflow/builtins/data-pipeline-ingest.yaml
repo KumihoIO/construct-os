@@ -1,0 +1,47 @@
+name: data-pipeline-ingest
+version: "1.0"
+description: "Ingest and analyze data, producing a report entity that triggers downstream processing."
+tags: [pipeline, data, chain]
+
+inputs:
+  - name: task
+    type: string
+    required: true
+    description: "What data to ingest and analyze"
+  - name: cwd
+    type: string
+    required: true
+
+steps:
+  - id: analyze
+    name: "Analyze data"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        ${inputs.task}
+
+        Produce a structured analysis report with findings, metrics, and recommendations.
+        Format your output as a clear markdown report.
+      timeout: 300
+
+  - id: publish
+    name: "Publish analysis report"
+    type: output
+    depends_on: [analyze]
+    output:
+      format: markdown
+      template: "${analyze.output}"
+      entity_name: "${inputs.task}-report"
+      entity_kind: "analysis-report"
+      entity_tag: "ready"
+      entity_metadata:
+        source_name: "${inputs.task}-report"
+        original_task: "${inputs.task}"
+
+outputs:
+  - name: report
+    source: "${analyze.output}"
+  - name: entity_kref
+    source: "${publish.output_data.entity_kref}"

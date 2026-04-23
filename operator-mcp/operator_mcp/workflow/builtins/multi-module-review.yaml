@@ -1,0 +1,92 @@
+name: multi-module-review
+version: "1.0"
+description: "Map-reduce style review across multiple modules or directories."
+tags: [review, parallel, quality]
+
+inputs:
+  - name: task
+    type: string
+    required: true
+    description: "Review task description"
+  - name: modules
+    type: list
+    required: true
+    description: "List of module paths or names to review"
+
+steps:
+  - id: scan
+    name: "Scan modules"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Scan the codebase and identify the structure of these modules:
+        ${inputs.modules}
+
+        For each module, report: file count, main patterns,
+        dependencies, and test coverage.
+        Task context: ${inputs.task}
+      timeout: 300
+
+  - id: review_modules
+    name: "Review individual modules"
+    type: agent
+    depends_on: [scan]
+    agent:
+      agent_type: claude
+      role: reviewer
+      prompt: |
+        Review each module identified in the scan:
+        ${scan.output}
+
+        Review criteria: ${inputs.task}
+
+        For each module provide:
+        - Quality assessment (0-100)
+        - Issues found
+        - Recommendations
+      timeout: 600
+
+  - id: cross_module
+    name: "Cross-module analysis"
+    type: agent
+    depends_on: [review_modules]
+    agent:
+      agent_type: claude
+      role: architect
+      prompt: |
+        Analyze cross-module concerns:
+        Individual reviews: ${review_modules.output}
+        Module scan: ${scan.output}
+
+        Check for:
+        - Interface consistency
+        - Dependency health
+        - Shared pattern compliance
+        - Integration risks
+      timeout: 300
+
+  - id: synthesis
+    name: "Final synthesis"
+    type: output
+    depends_on: [cross_module]
+    output:
+      format: markdown
+      template: |
+        ## Multi-Module Review: ${inputs.task}
+
+        ### Module-Level Findings
+        ${review_modules.output}
+
+        ### Cross-Module Analysis
+        ${cross_module.output}
+
+        ### Recommendations
+        See cross-module analysis above for prioritized action items.
+
+outputs:
+  - name: module_reviews
+    source: "${review_modules.output}"
+  - name: cross_module
+    source: "${cross_module.output}"

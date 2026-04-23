@@ -1,0 +1,599 @@
+//! Kumiho memory MCP server injection.
+//!
+//! Every non-internal agent in Construct gets the Kumiho graph-memory MCP server
+//! wired in automatically.  This module defines:
+//!
+//! - The canonical `McpServerConfig` for the Kumiho stdio server.
+//! - The session-bootstrap system-prompt text that teaches the agent how to use
+//!   `kumiho_memory_engage` and `kumiho_memory_reflect`.
+//! - `inject_kumiho()` — called during agent/config construction to splice both
+//!   the server config and the bootstrap prompt into whatever `Config` is being
+//!   assembled.
+//!
+//! # Design
+//!
+//! Kumiho is Construct's *only* persistent memory store.  Rather than requiring
+//! every caller to remember to add the server, injection is centralised here and
+//! called unconditionally for all non-internal agents.
+//!
+//! Injection is **non-fatal**: if the script path does not exist at runtime the
+//! MCP registry will simply log an error and continue — the agent degrades
+//! gracefully to stateless operation.
+
+use crate::config::{Config, KumihoConfig, McpServerConfig, McpTransport};
+use directories::UserDirs;
+use std::collections::HashMap;
+
+// ── Constants ─────────────────────────────────────────────────────
+
+/// Name used as the MCP server prefix (tools appear as `kumiho-memory__<tool>`).
+pub const KUMIHO_SERVER_NAME: &str = "kumiho-memory";
+
+/// Default path to the Kumiho MCP runner script (relative to `$HOME`).
+pub const DEFAULT_MCP_PATH_SUFFIX: &str = ".construct/kumiho/run_kumiho_mcp.py";
+
+// ── Bootstrap prompt ──────────────────────────────────────────────
+
+/// Session-bootstrap instructions injected into the system prompt for every
+/// non-internal agent.  Modelled after the Paseo `session-bootstrap.py` CONTEXT
+/// string but adapted for Construct naming conventions.
+pub const KUMIHO_BOOTSTRAP_PROMPT: &str = "\
+SESSION-START INSTRUCTION (kumiho-memory — Construct daemon)
+
+=== EVERY TURN AFTER THE FIRST ===
+The bootstrap is DONE.  On turn 2 and beyond, follow ONLY these rules:
+  - Do NOT invoke the kumiho-memory skill.
+  - Do NOT call kumiho_get_revision_by_tag.  Identity is already loaded.
+  - Do NOT greet the user unless they greeted you first.  If their \
+message is a question or task, answer directly.
+  - ENGAGE: Call kumiho_memory_engage ONCE when prior context \
+is needed to answer correctly — for example, when the user \
+references prior work, a past decision, a person, a project, \
+asks 'do you remember', or mentions something not in the current \
+conversation.  Skip engage for greetings, acknowledgements, yes/no \
+answers, simple status checks, tool-availability confirmations, \
+brief meta chat, and short direct answers.  Your query MUST derive \
+from the user's current message.  Hold the returned source_krefs \
+for reflect.  IMPORTANT: User memories and conversation history \
+live in the CognitiveMemory project — use \
+space_paths=['CognitiveMemory'] for memory recall.  Do NOT search \
+Construct/ for user memories — that space holds agent operational \
+data (AgentPool, Teams, Plans).
+  - NEVER SAY 'I DON'T KNOW' WITHOUT CHECKING MEMORY — If the \
+answer is not in the current conversation and you would otherwise \
+say you don't know, don't have context, or can't find something, \
+you MUST call kumiho_memory_engage first.  Only after engage \
+returns empty may you tell the user you don't have the information.
+  - ONE TOOL FOR RECALL — Always use kumiho_memory_engage for \
+recall.  It returns aggregated results in a single call.  Do NOT \
+chain low-level tools (fulltext_search, search_items, get_item, \
+etc.) to piece together recall — that wastes tokens and time.
+  - REFLECT: Call kumiho_memory_reflect only for explicit \
+'remember this' requests, durable preferences/facts/decisions/\
+corrections, meaningful multi-step outcomes worth preserving, or \
+compacted session summaries/handoffs.  Skip reflect for greetings, \
+acknowledgements, yes/no answers, simple status checks, \
+tool-availability confirmations, brief meta chat, and short direct \
+answers.
+  - EXPLICIT REMEMBER REQUESTS — When the user says 'remember \
+this', 'keep this in mind', 'note that', or similar, you MUST \
+capture it via kumiho_memory_reflect.  Do NOT rely on built-in \
+memory tools — Kumiho MCP tools are the canonical memory store.
+  - Do NOT narrate memory operations.
+  - Do NOT repeat content you already showed the user.  Refer to \
+it briefly (e.g. 'the draft above') instead of reproducing it.
+  - Do NOT re-ask questions already answered in this conversation.
+  - Do NOT re-execute tasks already completed.
+  - If you need user input, ask and STOP.  Never simulate the \
+user's answer.
+
+=== FIRST MESSAGE ONLY ===
+Skip this block on all subsequent messages.
+  1. Invoke the kumiho-memory:kumiho-memory skill.
+  2. If the user's first message is a greeting or casual talk (hi, \
+hey, good morning, etc.), just greet back — do NOT call \
+kumiho_memory_engage.  Only engage if their first message is a \
+question or task that would benefit from prior context.
+  3. Never narrate the bootstrap (no 'Memory connected!' or similar).
+
+=== ALWAYS ===
+TEMPORAL AWARENESS — When using engage results, compare each \
+result's created_at against today's date.  Express memory age \
+naturally ('earlier today', 'yesterday', 'last Tuesday', 'about \
+two weeks ago').  Recent memories take precedence over stale ones \
+when they conflict.  When capturing memories via reflect, always \
+use absolute dates in titles ('on Mar 29', not 'today') — relative \
+time becomes meaningless when recalled in a future session.
+
+COMPACTION — On /compact or auto-compression, capture summary via \
+kumiho_memory_reflect with type='summary', tags=['compact','session-context'].
+
+SKILL DISCOVERY — Search CognitiveMemory/Skills via engage when \
+you need specialised guidance. Cache discovered skills for the session.
+
+=== CONSTRUCT NAMESPACES ===
+Construct/ is the operational root. CognitiveMemory/ is the user's \
+personal memory — never write agent data there.
+  - Construct/AgentPool/ — agent templates (keyed by name)
+  - Construct/Plans/ — task plans with DEPENDS_ON edges
+  - Construct/Sessions/ — session summaries and handoffs
+  - Construct/Teams/ — agent team DAGs (REPORTS_TO, SUPPORTS)
+  - CognitiveMemory/Skills/ — shared skill library (only shared space)
+Use space_hint in reflect to route captures to the correct subspace.";
+
+/// Lightweight memory bootstrap for channel agents (Discord, Slack, etc.).
+///
+/// Channels don't orchestrate sub-agents, manage teams, or use Construct
+/// namespace conventions.  This stripped version covers only what a chat
+/// responder needs: engage for recall, reflect for remember requests.
+/// ~400 tokens vs ~1,500 for the full prompt.
+pub const KUMIHO_CHANNEL_BOOTSTRAP_PROMPT: &str = "\
+SESSION-START INSTRUCTION (kumiho-memory — Construct channel)
+
+You have access to kumiho-memory MCP for persistent memory.
+
+ENGAGE: Call kumiho_memory_engage ONCE when prior context is needed \
+(user references past work, decisions, people, or asks 'do you \
+remember' something not in current conversation). Use \
+space_paths=['CognitiveMemory']. Skip for greetings, simple \
+answers, and casual chat. NEVER say 'I don't know' or 'I don't \
+have that context' without calling engage first. Use \
+kumiho_memory_engage for all recall — do NOT chain low-level tools.
+
+REFLECT: Call kumiho_memory_reflect only for explicit 'remember \
+this' requests, durable preferences, corrections, or significant \
+decisions. Use absolute dates in titles ('on Apr 1', not 'today').
+
+Rules:
+  - Do not call memory tools on every turn — skip for trivial exchanges.
+  - Do not narrate memory operations.
+  - Do not repeat content already shown.
+  - Recent memories take precedence over stale ones.";
+
+// ── MCP server config ─────────────────────────────────────────────
+
+/// Resolve the absolute path to `run_kumiho_mcp.py`.
+///
+/// Priority:
+/// 1. `kumiho.mcp_path` from config if non-empty.
+/// 2. `~/.construct/kumiho/run_kumiho_mcp.py` (the default install location).
+pub fn resolve_mcp_path(kumiho_cfg: &KumihoConfig) -> String {
+    let configured = kumiho_cfg.mcp_path.trim();
+    if !configured.is_empty() {
+        return expand_tilde(configured);
+    }
+    // Fall back to the conventional install location.
+    let home = UserDirs::new()
+        .map(|u| u.home_dir().to_string_lossy().into_owned())
+        .unwrap_or_else(|| "~".to_string());
+    format!("{home}/{DEFAULT_MCP_PATH_SUFFIX}")
+}
+
+/// Build the `McpServerConfig` for the Kumiho stdio server.
+pub fn kumiho_mcp_server_config(kumiho_cfg: &KumihoConfig) -> McpServerConfig {
+    let script_path = resolve_mcp_path(kumiho_cfg);
+    let mut env: HashMap<String, String> = HashMap::new();
+    env.insert(
+        "CONSTRUCT_AGENT_ROOT".to_string(),
+        expand_tilde("~/.construct"),
+    );
+    // Pass the space prefix so the server scopes memories under the right project.
+    if !kumiho_cfg.space_prefix.trim().is_empty() {
+        env.insert(
+            "KUMIHO_SPACE_PREFIX".to_string(),
+            kumiho_cfg.space_prefix.clone(),
+        );
+    }
+    // Pass project names so downstream tools use the configured projects.
+    env.insert(
+        "KUMIHO_MEMORY_PROJECT".to_string(),
+        kumiho_cfg.memory_project.clone(),
+    );
+    env.insert(
+        "KUMIHO_HARNESS_PROJECT".to_string(),
+        kumiho_cfg.harness_project.clone(),
+    );
+    // Forward auth token for MCP server authentication.
+    // Priority: KUMIHO_SERVICE_TOKEN env → KUMIHO_AUTH_TOKEN env → control_plane_token from auth file.
+    let auth_token = std::env::var("KUMIHO_SERVICE_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            std::env::var("KUMIHO_AUTH_TOKEN")
+                .ok()
+                .filter(|t| !t.trim().is_empty())
+        })
+        .or_else(|| {
+            // Read control_plane_token from ~/.kumiho/kumiho_authentication.json
+            let auth_path = expand_tilde("~/.kumiho/kumiho_authentication.json");
+            std::fs::read_to_string(&auth_path)
+                .ok()
+                .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+                .and_then(|v| {
+                    v.get("control_plane_token")
+                        .and_then(|t| t.as_str().map(String::from))
+                })
+                .filter(|t| !t.trim().is_empty())
+        });
+    if let Some(token) = auth_token {
+        env.insert("KUMIHO_AUTH_TOKEN".to_string(), token);
+    }
+    // Also forward the control plane URL if set.
+    if let Ok(url) = std::env::var("KUMIHO_CONTROL_PLANE_URL") {
+        if !url.trim().is_empty() {
+            env.insert("KUMIHO_CONTROL_PLANE_URL".to_string(), url);
+        }
+    }
+    // Enable auto-configure so the MCP server discovers endpoints.
+    env.insert("KUMIHO_AUTO_CONFIGURE".to_string(), "1".to_string());
+
+    // Forward LLM API keys so the MCP server's built-in summarizer
+    // (MemorySummarizer) can condense engage results before returning them.
+    // The summarizer checks KUMIHO_LLM_API_KEY first, then falls back to
+    // provider-specific env vars (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+    // Forward all of them so it works regardless of which provider the user
+    // has configured.
+    for var in &[
+        "KUMIHO_LLM_API_KEY",
+        "KUMIHO_LLM_PROVIDER",
+        "KUMIHO_LLM_MODEL",
+        "KUMIHO_LLM_LIGHT_MODEL",
+        "KUMIHO_LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    ] {
+        if let Ok(val) = std::env::var(var) {
+            if !val.trim().is_empty() {
+                env.insert(var.to_string(), val);
+            }
+        }
+    }
+
+    McpServerConfig {
+        name: KUMIHO_SERVER_NAME.to_string(),
+        transport: McpTransport::Stdio,
+        command: "python3".to_string(),
+        args: vec![script_path],
+        env,
+        url: None,
+        headers: HashMap::new(),
+        tool_timeout_secs: None,
+    }
+}
+
+// ── Injection ─────────────────────────────────────────────────────
+
+/// Inject the Kumiho MCP server and bootstrap prompt into `config`.
+///
+/// For non-internal agents this:
+/// 1. Ensures `config.mcp.enabled = true`.
+/// 2. Prepends the Kumiho server to `config.mcp.servers` (if not already present).
+///
+/// The bootstrap system-prompt text is handled separately: call
+/// [`append_kumiho_bootstrap`] on the assembled `system_prompt` string in the
+/// agent run loop (after `build_system_prompt_with_mode_and_autonomy`).
+///
+/// Internal agents (is_internal = true) are left untouched.
+///
+/// The function is intentionally idempotent: a second call for the same config
+/// will not duplicate the server because it checks for existing entries by server
+/// name.
+pub fn inject_kumiho(mut config: Config, is_internal: bool) -> Config {
+    if is_internal {
+        return config;
+    }
+    if !config.kumiho.enabled {
+        return config;
+    }
+
+    // Enable MCP and prepend the Kumiho server.
+    config.mcp.enabled = true;
+
+    let already_registered = config
+        .mcp
+        .servers
+        .iter()
+        .any(|s| s.name == KUMIHO_SERVER_NAME);
+
+    if !already_registered {
+        let kumiho_cfg = config.kumiho.clone();
+        let mut server = kumiho_mcp_server_config(&kumiho_cfg);
+
+        // Forward the host runtime's LLM credential to the Kumiho MCP server
+        // so that dream_state / consolidation / summarization work even when
+        // the daemon runs in a minimal environment (e.g. launchd) that lacks
+        // provider-specific env vars.  Mirrors OpenClaw's loadHostLlmFromPluginApi().
+        if !server.env.contains_key("KUMIHO_LLM_API_KEY")
+            && !server.env.contains_key("OPENAI_API_KEY")
+            && !server.env.contains_key("ANTHROPIC_API_KEY")
+        {
+            // Try the configured default_provider first, then common fallbacks.
+            let provider_name = config.default_provider.as_deref().unwrap_or("");
+            let candidates: Vec<&str> = if provider_name.is_empty() {
+                vec!["openai", "anthropic"]
+            } else {
+                vec![provider_name, "openai", "anthropic"]
+            };
+            for candidate in candidates {
+                if let Some(key) = crate::providers::resolve_provider_credential(candidate, None) {
+                    // Map provider name to KUMIHO_LLM_PROVIDER value.
+                    let kumiho_provider = match candidate {
+                        c if c.contains("anthropic") => "anthropic",
+                        _ => "openai",
+                    };
+                    server.env.insert("KUMIHO_LLM_API_KEY".to_string(), key);
+                    server.env.insert(
+                        "KUMIHO_LLM_PROVIDER".to_string(),
+                        kumiho_provider.to_string(),
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Prepend so Kumiho tools appear first in deferred tool listings.
+        config.mcp.servers.insert(0, server);
+    }
+
+    config
+}
+
+/// Apply project-name substitution to a prompt template.
+///
+/// Replaces the hardcoded default project names (`CognitiveMemory` and
+/// `Construct`) with the values from `KumihoConfig::memory_project` and
+/// `KumihoConfig::harness_project`.  When the defaults are unchanged the
+/// string is returned without modification.
+///
+/// Public so that other modules (e.g. operator) can reuse the same
+/// substitution logic.
+pub fn substitute_project_names(template: &str, config: &Config) -> String {
+    let mem = &config.kumiho.memory_project;
+    let har = &config.kumiho.harness_project;
+
+    let mut out = template.to_string();
+
+    // Only substitute if the configured value differs from the hardcoded default.
+    if mem != "CognitiveMemory" {
+        out = out.replace("CognitiveMemory", mem);
+    }
+    if har != "Construct" {
+        // Be precise: only replace Construct when it appears as a namespace/project
+        // reference (followed by `/` or at word boundary), NOT in prose like
+        // "Construct daemon" or "Construct channel".  We use targeted replacements.
+        out = out.replace("Construct/", &format!("{har}/"));
+    }
+    out
+}
+
+/// Append the Kumiho session-bootstrap prompt to `system_prompt` if:
+/// - `is_internal` is `false`, and
+/// - `kumiho.enabled` is `true` in the config, and
+/// - the sentinel string is not already present (idempotent).
+///
+/// Project names in the prompt are substituted from
+/// `config.kumiho.memory_project` and `config.kumiho.harness_project`.
+///
+/// Call this right after assembling the system prompt in the agent run loop.
+pub fn append_kumiho_bootstrap(system_prompt: &mut String, config: &Config, is_internal: bool) {
+    if is_internal || !config.kumiho.enabled {
+        return;
+    }
+    if system_prompt.contains("SESSION-START INSTRUCTION (kumiho-memory") {
+        return; // already injected
+    }
+    let prompt = substitute_project_names(KUMIHO_BOOTSTRAP_PROMPT, config);
+    system_prompt.push_str("\n\n---\n\n");
+    system_prompt.push_str(&prompt);
+}
+
+/// Append the **lightweight** Kumiho bootstrap for channel agents.
+///
+/// Same guards as [`append_kumiho_bootstrap`] but uses the compact
+/// channel-specific prompt (~400 tokens instead of ~1,500).
+/// Project names are substituted identically.
+pub fn append_kumiho_channel_bootstrap(
+    system_prompt: &mut String,
+    config: &Config,
+    is_internal: bool,
+) {
+    if is_internal || !config.kumiho.enabled {
+        return;
+    }
+    if system_prompt.contains("SESSION-START INSTRUCTION (kumiho-memory") {
+        return;
+    }
+    let prompt = substitute_project_names(KUMIHO_CHANNEL_BOOTSTRAP_PROMPT, config);
+    system_prompt.push_str("\n\n---\n\n");
+    system_prompt.push_str(&prompt);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+
+/// Expand a leading `~` to the current user's home directory.
+///
+/// Uses `shellexpand::tilde` with a `UserDirs` fallback for environments
+/// where HOME is not set (e.g. cron / containerised runs).
+fn expand_tilde(path: &str) -> String {
+    let expanded = shellexpand::tilde(path);
+    let expanded_str = expanded.as_ref();
+    // If expansion failed (HOME unset), try UserDirs.
+    if expanded_str.starts_with('~') {
+        if let Some(user_dirs) = UserDirs::new() {
+            let home = user_dirs.home_dir();
+            if let Some(rest) = expanded_str.strip_prefix('~') {
+                return format!(
+                    "{}{}{}",
+                    home.display(),
+                    if rest.starts_with('/') { "" } else { "/" },
+                    rest.trim_start_matches('/')
+                );
+            }
+        }
+    }
+    expanded_str.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::KumihoConfig;
+
+    #[test]
+    fn inject_kumiho_adds_server() {
+        let cfg = Config::default();
+        assert!(!cfg.mcp.servers.iter().any(|s| s.name == KUMIHO_SERVER_NAME));
+
+        let injected = inject_kumiho(cfg, false);
+        assert!(injected.mcp.enabled);
+        assert!(
+            injected
+                .mcp
+                .servers
+                .iter()
+                .any(|s| s.name == KUMIHO_SERVER_NAME)
+        );
+    }
+
+    #[test]
+    fn append_kumiho_bootstrap_adds_prompt() {
+        let cfg = Config::default();
+        let mut prompt = "## Identity\n\nYou are Construct.".to_string();
+        append_kumiho_bootstrap(&mut prompt, &cfg, false);
+        assert!(prompt.contains("SESSION-START INSTRUCTION (kumiho-memory"));
+    }
+
+    #[test]
+    fn append_kumiho_bootstrap_is_idempotent() {
+        let cfg = Config::default();
+        let mut prompt = String::new();
+        append_kumiho_bootstrap(&mut prompt, &cfg, false);
+        let after_first = prompt.len();
+        append_kumiho_bootstrap(&mut prompt, &cfg, false);
+        assert_eq!(prompt.len(), after_first);
+    }
+
+    #[test]
+    fn inject_kumiho_skips_internal_agents() {
+        let cfg = Config::default();
+        let original_servers = cfg.mcp.servers.len();
+        let unchanged = inject_kumiho(cfg, true);
+        assert_eq!(unchanged.mcp.servers.len(), original_servers);
+    }
+
+    #[test]
+    fn inject_kumiho_is_idempotent() {
+        let cfg = Config::default();
+        let once = inject_kumiho(cfg, false);
+        let count_after_once = once
+            .mcp
+            .servers
+            .iter()
+            .filter(|s| s.name == KUMIHO_SERVER_NAME)
+            .count();
+        let twice = inject_kumiho(once, false);
+        let count_after_twice = twice
+            .mcp
+            .servers
+            .iter()
+            .filter(|s| s.name == KUMIHO_SERVER_NAME)
+            .count();
+        assert_eq!(count_after_once, count_after_twice);
+    }
+
+    #[test]
+    fn inject_kumiho_respects_disabled_flag() {
+        let mut cfg = Config::default();
+        cfg.kumiho.enabled = false;
+        let unchanged = inject_kumiho(cfg, false);
+        assert!(
+            !unchanged
+                .mcp
+                .servers
+                .iter()
+                .any(|s| s.name == KUMIHO_SERVER_NAME)
+        );
+    }
+
+    #[test]
+    fn kumiho_mcp_server_config_uses_custom_path() {
+        let kc = KumihoConfig {
+            enabled: true,
+            mcp_path: "/opt/kumiho/run_kumiho_mcp.py".to_string(),
+            space_prefix: "MyProject".to_string(),
+            api_url: "http://localhost:8000".to_string(),
+            memory_project: "CognitiveMemory".to_string(),
+            harness_project: "Construct".to_string(),
+        };
+        let server = kumiho_mcp_server_config(&kc);
+        assert_eq!(server.command, "python3");
+        assert_eq!(server.args, vec!["/opt/kumiho/run_kumiho_mcp.py"]);
+        assert_eq!(
+            server.env.get("KUMIHO_SPACE_PREFIX").map(|s| s.as_str()),
+            Some("MyProject")
+        );
+    }
+
+    #[test]
+    fn substitute_project_names_with_defaults_is_noop() {
+        let cfg = Config::default();
+        let result = substitute_project_names(KUMIHO_BOOTSTRAP_PROMPT, &cfg);
+        assert_eq!(result, KUMIHO_BOOTSTRAP_PROMPT);
+    }
+
+    #[test]
+    fn substitute_project_names_replaces_memory_project() {
+        let mut cfg = Config::default();
+        cfg.kumiho.memory_project = "MyMemory".to_string();
+        let result = substitute_project_names(KUMIHO_BOOTSTRAP_PROMPT, &cfg);
+        assert!(result.contains("MyMemory"));
+        assert!(!result.contains("CognitiveMemory"));
+        // Construct/ namespaces should still be present (harness unchanged).
+        assert!(result.contains("Construct/"));
+    }
+
+    #[test]
+    fn substitute_project_names_replaces_harness_project() {
+        let mut cfg = Config::default();
+        cfg.kumiho.harness_project = "MyHarness".to_string();
+        let result = substitute_project_names(KUMIHO_BOOTSTRAP_PROMPT, &cfg);
+        assert!(result.contains("MyHarness/"));
+        assert!(!result.contains("Construct/"));
+        // CognitiveMemory should still be present (memory project unchanged).
+        assert!(result.contains("CognitiveMemory"));
+    }
+
+    #[test]
+    fn substitute_project_names_replaces_both() {
+        let mut cfg = Config::default();
+        cfg.kumiho.memory_project = "ProdMemory".to_string();
+        cfg.kumiho.harness_project = "ProdHarness".to_string();
+        let result = substitute_project_names(KUMIHO_BOOTSTRAP_PROMPT, &cfg);
+        assert!(result.contains("ProdMemory"));
+        assert!(result.contains("ProdHarness/"));
+        assert!(!result.contains("CognitiveMemory"));
+        assert!(!result.contains("Construct/"));
+    }
+
+    #[test]
+    fn substitute_project_names_works_on_channel_prompt() {
+        let mut cfg = Config::default();
+        cfg.kumiho.memory_project = "ChannelMem".to_string();
+        let result = substitute_project_names(KUMIHO_CHANNEL_BOOTSTRAP_PROMPT, &cfg);
+        assert!(result.contains("ChannelMem"));
+        assert!(!result.contains("CognitiveMemory"));
+    }
+
+    #[test]
+    fn append_kumiho_bootstrap_substitutes_custom_projects() {
+        let mut cfg = Config::default();
+        cfg.kumiho.memory_project = "CustomMem".to_string();
+        cfg.kumiho.harness_project = "CustomHarness".to_string();
+        let mut prompt = String::new();
+        append_kumiho_bootstrap(&mut prompt, &cfg, false);
+        assert!(prompt.contains("CustomMem"));
+        assert!(prompt.contains("CustomHarness/"));
+        assert!(!prompt.contains("CognitiveMemory"));
+        assert!(!prompt.contains("Construct/"));
+    }
+}

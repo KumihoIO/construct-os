@@ -1,0 +1,109 @@
+name: code-review-advanced
+version: "1.0"
+description: "Multi-pass code review with security audit, quality check, and iterative fixes."
+tags: [review, quality, security]
+
+inputs:
+  - name: task
+    type: string
+    required: true
+    description: "What to implement or review"
+
+steps:
+  - id: implement
+    name: "Implement changes"
+    type: agent
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: "${inputs.task}"
+      timeout: 300
+
+  - id: parallel_review
+    name: "Parallel review passes"
+    type: parallel
+    depends_on: [implement]
+    parallel:
+      steps: [quality_review, security_review]
+      join: all
+      max_concurrency: 2
+
+  - id: quality_review
+    name: "Quality review"
+    type: agent
+    agent:
+      agent_type: claude
+      role: reviewer
+      prompt: |
+        Review code quality of the implementation:
+        Task: ${inputs.task}
+        Files: ${implement.files}
+        Output: ${implement.output}
+
+        Check for: code style, maintainability, test coverage,
+        error handling, documentation, and design patterns.
+        Rate quality 0-100.
+      timeout: 300
+
+  - id: security_review
+    name: "Security audit"
+    type: agent
+    agent:
+      agent_type: claude
+      role: reviewer
+      prompt: |
+        Security audit of the implementation:
+        Task: ${inputs.task}
+        Files: ${implement.files}
+        Output: ${implement.output}
+
+        Check OWASP Top 10, input validation, auth/authz,
+        injection risks, sensitive data exposure.
+        Rate security 0-100.
+      timeout: 300
+
+  - id: check_reviews
+    name: "Check review results"
+    type: conditional
+    depends_on: [parallel_review]
+    conditional:
+      branches:
+        - condition: "${parallel_review.output} contains APPROVED"
+          goto: summary
+        - condition: default
+          goto: fix_issues
+
+  - id: fix_issues
+    name: "Fix identified issues"
+    type: agent
+    depends_on: [parallel_review]
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: |
+        Fix issues found in reviews:
+
+        Quality review: ${quality_review.output}
+        Security review: ${security_review.output}
+
+        Address all findings, prioritizing security issues first.
+      timeout: 300
+
+  - id: summary
+    name: "Final summary"
+    type: output
+    depends_on: [parallel_review]
+    output:
+      format: markdown
+      template: |
+        ## Advanced Code Review Complete
+        **Task:** ${inputs.task}
+        **Quality:** ${quality_review.output}
+        **Security:** ${security_review.output}
+        **Files:** ${implement.files}
+
+outputs:
+  - name: quality_review
+    source: "${quality_review.output}"
+  - name: security_review
+    source: "${security_review.output}"

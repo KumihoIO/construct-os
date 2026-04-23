@@ -1,0 +1,81 @@
+name: research-only
+version: "1.0"
+description: "Two parallel researchers investigate different angles, then synthesize."
+tags: [research, parallel]
+
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: "Research topic"
+  - name: angle_a
+    type: string
+    default: "Technical implementation perspective"
+    description: "First research angle"
+  - name: angle_b
+    type: string
+    default: "Architecture and design perspective"
+    description: "Second research angle"
+
+steps:
+  - id: research_parallel
+    name: "Parallel research"
+    type: parallel
+    parallel:
+      steps: [research_alpha, research_beta]
+      join: all
+      max_concurrency: 2
+
+  - id: research_alpha
+    name: "Research angle A"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Research this topic from the following angle:
+        Topic: ${inputs.topic}
+        Angle: ${inputs.angle_a}
+
+        Be thorough and specific. Cite relevant files and patterns.
+      timeout: 300
+
+  - id: research_beta
+    name: "Research angle B"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Research this topic from the following angle:
+        Topic: ${inputs.topic}
+        Angle: ${inputs.angle_b}
+
+        Be thorough and specific. Cite relevant files and patterns.
+      timeout: 300
+
+  - id: synthesize
+    name: "Synthesize findings"
+    type: agent
+    depends_on: [research_parallel]
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Synthesize the findings from two research angles:
+
+        Angle A (${inputs.angle_a}):
+        ${research_alpha.output}
+
+        Angle B (${inputs.angle_b}):
+        ${research_beta.output}
+
+        Produce a unified analysis highlighting:
+        - Common findings
+        - Unique insights from each angle
+        - Recommendations
+      timeout: 300
+
+outputs:
+  - name: synthesis
+    source: "${synthesize.output}"

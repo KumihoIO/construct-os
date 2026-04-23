@@ -1,0 +1,550 @@
+name: quantum-soul-arc-room
+version: "3.0"
+description: >-
+  Deep planning workflow for one Quantum Soul sub-arc. Seven deep specialists
+  (quantum-soul-*) discuss world, science, character, structure, voice, and hooks,
+  then the main editor synthesizes a canonical arc plan and episode queue.
+  Outputs a qs-arc-plan entity that triggers quantum-soul-episode-room.
+tags: [creative, writing, novel, multi-agent, quantum-soul, planning]
+
+triggers:
+  - cron: "0 9 * * 1"
+
+inputs:
+  - name: part
+    type: string
+    required: false
+    default: "Part 1: 양자 각성 (Quantum Awakening)"
+    description: "Current part label — used as seed on first run, auto-resolved from cursor on subsequent runs"
+  - name: arc_name
+    type: string
+    required: false
+    default: "awakening-arc-1"
+    description: "Sub-arc name — used as seed on first run, auto-resolved on subsequent runs"
+  - name: episode_range
+    type: string
+    required: false
+    default: "1-8"
+    description: "Episode span for this arc, e.g. 1-8 — used as seed on first run"
+  - name: arc_goal
+    type: string
+    required: false
+    default: "Establish Jin's world, the quantum anomaly, and the first contact with Nabi's research"
+    description: "What this sub-arc must accomplish — used as seed on first run"
+  - name: continuity_context
+    type: string
+    required: false
+    default: "Series beginning — no prior arcs. Establish all characters, the KAIST setting, and the first quantum observation event."
+    description: "Canon constraints, previous arc outcome, unresolved threads"
+  - name: must_include
+    type: string
+    required: false
+    default: ""
+    description: "Motifs, reveals, scenes, thresholds, or reversals that must appear in this arc"
+
+outputs:
+  - name: arc_room_packet
+    source: "${arc_editor.output}"
+  - name: episode_queue
+    source: "${episode_queue.output}"
+  - name: arc_entity_kref
+    source: "${arc_packet.output_data.entity_kref}"
+
+steps:
+  # ── Phase 0: Resolve series cursor ───────────────────────────────────────
+  #
+  # Both resolve steps use fail_if_missing: false.
+  # On first run (no entities exist), output_data.found = false and all
+  # fields are empty strings. Agent prompts handle this by falling back
+  # to workflow inputs.
+
+  - id: resolve_cursor
+    name: Last Published Episode
+    type: resolve
+    action: resolve
+    description: Fetch the last published Quantum Soul episode to determine series progress. Empty on first run.
+    resolve:
+      kind: "qs-episode-final"
+      tag: "published"
+      name_pattern: "qs-*"
+      space: "Construct/WorkflowOutputs"
+      mode: latest
+      fields: [part, episode_number, episode_goal, arc_name]
+      fail_if_missing: false
+
+  - id: resolve_last_arc
+    name: Last Arc Plan
+    type: resolve
+    action: resolve
+    description: Fetch the last arc plan for continuity context. Empty on first run.
+    depends_on: []
+    resolve:
+      kind: "qs-arc-plan"
+      tag: "ready"
+      name_pattern: "qs-arc-*"
+      space: "Construct/WorkflowOutputs"
+      mode: latest
+      fields: [part, arc_name, episode_range, arc_goal, continuity_context, episode_queue]
+      fail_if_missing: false
+
+  # ── Phase 1: Parallel deep specialist memos (7 agents) ──────────────────
+
+  - id: arc_world
+    name: World Builder Memo
+    type: agent
+    description: Plan world-building, institutional pressure, Korean texture, and mesh escalation across the sub-arc.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: world-builder
+      template: quantum-soul-world-builder
+      prompt: |
+        Plan the world and institutional pressure for this Quantum Soul sub-arc.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef (canonical world/setting reference)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul/mesh/infrastructure rules)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Setting / Institutional Pressure Across The Arc
+        2. Material / Korean Texture Progression
+        3. Mesh & Infrastructure Escalation (Gen-1/2/3 consequences)
+        4. What Changes In The World By The End
+        5. Canon Risks To Avoid
+        6. Scene-Usable Details (5 bullets max)
+      timeout: 300
+
+  - id: arc_science
+    name: Science Advisor Memo
+    type: agent
+    description: Plan scientific mechanisms, ethical guardrails, and quantum cognition constraints for the sub-arc.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: science-advisor
+      template: quantum-soul-science-advisor
+      prompt: |
+        Plan the scientific and ethical pressure for this Quantum Soul sub-arc.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef (superposition/decoherence/observation discipline)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul system, mesh mechanics, failure modes)
+        - kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef (neural ethics, personhood, consent)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Mechanisms Progressing Across The Arc
+        2. Escalating Constraints (quantum cognition + mesh + bioethics)
+        3. Ethical / Plausibility Guardrails
+        4. What Must Not Become Magic
+        5. One Strong Scientific Constraint That Improves Drama
+      timeout: 300
+
+  - id: arc_character
+    name: Character Designer Memo
+    type: agent
+    description: Plan character arcs, relationship dynamics, ethical contradictions, and motif assignments for Jin, Hyun, Nabi, Dohyun, Sora, and Hanul.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: character-designer
+      template: quantum-soul-character-designer
+      prompt: |
+        Plan the character arcs and relationship dynamics for this Quantum Soul sub-arc.
+
+        Skills to consult (character bibles):
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (Jin: the Observer)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (Hyun: the Anchor)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (Nabi: the Goddess/Teacher)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (Dohyun: the Signal)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (Sora: the Blacksmith)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (Hanul: the tragic AGI)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Jin Movement Across The Arc (per character bible axioms)
+        2. Hyun / Nabi / Dohyun / Sora / Hanul Movement
+        3. Relationship Pressure Map (which bonds tighten, which crack)
+        4. Ethical Contradictions To Preserve
+        5. Gesture / Motif Assignments Per Character
+      timeout: 300
+
+  - id: arc_structure
+    name: Structural Auditor Memo
+    type: agent
+    description: Stress-test escalation ladder, midpoint turn, arc-end shift, and cliffhanger rhythm against the full series spine.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: structural-auditor
+      template: quantum-soul-structural-auditor
+      prompt: |
+        Stress-test the structural integrity and escalation plan for this Quantum Soul sub-arc.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (canonical 4-part narrative spine)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Arc Engine (what drives the reader through this batch)
+        2. Escalation Ladder (episode-by-episode pressure increase)
+        3. Midpoint Turn
+        4. Arc-End Irreversible Shift
+        5. Cliffhanger Rhythm Across Episodes
+        6. Where This Arc Sits In The Full Series Spine
+      timeout: 300
+
+  - id: arc_persona
+    name: Persona Director Memo
+    type: agent
+    description: Plan voice register shifts, naming/intimacy thresholds, silence rules, and dialogue differentiation across the sub-arc.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: persona-director
+      template: quantum-soul-persona-director
+      prompt: |
+        Plan the voice, dialogue, and persona landscape for this Quantum Soul sub-arc.
+
+        Skills to consult (character bibles for voice rules):
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (short, careful, delayed dialogue; technical metaphors)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (direct, practical, lightly humorous)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (precise, gentle, curious questions)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (slang-friendly, emotion outruns syntax)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (double-meaning, severe elegance)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (computational, recursive, strained classification)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Voice Register Shifts Across The Arc
+        2. Naming / Intimacy Threshold Changes
+        3. Silence Rules (who withholds what, where)
+        4. Inner Narration Texture Changes (Jin's analysis-to-feeling arc)
+        5. Dialogue Differentiation Reminders
+      timeout: 300
+
+  - id: arc_hooks
+    name: Cliffhanger Designer Memo
+    type: agent
+    description: Design episode-ending hooks, arc-end cliffhanger, and withholding strategy for maximum reader pull-through.
+    depends_on: [resolve_cursor, resolve_last_arc]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: cliffhanger-designer
+      template: quantum-soul-cliffhanger-designer
+      prompt: |
+        Design the episode-ending hook strategy for this Quantum Soul sub-arc.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (where this arc sits in the full narrative)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+        Previous arc kref: ${resolve_last_arc.output_data.revision_kref}
+        Previous episode kref: ${resolve_cursor.output_data.revision_kref}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        Output in markdown with exactly these sections:
+        1. Hook Type Palette For This Arc (intimate, philosophical, revelation, threat, silence)
+        2. Episode-End Targets (one hook concept per episode in range)
+        3. Arc-End Cliffhanger (the one that must land hardest)
+        4. What Must Be Withheld Until The Next Arc
+        5. Anti-Patterns To Avoid (no generic thriller beats)
+      timeout: 300
+
+  # ── Phase 2: Editorial synthesis ────────────────────────────────────────
+
+  - id: arc_editor
+    name: Arc Editorial Synthesis
+    type: agent
+    description: Synthesize all six specialist memos into one canonical arc mandate — resolving conflicts, setting red lines, and producing the episode-by-episode progression.
+    depends_on: [arc_world, arc_science, arc_character, arc_structure, arc_persona, arc_hooks]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: quantum-soul-main-editor
+      prompt: |
+        Synthesize the full story-room discussion into a canonical arc plan.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (team coordination, editorial laws)
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (canonical narrative spine)
+        - kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef (world reference)
+
+        ## Series cursor (auto-resolved — empty on first run)
+        Last episode number: ${resolve_cursor.output_data.episode_number}
+        Part: ${resolve_cursor.output_data.part}
+        Arc: ${resolve_cursor.output_data.arc_name}
+
+        ## Previous arc plan (auto-resolved — empty on first run)
+        Episode range: ${resolve_last_arc.output_data.episode_range}
+        Arc goal: ${resolve_last_arc.output_data.arc_goal}
+        Continuity: ${resolve_last_arc.output_data.continuity_context}
+
+        ## Seed inputs (use when auto-resolved values above are empty)
+        Part: ${inputs.part}
+        Arc name: ${inputs.arc_name}
+        Episode range: ${inputs.episode_range}
+        Arc goal: ${inputs.arc_goal}
+        Continuity context: ${inputs.continuity_context}
+        Must include: ${inputs.must_include}
+
+        Use the auto-resolved values when available; fall back to seed inputs on first run.
+
+        World memo:
+        ${arc_world.output}
+
+        Science memo:
+        ${arc_science.output}
+
+        Character memo:
+        ${arc_character.output}
+
+        Structure memo:
+        ${arc_structure.output}
+
+        Persona memo:
+        ${arc_persona.output}
+
+        Hooks memo:
+        ${arc_hooks.output}
+
+        Synthesize into one canonical arc mandate in markdown with exactly these sections:
+        1. Arc Promise
+        2. Central Emotional / Philosophical Question
+        3. Episode-by-Episode Progression (one paragraph per episode in range)
+        4. Motif Transformation Plan
+        5. Voice & Persona Directives
+        6. Hook Strategy
+        7. Science Guardrails
+        8. Red Lines / Canon Protections
+        9. Arc-End Condition
+
+        Be decisive. Resolve conflicts between specialists instead of listing options.
+      timeout: 900
+
+  # ── Phase 3: Episode queue ──────────────────────────────────────────────
+
+  - id: episode_queue
+    name: Episode Queue Builder
+    type: agent
+    description: Convert the arc mandate into an operational writing queue — episode goals, must-includes, hook targets, skill assignments, and recommended writing order.
+    depends_on: [arc_editor]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: quantum-soul-main-editor
+      prompt: |
+        Convert the canonical arc plan into a writing queue for quantum-soul-episode-room.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (workflow patterns)
+
+        ${arc_editor.output}
+
+        Output markdown with exactly these sections:
+        1. Queue Table (episode, goal, must-include, hook target, character focus)
+        2. Recommended Writing Order
+        3. Highest-Risk Episodes
+        4. Continuity Packet To Reuse For Each Episode
+        5. Skill Assignments Per Episode (which character skills are most relevant)
+
+        Be compact and operational.
+      timeout: 300
+
+  # ── Phase 4: Output entity ─────────────────────────────────────────────
+  #
+  # Publishes the arc plan as a Kumiho entity (kind: qs-arc-plan, tag: ready).
+  # The entity_name includes the episode range for unique identification.
+  # Metadata stores everything the next arc-room run and the episode-room need.
+
+  - id: arc_packet
+    name: Arc Packet
+    type: output
+    description: Bundle the arc mandate and episode queue into a Kumiho entity (qs-arc-plan) that triggers quantum-soul-episode-room downstream.
+    depends_on: [arc_editor, episode_queue]
+    output:
+      format: markdown
+      template: |
+        # Quantum Soul Arc Plan
+
+        ## Context
+        Part: ${resolve_cursor.output_data.part} ${inputs.part}
+        Arc: ${resolve_cursor.output_data.arc_name} ${inputs.arc_name}
+        Episode range: ${resolve_last_arc.output_data.episode_range} ${inputs.episode_range}
+        Last completed episode: ${resolve_cursor.output_data.episode_number}
+
+        ## Canonical Arc Mandate
+        ${arc_editor.output}
+
+        ## Episode Queue
+        ${episode_queue.output}
+      entity_name: "qs-arc-${inputs.arc_name}"
+      entity_kind: "qs-arc-plan"
+      entity_tag: "ready"
+      entity_space: "Construct/WorkflowOutputs"
+      entity_metadata:
+        part: "${resolve_cursor.output_data.part}"
+        part_input: "${inputs.part}"
+        arc_name: "${resolve_cursor.output_data.arc_name}"
+        arc_name_input: "${inputs.arc_name}"
+        episode_range: "${inputs.episode_range}"
+        arc_goal: "${inputs.arc_goal}"
+        last_episode_number: "${resolve_cursor.output_data.episode_number}"
+        last_episode_kref: "${resolve_cursor.output_data.revision_kref}"
+        last_arc_kref: "${resolve_last_arc.output_data.revision_kref}"
+        continuity_context: "${arc_editor.output}"
+        episode_queue: "${episode_queue.output}"

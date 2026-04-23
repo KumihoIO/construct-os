@@ -1,0 +1,20 @@
+{
+  "name": "@construct/session-manager",
+  "version": "0.1.0",
+  "description": "Construct Session Manager — TypeScript sidecar for agent SDK sessions",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@construct/operator-mcp",
+  "version": "0.2.0",
+  "description": "Construct Operator MCP Server — agent orchestration control plane",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "session-manager"
+  ],
+  "scripts": {
+    "build": "npm run build:session-manager",
+    "build:session-manager": "cd session-manager && npm run build",
+    "typecheck": "cd session-manager && npx tsc --noEmit",
+    "install:python": "pip install -e '.[all]'",
+    "install:all": "npm install && npm run build && pip install -e '.[all]'",
+    "start:operator": "python -m operator_mcp",
+    "start:session-manager": "node session-manager/dist/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

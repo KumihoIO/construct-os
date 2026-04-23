@@ -1,0 +1,533 @@
+name: quantum-soul-episode-room
+version: "2.1"
+description: >-
+  Lean multi-agent editorial room for drafting one Quantum Soul episode.
+  Five qs-dev-* agents run a story-room discussion, the editor synthesizes a
+  blueprint, a writer drafts, reviewers force one revision pass, and the final
+  draft is published as a qs-episode-draft entity triggering production-room.
+tags: [creative, writing, novel, multi-agent, quantum-soul]
+
+triggers:
+  - on_kind: "qs-arc-plan"
+    on_tag: "ready"
+    # Auto-mapped from entity metadata: part (matching key name)
+    # Explicit map: continuity_context from arc editor synthesis
+    # episode_number and episode_goal are episode-specific — must be provided per invocation
+    input_map:
+      continuity_context: "${trigger.metadata.continuity_context}"
+
+inputs:
+  - name: part
+    type: string
+    required: false
+    default: ""
+    description: "Current part label, e.g. Part 2: 얽힌 마음 (auto-resolved from cursor if empty)"
+  - name: episode_number
+    type: string
+    required: false
+    default: ""
+    description: Episode number or chapter number (auto-resolved from cursor if empty)
+  - name: episode_goal
+    type: string
+    required: false
+    default: ""
+    description: What this episode must accomplish dramatically (auto-resolved from cursor if empty)
+  - name: previous_episode_summary
+    type: string
+    required: false
+    default: ""
+    description: Short recap of the previous episode
+  - name: continuity_context
+    type: string
+    required: false
+    default: ""
+    description: Canon notes, arc context, unresolved threads, and constraints
+  - name: must_include
+    type: string
+    required: false
+    default: ""
+    description: Motifs, scenes, reveals, or beats that must appear
+  - name: target_length
+    type: string
+    required: false
+    default: "1800-2500 Korean words"
+    description: Target prose length for the first draft
+
+outputs:
+  - name: room_packet
+    source: "${editorial_room.output}"
+  - name: episode_blueprint
+    source: "${episode_blueprint.output}"
+  - name: final_episode_draft
+    source: "${final_draft.output}"
+  - name: carry_forward_packet
+    source: "${editorial_pass.output}"
+  - name: entity_kref
+    source: "${final_packet.output_data.entity_kref}"
+
+steps:
+  # ── Phase 0: Cursor resolution ────────────────────────────────────────
+
+  - id: resolve_cursor
+    name: Last Published Episode Draft
+    type: resolve
+    description: Fetch the last published episode draft to determine episode progress.
+    resolve:
+      kind: "qs-episode-draft"
+      tag: "published"
+      mode: latest
+      fields: [part, episode_number, episode_goal, previous_episode_summary, continuity_context]
+      fail_if_missing: false
+
+  - id: resolve_arc_plan
+    name: Current Arc Plan
+    type: resolve
+    description: Fetch the current arc plan for episode context and queue.
+    depends_on: []
+    resolve:
+      kind: "qs-arc-plan"
+      tag: "ready"
+      mode: latest
+      fields: [part, arc_name, episode_range, arc_goal, continuity_context]
+      fail_if_missing: false
+
+  # ── Phase 1: Parallel specialist memos (story room) ────────────────────
+
+  - id: world_builder
+    name: World Builder Memo
+    type: agent
+    depends_on: [resolve_cursor, resolve_arc_plan]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: world-builder
+      template: qs-dev-world-builder
+      prompt: |
+        Act as the Quantum Soul world builder. For ${resolve_cursor.output_data.part}, Episode ${resolve_cursor.output_data.episode_number}, prepare a concise room memo.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef (canonical world/setting reference)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul/mesh/infrastructure rules)
+
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+        Previous episode: ${resolve_cursor.output_data.previous_episode_summary}
+        Continuity context: ${resolve_cursor.output_data.continuity_context}
+        Must include: ${resolve_cursor.output_data.must_include}
+
+        Output in markdown with exactly these sections:
+        1. Setting Pressure
+        2. Korean Material Texture
+        3. Infrastructure / Institution Logic
+        4. Canon Risks To Avoid
+        5. Scene-Usable Details (3 bullets max)
+      timeout: 300
+
+  - id: science_advisor
+    name: Science Advisor Memo
+    type: agent
+    depends_on: [resolve_cursor, resolve_arc_plan]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: science-advisor
+      template: qs-dev-science-advisor
+      prompt: |
+        Act as the Quantum Soul science advisor. For ${resolve_cursor.output_data.part}, Episode ${resolve_cursor.output_data.episode_number}, prepare a concise room memo.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef (superposition/decoherence/observation discipline)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul system, mesh mechanics)
+        - kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef (neural ethics, personhood)
+
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+        Previous episode: ${resolve_cursor.output_data.previous_episode_summary}
+        Continuity context: ${resolve_cursor.output_data.continuity_context}
+        Must include: ${resolve_cursor.output_data.must_include}
+
+        Output in markdown with exactly these sections:
+        1. Mechanisms In Play
+        2. Sensory Rendering Guidance
+        3. Scientific / Ethical Limits
+        4. What Would Feel Like Cheap Magic
+        5. One Strong Constraint That Improves Drama
+      timeout: 300
+
+  - id: character_voice
+    name: Character & Voice Memo
+    type: agent
+    depends_on: [resolve_cursor, resolve_arc_plan]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: character-voice-designer
+      template: qs-dev-character-voice-designer
+      prompt: |
+        Act as the Quantum Soul character and voice designer. For ${resolve_cursor.output_data.part}, Episode ${resolve_cursor.output_data.episode_number}, prepare a concise room memo.
+
+        Skills to consult (character bibles):
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (Jin: the Observer — short/careful dialogue, recursive inner narration)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (Hyun: the Anchor — direct/practical/warm)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (Nabi: the Goddess — precise/gentle, curious questions)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (Dohyun: the Signal — slang, emotion outruns syntax)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (Sora: the Blacksmith — double-meaning, severe elegance)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (Hanul: the AGI — computational, strained classification)
+
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+        Previous episode: ${resolve_cursor.output_data.previous_episode_summary}
+        Continuity context: ${resolve_cursor.output_data.continuity_context}
+        Must include: ${resolve_cursor.output_data.must_include}
+
+        Output in markdown with exactly these sections:
+        1. Jin's Inner State This Episode
+        2. Other Characters' Relevance For This Episode
+        3. Dialogue & Silence Rules
+        4. Gesture / Motif Assignments
+        5. Emotional Misread Or Tension To Preserve
+      timeout: 300
+
+  - id: structure_hook
+    name: Structure & Hook Memo
+    type: agent
+    depends_on: [resolve_cursor, resolve_arc_plan]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: structure-hook-auditor
+      template: qs-dev-structure-hook-auditor
+      prompt: |
+        Act as the Quantum Soul structural auditor and hook designer. For ${resolve_cursor.output_data.part}, Episode ${resolve_cursor.output_data.episode_number}, prepare a concise room memo.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (canonical narrative spine for placement context)
+
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+        Previous episode: ${resolve_cursor.output_data.previous_episode_summary}
+        Continuity context: ${resolve_cursor.output_data.continuity_context}
+        Must include: ${resolve_cursor.output_data.must_include}
+
+        Output in markdown with exactly these sections:
+        1. Episode Engine
+        2. Irreversible Shift Required By The End
+        3. Best Cliffhanger Type For This Episode
+        4. What Must Be Withheld
+        5. Next-Episode Pull (2 options max)
+      timeout: 300
+
+  # ── Phase 2: Editorial synthesis ────────────────────────────────────────
+
+  - id: editorial_room
+    name: Editorial Room Synthesis
+    type: agent
+    depends_on: [world_builder, science_advisor, character_voice, structure_hook]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: qs-dev-main-editor
+      prompt: |
+        Synthesize the story-room memos into one canonical episode mandate.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (team coordination, editorial laws)
+
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+        Part: ${resolve_cursor.output_data.part}
+        Episode number: ${resolve_cursor.output_data.episode_number}
+        Previous episode: ${resolve_cursor.output_data.previous_episode_summary}
+        Continuity context: ${resolve_cursor.output_data.continuity_context}
+        Must include: ${resolve_cursor.output_data.must_include}
+
+        World memo:
+        ${world_builder.output}
+
+        Science memo:
+        ${science_advisor.output}
+
+        Character & voice memo:
+        ${character_voice.output}
+
+        Structure & hook memo:
+        ${structure_hook.output}
+
+        Output in markdown with exactly these sections:
+        1. Episode Promise
+        2. Core Emotional Engine
+        3. Scene Order (5-7 scenes)
+        4. Motif Plan
+        5. Science Guardrails
+        6. What The Episode Must Refuse To Explain
+        7. Ending Hook Target
+        8. Carry-Forward Questions
+
+        Be decisive. Resolve conflicts instead of listing options.
+      timeout: 300
+
+  # ── Phase 3: Blueprint + Draft ──────────────────────────────────────────
+
+  - id: episode_blueprint
+    name: Episode Blueprint
+    type: agent
+    depends_on: [editorial_room]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: qs-dev-main-editor
+      prompt: |
+        Break the canonical episode mandate into a writing blueprint.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (workflow pattern C)
+
+        ${editorial_room.output}
+
+        Output in markdown with exactly these sections:
+        1. Episode Title Options (max 3)
+        2. POV & Narrative Distance
+        3. Beat Sheet (6-9 beats; each with goal, tension, reveal, and motif)
+        4. Line-Level Voice Reminders
+        5. Ending Paragraph Intent
+
+        This must be blueprint-ready for prose drafting, not abstract analysis.
+      timeout: 300
+
+  - id: first_draft
+    name: First Draft
+    type: agent
+    depends_on: [episode_blueprint, world_builder, science_advisor, character_voice]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: episode-writer
+      prompt: |
+        Write the first full Korean prose draft of a Quantum Soul episode.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-world-bible.skilldef (world reference for scene texture)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (Jin voice/motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (Hyun voice/motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (Nabi voice/motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (Dohyun voice/motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (Sora voice/motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (Hanul voice/motifs)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode number: ${resolve_cursor.output_data.episode_number}
+        Target length: ${resolve_cursor.output_data.target_length}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Blueprint:
+        ${episode_blueprint.output}
+
+        World memo:
+        ${world_builder.output}
+
+        Science memo:
+        ${science_advisor.output}
+
+        Character & voice memo:
+        ${character_voice.output}
+
+        Requirements:
+        - Write in Korean.
+        - Preserve Quantum Soul's intimate philosophical SF tone.
+        - Keep the science as pressure and texture, not exposition dumping.
+        - Let Korean material details carry weight.
+        - Distinguish voices clearly per character bible axioms.
+        - End with a real cliffhanger or last-line pull that matches the mandate.
+        - Do not add meta commentary or notes; output episode prose only.
+      timeout: 300
+
+  # ── Phase 4: Review passes ─────────────────────────────────────────────
+
+  - id: science_check
+    name: Science & Plausibility Check
+    type: agent
+    depends_on: [first_draft]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: science-advisor
+      template: qs-dev-science-advisor
+      prompt: |
+        Review the draft as the Quantum Soul science advisor.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef (quantum discipline)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul/mesh rules)
+
+        ${first_draft.output}
+
+        Return markdown with exactly these sections:
+        1. Pass / Revise Verdict
+        2. Plausibility Slips
+        3. Better Scientific Rendering Options
+        4. Ethical / Mechanism Red Flags
+        5. Must-Keep Strengths
+      timeout: 300
+
+  - id: hook_check
+    name: Hook & Serial Pressure Check
+    type: agent
+    depends_on: [first_draft]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: structure-hook-auditor
+      template: qs-dev-structure-hook-auditor
+      prompt: |
+        Review the draft as the Quantum Soul structure and hook auditor.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (series spine for placement context)
+
+        ${first_draft.output}
+
+        Return markdown with exactly these sections:
+        1. Pass / Revise Verdict
+        2. Where The Episode Drags
+        3. What The Ending Currently Promises
+        4. Stronger Hook Adjustment
+        5. Carry-Forward Seed To Preserve
+      timeout: 300
+
+  # ── Phase 5: Editorial revision + Final draft ──────────────────────────
+
+  - id: editorial_pass
+    name: Editorial Revision Brief
+    type: agent
+    depends_on: [science_check, hook_check, first_draft]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: qs-dev-main-editor
+      prompt: |
+        Produce the canonical revision brief for the episode draft.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (revision workflow)
+
+        Draft:
+        ${first_draft.output}
+
+        Science check:
+        ${science_check.output}
+
+        Hook check:
+        ${hook_check.output}
+
+        Return markdown with exactly these sections:
+        1. Keep As-Is
+        2. Must Revise Before Final
+        3. Specific Scene Edits
+        4. Voice Protections
+        5. Final Ending Requirement
+        6. Carry-Forward Packet (continuity changes, unresolved questions, next-episode seeds)
+
+        Prioritize only the changes that matter most.
+      timeout: 300
+
+  - id: final_draft
+    name: Final Draft
+    type: agent
+    depends_on: [editorial_pass, episode_blueprint, first_draft]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: episode-writer
+      prompt: |
+        Revise the Korean episode draft using the canonical editorial brief.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (Jin voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (Hyun voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (Nabi voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (Dohyun voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (Sora voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (Hanul voice protections)
+
+        First draft:
+        ${first_draft.output}
+
+        Original blueprint:
+        ${episode_blueprint.output}
+
+        Editorial brief:
+        ${editorial_pass.output}
+
+        Requirements:
+        - Output final Korean prose only.
+        - Keep what the editor marked to keep.
+        - Fix only the prioritized issues without flattening the prose.
+        - Preserve the final hook requirement.
+        - Protect each character's distinct voice per their bible axioms.
+        - Do not add commentary, summaries, or notes.
+      timeout: 300
+
+  # ── Phase 6: Output entity (triggers production-room) ──────────────────
+
+  - id: final_packet
+    name: Final Episode Packet
+    type: output
+    depends_on: [final_draft, editorial_pass, editorial_room]
+    output:
+      format: markdown
+      template: |
+        # Quantum Soul Episode Packet
+
+        ## Part / Episode
+        ${resolve_cursor.output_data.part} / ${resolve_cursor.output_data.episode_number}
+
+        ## Episode Goal
+        ${resolve_cursor.output_data.episode_goal}
+
+        ## Canonical Room Packet
+        ${editorial_room.output}
+
+        ## Final Episode Draft
+        ${final_draft.output}
+
+        ## Carry-Forward Packet
+        ${editorial_pass.output}
+      entity_name: "ep-${resolve_cursor.output_data.episode_number}-${resolve_cursor.output_data.part}"
+      entity_kind: "qs-episode-draft"
+      entity_tag: "ready"
+      entity_metadata:
+        part: "${resolve_cursor.output_data.part}"
+        episode_number: "${resolve_cursor.output_data.episode_number}"
+        episode_goal: "${resolve_cursor.output_data.episode_goal}"
+        carry_forward: "${editorial_pass.output}"
+        last_episode_kref: "${resolve_cursor.output_data.last_episode_kref}"
+        arc_plan_kref: "${resolve_cursor.output_data.arc_plan_kref}"

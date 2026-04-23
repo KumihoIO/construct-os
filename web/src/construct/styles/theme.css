@@ -1,0 +1,558 @@
+@import './tokens.css';
+
+:root[data-theme='dark'],
+:root[data-theme='oled'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+.construct-shell {
+  min-height: 100vh;
+  color: var(--construct-text-primary);
+  background:
+    radial-gradient(circle at top left, var(--construct-grid-line), transparent 28%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--construct-signal-network) 18%, transparent), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
+    var(--construct-bg-base);
+}
+
+.construct-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--construct-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--construct-grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 72%);
+  opacity: 0.32;
+}
+
+.construct-shell::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(125, 255, 155, 0.025), transparent 22%, transparent 78%, rgba(114, 216, 255, 0.025)),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 4px);
+  opacity: 0.2;
+  mix-blend-mode: soft-light;
+}
+
+.construct-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--construct-border-soft);
+  border-radius: var(--construct-radius-md);
+  background: var(--construct-bg-panel);
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--construct-signal-live) 8%, transparent), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 28%);
+  box-shadow: var(--construct-shadow-panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.construct-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--construct-signal-live-soft), transparent 70%);
+  pointer-events: none;
+}
+
+.construct-panel::after {
+  content: '';
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  background: radial-gradient(circle, color-mix(in srgb, var(--construct-signal-network) 12%, transparent), transparent 72%);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.construct-panel[data-variant='secondary'] {
+  background: var(--construct-bg-surface);
+}
+
+.construct-panel[data-variant='utility'] {
+  background: color-mix(in srgb, var(--construct-bg-surface) 88%, transparent);
+  box-shadow: none;
+}
+
+.construct-title {
+  color: var(--construct-text-primary);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.construct-kicker {
+  color: var(--construct-text-faint);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.construct-metric-value {
+  color: var(--construct-text-primary);
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.construct-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid var(--construct-border-soft);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.construct-status-cluster-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  border: 1px solid var(--construct-border-soft);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--construct-bg-surface) 90%, transparent);
+  padding: 0.55rem 0.65rem;
+}
+
+.construct-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.construct-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+  color: var(--construct-text-secondary);
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.construct-sidebar-link:hover {
+  border-color: var(--construct-border-soft);
+  background: var(--construct-signal-live-soft);
+  color: var(--construct-text-primary);
+}
+
+.construct-sidebar-link[data-active='true'] {
+  border-color: var(--construct-border-strong);
+  background: linear-gradient(135deg, var(--construct-signal-live-soft), transparent 80%);
+  color: var(--construct-text-primary);
+}
+
+.construct-sidebar-link[data-collapsed='true'] {
+  justify-content: center;
+  padding: 0.7rem 0.5rem;
+  gap: 0;
+}
+
+.construct-sidebar-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--construct-border-soft);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--construct-text-secondary);
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.construct-sidebar-collapse-btn:hover {
+  border-color: var(--construct-border-strong);
+  background: var(--construct-signal-live-soft);
+  color: var(--construct-text-primary);
+}
+
+/* Wrap .construct-input in `components` layer so Tailwind utilities
+   (pl-10, pr-10, etc.) cascade above the default padding — otherwise the
+   shorthand here clobbers per-call-site overrides and icons overlap placeholder text. */
+@layer components {
+  .construct-input {
+    width: 100%;
+    border: 1px solid var(--construct-border-neutral);
+    border-radius: var(--construct-radius-sm);
+    background: var(--construct-bg-input);
+    color: var(--construct-text-primary);
+    padding: 0.75rem 0.9rem;
+  }
+
+  .construct-input::placeholder {
+    color: var(--construct-text-faint);
+  }
+}
+
+.construct-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--construct-radius-sm);
+  border: 1px solid var(--construct-border-neutral);
+  padding: 0.7rem 0.95rem;
+  color: var(--construct-text-secondary);
+  background: var(--construct-bg-surface);
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.construct-button:hover {
+  border-color: var(--construct-border-strong);
+  color: var(--construct-text-primary);
+}
+
+.construct-button[data-variant='primary'] {
+  border-color: color-mix(in srgb, var(--construct-signal-live) 40%, transparent);
+  background: linear-gradient(135deg, var(--construct-signal-live-soft), transparent 85%);
+  color: var(--construct-text-primary);
+}
+
+.construct-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+}
+
+.construct-skills-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.construct-skills-grid > :nth-child(3) { grid-column: 1 / -1; }
+@media (min-width: 1024px) {
+  .construct-skills-grid { grid-template-columns: 20rem minmax(0, 1fr); }
+  .construct-skills-grid > :nth-child(3) { grid-column: 1 / -1; }
+}
+@media (min-width: 1440px) {
+  .construct-skills-grid { grid-template-columns: 20rem minmax(0, 1.15fr) minmax(18rem, 0.85fr); }
+  .construct-skills-grid > :nth-child(3) { grid-column: auto; }
+}
+
+.construct-table thead th {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--construct-text-faint);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--construct-border-soft);
+  background: color-mix(in srgb, var(--construct-bg-panel-strong) 55%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.construct-table tbody td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--construct-border-soft);
+  vertical-align: middle;
+  color: var(--construct-text-secondary);
+}
+
+.construct-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.construct-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--construct-bg-panel-strong) 40%, transparent);
+}
+
+.construct-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--construct-border-soft);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--construct-bg-surface) 90%, transparent);
+  padding: 0.22rem;
+}
+
+.construct-theme-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--construct-text-secondary);
+  padding: 0.42rem 0.72rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.construct-theme-toggle-button[data-active='true'] {
+  background: linear-gradient(135deg, var(--construct-signal-live-soft), transparent 85%);
+  color: var(--construct-text-primary);
+}
+
+
+.construct-theme-toggle-button:hover {
+  color: var(--construct-text-primary);
+}
+
+.construct-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--construct-border-strong) transparent;
+}
+
+.construct-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.construct-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: var(--construct-border-strong);
+  border-radius: 9999px;
+}
+
+.construct-tab-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--construct-border-soft);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--construct-bg-surface) 92%, transparent);
+  padding: 0.25rem;
+}
+
+.construct-tab-button {
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--construct-text-secondary);
+  padding: 0.46rem 0.8rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.construct-tab-button[data-active='true'] {
+  background: linear-gradient(135deg, var(--construct-signal-network-soft), transparent 85%);
+  color: var(--construct-text-primary);
+}
+
+.construct-tab-button:hover {
+  color: var(--construct-text-primary);
+}
+
+.construct-modal-shell {
+  display: flex;
+  max-height: min(92vh, 72rem);
+  flex-direction: column;
+}
+
+.construct-modal-body {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.construct-graph {
+  position: relative;
+}
+
+.construct-graph-overlay {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.85rem;
+  z-index: 5;
+  max-width: min(24rem, calc(100% - 1.7rem));
+  pointer-events: none;
+}
+
+.construct-graph-overlay > * {
+  pointer-events: auto;
+}
+
+.construct-operator-card {
+  border: 1px solid var(--construct-border-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--construct-bg-panel-strong) 94%, transparent);
+  padding: 0.75rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.construct-signal-chip {
+  border-radius: 12px;
+  border: 1px solid var(--construct-border-soft);
+  background: color-mix(in srgb, var(--construct-bg-panel-strong) 92%, transparent);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.construct-kbd {
+  border: 1px solid var(--construct-border-neutral);
+  border-radius: 8px;
+  background: var(--construct-bg-elevated);
+  padding: 0.12rem 0.38rem;
+  color: var(--construct-text-faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.construct-notice {
+  animation: v2NoticeIn 160ms ease-out;
+}
+
+.construct-run-focus-banner {
+  margin-top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--construct-signal-network) 16%, var(--construct-border-soft));
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--construct-signal-live) 10%, transparent), transparent 42%),
+    color-mix(in srgb, var(--construct-bg-panel-strong) 94%, transparent);
+  padding: 0.9rem 1rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+}
+
+.construct-run-focus-banner.is-active {
+  animation: v2RunFocusPulse 420ms ease-out;
+}
+
+.construct-run-selection-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--construct-border-soft);
+  padding: 0.85rem;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.construct-run-selection-card:hover {
+  border-color: color-mix(in srgb, var(--construct-signal-network) 24%, var(--construct-border-soft));
+  background: color-mix(in srgb, var(--construct-signal-live-soft) 70%, transparent);
+}
+
+.construct-run-selection-card[data-active='true'] {
+  border-color: color-mix(in srgb, var(--construct-signal-live) 38%, var(--construct-border-strong));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--construct-signal-live) 12%, transparent), transparent 60%),
+    color-mix(in srgb, var(--construct-signal-live-soft) 78%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--construct-signal-live) 12%, transparent),
+    0 12px 24px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
+}
+
+.construct-run-selection-card[data-active='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--construct-signal-live), var(--construct-signal-network));
+}
+
+.construct-selection-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--construct-border-soft);
+  padding: 0.85rem;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.construct-selection-card:hover {
+  border-color: color-mix(in srgb, var(--construct-signal-network) 24%, var(--construct-border-soft));
+  background: color-mix(in srgb, var(--construct-bg-panel-strong) 94%, transparent);
+}
+
+.construct-selection-card[data-active='true'] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 10%, transparent),
+    0 12px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.construct-selection-card[data-active='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, currentColor, color-mix(in srgb, currentColor 58%, white));
+}
+
+.construct-selection-card[data-accent='workflow'][data-active='true'] {
+  color: var(--construct-signal-live);
+  border-color: color-mix(in srgb, var(--construct-signal-live) 38%, var(--construct-border-strong));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--construct-signal-live) 12%, transparent), transparent 60%),
+    color-mix(in srgb, var(--construct-signal-live-soft) 76%, transparent);
+}
+
+.construct-selection-card[data-accent='team'][data-active='true'] {
+  color: var(--construct-signal-network);
+  border-color: color-mix(in srgb, var(--construct-signal-network) 38%, var(--construct-border-strong));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--construct-signal-network) 12%, transparent), transparent 60%),
+    color-mix(in srgb, var(--construct-signal-network-soft) 78%, transparent);
+}
+
+@keyframes v2NoticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes v2RunFocusPulse {
+  0% {
+    transform: translateY(6px);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--construct-signal-live) 0%, transparent);
+  }
+  55% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--construct-signal-live) 10%, transparent);
+  }
+  100% {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+  }
+}
+
+@media (max-width: 768px) {
+  .construct-modal-shell {
+    max-height: 96vh;
+    padding: 1rem;
+  }
+
+  .construct-graph-overlay {
+    left: 0.65rem;
+    right: 0.65rem;
+    top: 0.65rem;
+    max-width: none;
+  }
+}

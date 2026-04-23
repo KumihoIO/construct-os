@@ -1,0 +1,81 @@
+name: refactor
+version: "1.0"
+description: "Researcher analyzes, architect plans, coder implements, reviewer approves."
+tags: [refactor, architecture, review]
+
+inputs:
+  - name: target
+    type: string
+    required: true
+    description: "What to refactor and why"
+
+steps:
+  - id: analyze
+    name: "Analyze current code"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Analyze the codebase for this refactoring:
+        ${inputs.target}
+
+        Identify: current structure, pain points, dependencies,
+        risk areas, and test coverage.
+      timeout: 300
+
+  - id: plan
+    name: "Design refactoring plan"
+    type: agent
+    depends_on: [analyze]
+    agent:
+      agent_type: claude
+      role: architect
+      prompt: |
+        Design a refactoring plan based on the analysis:
+        ${analyze.output}
+
+        Target: ${inputs.target}
+
+        Create a step-by-step plan that minimizes risk.
+        Each step should be independently verifiable.
+      timeout: 300
+
+  - id: implement
+    name: "Execute refactoring"
+    type: agent
+    depends_on: [plan]
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: |
+        Execute the refactoring plan:
+        ${plan.output}
+
+        Follow each step carefully. Run tests after each change.
+      timeout: 600
+
+  - id: review
+    name: "Review refactoring"
+    type: agent
+    depends_on: [implement]
+    agent:
+      agent_type: codex
+      role: reviewer
+      prompt: |
+        Review the refactoring:
+        Plan: ${plan.output}
+        Changes: ${implement.output}
+        Files: ${implement.files}
+
+        Verify the refactoring follows the plan, maintains behavior,
+        and doesn't introduce regressions.
+      timeout: 300
+
+outputs:
+  - name: analysis
+    source: "${analyze.output}"
+  - name: plan
+    source: "${plan.output}"
+  - name: review
+    source: "${review.output}"

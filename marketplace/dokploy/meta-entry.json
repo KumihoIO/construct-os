@@ -1,0 +1,13 @@
+{
+  "id": "construct",
+  "name": "Construct",
+  "version": "2026.4.21",
+  "description": "Fast, small, and fully autonomous AI personal assistant infrastructure. Deploy anywhere, swap anything. 100% Rust.",
+  "logo": "construct.png",
+  "links": {
+    "github": "https://github.com/KumihoIO/Construct",
+    "website": "https://construct.com/",
+    "docs": "https://github.com/KumihoIO/Construct#readme"
+  },
+  "tags": ["ai", "self-hosted"]
+}

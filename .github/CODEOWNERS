@@ -1,0 +1,32 @@
+# Default owner for all files
+* @kaveone
+
+# Important functional modules
+/src/agent/** @kaveone
+/src/providers/** @kaveone
+/src/channels/** @kaveone
+/src/tools/** @kaveone
+/src/gateway/** @kaveone
+/src/runtime/** @kaveone
+/src/memory/** @kaveone
+/Cargo.toml @kaveone
+/Cargo.lock @kaveone
+
+# Security / tests / CI-CD ownership
+/src/security/** @kaveone
+/tests/** @kaveone
+/.github/** @kaveone
+/.github/workflows/** @kaveone
+/.github/codeql/** @kaveone
+/.github/dependabot.yml @kaveone
+/SECURITY.md @kaveone
+/docs/actions-source-policy.md @kaveone
+/docs/ci-map.md @kaveone
+
+# Docs & governance
+/docs/** @kaveone
+/AGENTS.md @kaveone
+/CLAUDE.md @kaveone
+/CONTRIBUTING.md @kaveone
+/docs/contributing/pr-workflow.md @kaveone
+/docs/contributing/reviewer-playbook.md @kaveone

@@ -1,0 +1,56 @@
+# Configuration for git-cliff — conventional-commit-driven changelog.
+# Used by release workflows to generate release notes.
+
+[changelog]
+# Header rendered once per release range.
+header = ""
+# Body rendered per release.
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+{{ commit.message | split(pat="\n") | first | trim }}\
+{% if commit.breaking %} [**breaking**]{% endif %}
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+# Remove leading/trailing whitespace from the template output.
+trim = true
+# Remove empty groups.
+postprocessors = [
+  { pattern = '\(#([0-9]+)\)\s*$', replace = "" },
+]
+
+[git]
+# Parse commits according to the Conventional Commits spec.
+conventional_commits = true
+# Drop commits that don't match a conventional prefix from the changelog.
+filter_unconventional = true
+# Split commits that contain multiple conventional messages.
+split_commits = false
+# Regex-based rules that categorize each commit.
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Refactor" },
+  { message = "^docs", group = "<!-- 4 -->Documentation", skip = true },
+  { message = "^style", skip = true },
+  { message = "^test", skip = true },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^chore", group = "<!-- 5 -->Chore", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^build", skip = true },
+  { body = ".*security", group = "<!-- 6 -->Security" },
+]
+# Exclude merge commits.
+filter_commits = false
+# Skip tags matching this pattern when computing ranges.
+skip_tags = ""
+# Sort commits inside each group oldest → newest.
+sort_commits = "oldest"
+# Treat CalVer tags like v2026.4.21 or v2026.4.21-beta.1 as release tags.
+# Regex intentionally covers legacy 0.x.y tags from the pre-CalVer stream too.
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$"

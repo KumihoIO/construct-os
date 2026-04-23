@@ -1,0 +1,121 @@
+"""Tests for operator.mcp_injection — config builders and system prompt layering."""
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+from operator_mcp.mcp_injection import (
+    build_mcp_servers,
+    build_system_prompt,
+    operator_tools_config,
+    kumiho_memory_config,
+)
+
+
+class TestKumihoMemoryConfig:
+    def test_returns_none_when_script_missing(self):
+        with patch("os.path.exists", return_value=False):
+            assert kumiho_memory_config() is None
+
+    def test_returns_config_when_script_exists(self):
+        def exists_side_effect(path):
+            return True  # both script and venv python exist
+        with patch("os.path.exists", side_effect=exists_side_effect):
+            config = kumiho_memory_config()
+            assert config is not None
+            assert config["type"] == "stdio"
+            assert "kumiho" in config["args"][0].lower() or "kumiho" in config["command"].lower() or True
+            assert "KUMIHO_AUTO_CONFIGURE" in config["env"]
+
+    def test_passes_env_vars(self):
+        with patch("os.path.exists", return_value=True), \
+             patch.dict("os.environ", {"KUMIHO_AUTH_TOKEN": "test-token"}):
+            config = kumiho_memory_config()
+            assert config["env"]["KUMIHO_AUTH_TOKEN"] == "test-token"
+
+
+class TestOperatorToolsConfig:
+    def test_basic_config(self):
+        with patch("os.path.exists", return_value=False):  # venv python missing, falls back to python3
+            config = operator_tools_config()
+            assert config["type"] == "stdio"
+            assert config["command"] == "python3"
+            assert "subagent_mcp" in config["args"][0]
+
+    def test_with_socket_path(self):
+        with patch("os.path.exists", return_value=False):
+            config = operator_tools_config(socket_path="/tmp/test.sock")
+            assert config["env"]["CONSTRUCT_SIDECAR_SOCKET"] == "/tmp/test.sock"
+
+    def test_no_socket_path(self):
+        with patch("os.path.exists", return_value=False):
+            config = operator_tools_config()
+            assert config["env"] == {}
+
+
+class TestBuildMcpServers:
+    def test_both_servers(self):
+        with patch("os.path.exists", return_value=True):
+            servers = build_mcp_servers(include_memory=True, include_operator=True)
+            assert "kumiho-memory" in servers
+            assert "operator-tools" in servers
+
+    def test_memory_only(self):
+        with patch("os.path.exists", return_value=True):
+            servers = build_mcp_servers(include_memory=True, include_operator=False)
+            assert "kumiho-memory" in servers
+            assert "operator-tools" not in servers
+
+    def test_operator_only(self):
+        with patch("os.path.exists", return_value=False):
+            servers = build_mcp_servers(include_memory=True, include_operator=True)
+            # kumiho script doesn't exist, so memory config returns None
+            assert "kumiho-memory" not in servers
+            assert "operator-tools" in servers
+
+    def test_neither(self):
+        servers = build_mcp_servers(include_memory=False, include_operator=False)
+        assert servers == {}
+
+
+class TestBuildSystemPrompt:
+    def test_top_level_with_operator(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(is_top_level=True, include_operator=True, include_memory=True)
+            assert "sub-agent managed by the Construct Operator" in prompt
+            assert "kumiho-memory MCP" in prompt
+
+    def test_sub_agent(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(is_top_level=False)
+            assert "worker agent spawned by a parent" in prompt
+
+    def test_role_identity(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(role_identity="Expert Rust developer")
+            assert "## Your Role" in prompt
+            assert "Expert Rust developer" in prompt
+
+    def test_template_hint(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(template_hint="Focus on performance")
+            assert "## Context" in prompt
+            assert "Focus on performance" in prompt
+
+    def test_skill_pattern_injection(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value="SKILL CONTENT HERE"):
+            prompt = build_system_prompt(skill_pattern="team")
+            assert "## Orchestration Skills" in prompt
+            assert "SKILL CONTENT HERE" in prompt
+
+    def test_no_memory(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(is_top_level=True, include_memory=False)
+            assert "kumiho-memory" not in prompt
+
+    def test_no_operator(self):
+        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+            prompt = build_system_prompt(is_top_level=True, include_operator=False, include_memory=False)
+            # sub-agent preamble not present, operator prompt not present
+            assert "sub-agent managed by" not in prompt

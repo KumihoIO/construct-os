@@ -1,0 +1,83 @@
+name: code-review
+version: "1.0"
+description: "Coder implements, reviewer checks. Produces fix if rejected."
+tags: [review, quality]
+
+inputs:
+  - name: task
+    type: string
+    required: true
+    description: "What to implement or change"
+  - name: cwd
+    type: string
+    required: true
+    description: "Working directory"
+
+steps:
+  - id: implement
+    name: "Implement changes"
+    type: agent
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: "${inputs.task}"
+      timeout: 300
+
+  - id: review
+    name: "Review implementation"
+    type: agent
+    depends_on: [implement]
+    agent:
+      agent_type: codex
+      role: reviewer
+      prompt: |
+        Review the changes made by the coder.
+        Task: ${inputs.task}
+        Files changed: ${implement.files}
+        Coder output: ${implement.output}
+
+        Provide feedback. If changes look good, say APPROVED.
+        If issues found, say NEEDS_CHANGES with specific feedback.
+      timeout: 300
+
+  - id: check_verdict
+    name: "Check review verdict"
+    type: conditional
+    depends_on: [review]
+    conditional:
+      branches:
+        - condition: "${review.output} contains APPROVED"
+          goto: summary
+        - condition: default
+          goto: fix
+
+  - id: fix
+    name: "Fix review issues"
+    type: agent
+    depends_on: [review]
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: |
+        The reviewer found issues. Fix them.
+        Original task: ${inputs.task}
+        Review feedback: ${review.output}
+      timeout: 300
+
+  - id: summary
+    name: "Output summary"
+    type: output
+    depends_on: [review]
+    output:
+      format: markdown
+      template: |
+        ## Code Review Complete
+        **Task:** ${inputs.task}
+        **Review:** ${review.output}
+        **Files:** ${implement.files}
+
+outputs:
+  - name: review_output
+    source: "${review.output}"
+  - name: files_changed
+    source: "${implement.files}"

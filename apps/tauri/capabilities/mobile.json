@@ -1,0 +1,8 @@
+{
+  "identifier": "mobile",
+  "description": "Mobile-specific permissions for Construct",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

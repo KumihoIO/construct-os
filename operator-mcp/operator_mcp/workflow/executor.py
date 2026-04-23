@@ -1,0 +1,2104 @@
+"""Workflow executor — runs a validated WorkflowDef step by step.
+
+Handles:
+  - Topological ordering via depends_on
+  - Variable interpolation: ${step_id.output}, ${inputs.field}, ${loop.iteration}
+  - Parallel step execution with join strategies
+  - Goto loops with iteration guards
+  - Checkpoint persistence (save/resume)
+  - Per-step retry with delay
+  - Human approval pauses
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from .._log import _log
+from ..agent_subprocess import compose_agent_prompt
+from ..failure_classification import classified_error, VALIDATION_ERROR
+from .schema import (
+    JoinStrategy,
+    StepDef,
+    StepResult,
+    StepType,
+    WorkflowDef,
+    WorkflowState,
+    WorkflowStatus,
+    AgentStepConfig,
+    QualityCheckConfig,
+    ShellStepConfig,
+    A2AStepConfig,
+    GotoStepConfig,
+    OutputStepConfig,
+    MapReduceStepConfig,
+    SupervisorStepConfig,
+    GroupChatStepConfig,
+    HandoffStepConfig,
+    ResolveStepConfig,
+    ForEachStepConfig,
+    TagStepConfig,
+    DeprecateStepConfig,
+)
+from .validator import validate_workflow
+
+# ---------------------------------------------------------------------------
+# Variable interpolation
+# ---------------------------------------------------------------------------
+
+_VAR_RE = re.compile(r"\$\{([^}]+)\}")
+
+
+def interpolate(template: str, state: WorkflowState) -> str:
+    """Replace ${...} references with values from workflow state.
+
+    Supported namespaces:
+      - ${inputs.field}          — workflow input parameters
+      - ${trigger.entity_kref}   — trigger context (event-driven launches)
+      - ${trigger.entity_name}   — trigger context fields
+      - ${step_id.output}        — step's text output
+      - ${step_id.status}        — step's status string
+      - ${step_id.output_data.k} — step's structured output field
+      - ${step_id.files}         — comma-separated files list
+      - ${loop.iteration}        — current goto iteration count
+      - ${for_each.<variable>}   — current for_each iteration value
+      - ${for_each.index}        — zero-based iteration index
+      - ${for_each.iteration}    — one-based iteration number
+      - ${for_each.total}        — total iteration count
+      - ${previous.<step>.output} — previous iteration step output
+      - ${rejection.feedback}     — human reviewer's feedback on rejection
+      - ${rejection.count}       — number of rejection loops so far
+      - ${env.VAR}               — environment variable
+      - ${run_id}                — workflow run ID
+    """
+    def _resolve(match: re.Match) -> str:
+        ref = match.group(1)
+        parts = ref.split(".", 1)
+        ns = parts[0]
+        field = parts[1] if len(parts) > 1 else ""
+
+        if ns == "inputs":
+            return str(state.inputs.get(field, ""))
+        if ns == "trigger":
+            return state.trigger_context.get(field, "")
+        if ns == "loop":
+            if field == "iteration":
+                return str(max(state.iteration_counts.values(), default=0))
+            return ""
+        if ns == "for_each":
+            # for_each context is injected into inputs by _exec_for_each
+            fe_ctx = state.inputs.get("__for_each__", {})
+            if field in fe_ctx:
+                return str(fe_ctx[field])
+            return ""
+        if ns == "previous":
+            # Previous iteration step results: ${previous.step_id.output}
+            prev_map = state.inputs.get("__previous__", {})
+            prev_parts = field.split(".", 1)
+            prev_step = prev_parts[0]
+            prev_field = prev_parts[1] if len(prev_parts) > 1 else "output"
+            sr_prev = prev_map.get(prev_step)
+            if isinstance(sr_prev, dict):
+                if prev_field == "output":
+                    return str(sr_prev.get("output", ""))
+                if prev_field.startswith("output_data."):
+                    key = prev_field[len("output_data."):]
+                    return str(sr_prev.get("output_data", {}).get(key, ""))
+                return str(sr_prev.get(prev_field, ""))
+            return ""
+        if ns == "rejection":
+            # Revision loop context: ${rejection.feedback}, ${rejection.count}
+            if field == "feedback":
+                return str(state.inputs.get("__rejection_feedback__", ""))
+            if field == "count":
+                return str(state.inputs.get("__rejection_count__", 0))
+            return ""
+        if ns == "env":
+            return os.environ.get(field, "")
+        if ns == "run_id":
+            return state.run_id
+
+        # Step reference
+        sr = state.step_results.get(ns)
+        if not sr:
+            return match.group(0)  # Leave unresolved
+
+        if not field or field == "output":
+            return sr.output
+        if field == "status":
+            return sr.status
+        if field == "error":
+            return sr.error
+        if field == "files":
+            return ", ".join(sr.files_touched)
+        if field.startswith("output_data."):
+            key = field[len("output_data."):]
+            return str(sr.output_data.get(key, ""))
+        if field == "agent_id":
+            return sr.agent_id or ""
+
+        return match.group(0)
+
+    return _VAR_RE.sub(_resolve, template)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint persistence
+# ---------------------------------------------------------------------------
+
+_CHECKPOINT_DIR = os.path.expanduser("~/.construct/workflow_checkpoints")
+
+
+def _save_checkpoint(state: WorkflowState) -> str:
+    """Save workflow state to disk. Returns checkpoint path."""
+    os.makedirs(_CHECKPOINT_DIR, exist_ok=True)
+    path = os.path.join(_CHECKPOINT_DIR, f"{state.run_id}.json")
+    with open(path, "w") as f:
+        json.dump(state.model_dump(), f, indent=2, default=str)
+    state.checkpoint_path = path
+    return path
+
+
+def load_checkpoint(run_id: str) -> WorkflowState | None:
+    """Load a checkpoint from disk."""
+    path = os.path.join(_CHECKPOINT_DIR, f"{run_id}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        data = json.load(f)
+    return WorkflowState(**data)
+
+
+def _cleanup_checkpoint(run_id: str) -> None:
+    """Remove a checkpoint file."""
+    path = os.path.join(_CHECKPOINT_DIR, f"{run_id}.json")
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Condition evaluation
+# ---------------------------------------------------------------------------
+
+def _eval_condition(expr: str, state: WorkflowState) -> bool:
+    """Evaluate a simple condition expression.
+
+    Supports: == != > < >= <= contains
+    Example: "${review.status} == 'completed'"
+    """
+    if not expr or expr.strip().lower() == "default":
+        return True
+
+    resolved = interpolate(expr, state)
+
+    # Try simple comparisons
+    for op, fn in [
+        ("!=", lambda a, b: a.strip("'\"") != b.strip("'\"")),
+        ("==", lambda a, b: a.strip("'\"") == b.strip("'\"")),
+        (">=", lambda a, b: float(a) >= float(b)),
+        ("<=", lambda a, b: float(a) <= float(b)),
+        (">", lambda a, b: float(a) > float(b)),
+        ("<", lambda a, b: float(a) < float(b)),
+        ("contains", lambda a, b: b.strip("'\"") in a),
+    ]:
+        if op in resolved:
+            parts = resolved.split(op, 1)
+            if len(parts) == 2:
+                try:
+                    return fn(parts[0].strip(), parts[1].strip())
+                except (ValueError, TypeError):
+                    return False
+
+    # Truthy check
+    return bool(resolved and resolved.lower() not in ("", "false", "0", "none", "failed"))
+
+
+# ---------------------------------------------------------------------------
+# Skill pre-resolution
+# ---------------------------------------------------------------------------
+
+async def _resolve_skills_inline(skill_refs: list[str]) -> str:
+    """Pre-resolve skill krefs into inline content.
+
+    Fetches skill content from Kumiho or local files so agents get the full
+    text in their prompt instead of opaque kref URIs they'd waste turns
+    trying to fetch via MCP tools.
+    """
+    parts: list[str] = []
+    for ref in skill_refs:
+        content = None
+        if ref.startswith("kref://"):
+            # Try Kumiho resolve — returns file path on disk
+            try:
+                from ..operator_mcp import KUMIHO_SDK
+                if KUMIHO_SDK._available:
+                    file_path = await KUMIHO_SDK.resolve_kref(ref)
+                    if file_path and os.path.exists(file_path):
+                        with open(file_path, "r") as f:
+                            content = f.read()
+            except Exception as e:
+                _log(f"skill pre-resolve failed for {ref}: {e}")
+        if not content:
+            # Fallback: try as local skill name
+            from ..skill_loader import load_skill
+            name = ref.rsplit("/", 1)[-1].replace(".skilldef", "").replace(".md", "")
+            content = load_skill(name)
+        if content:
+            # Truncate very large skills to save tokens
+            if len(content) > 8000:
+                content = content[:8000] + "\n\n[... truncated for token efficiency ...]"
+            parts.append(content)
+        else:
+            _log(f"skill pre-resolve: could not resolve {ref}, skipping")
+    if parts:
+        return "\n## Reference Skills\n\n" + "\n\n---\n\n".join(parts)
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Quality scoring
+# ---------------------------------------------------------------------------
+
+async def _quality_score(
+    output: str,
+    criteria: list[str],
+    step_id: str,
+    model: str = "claude-haiku-4-5-20251001",
+    prompt_hint: str = "",
+) -> tuple[float, str]:
+    """Score agent output quality using a lightweight model.
+
+    Returns (score: 0.0-1.0, feedback: str).
+    """
+    criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "- Output is substantive and on-topic\n- Output meets the requested format\n- Output is not generic filler"
+
+    scoring_prompt = f"""Score the following agent output on a scale of 0.0 to 1.0.
+
+Criteria to evaluate:
+{criteria_text}
+
+Original task hint (first 500 chars of prompt):
+{prompt_hint}
+
+Agent output to score:
+{output[:8000]}
+
+Respond with ONLY a JSON object:
+{{"score": 0.85, "feedback": "Brief explanation of score"}}"""
+
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic()
+        response = await client.messages.create(
+            model=model,
+            max_tokens=200,
+            messages=[{"role": "user", "content": scoring_prompt}],
+        )
+        text = response.content[0].text.strip()
+
+        # Strip markdown fences if present (LLMs sometimes wrap JSON)
+        import json as _json
+        if text.startswith("```"):
+            lines = text.split("\n")
+            lines = [l for l in lines if not l.startswith("```")]
+            text = "\n".join(lines).strip()
+
+        parsed = _json.loads(text)
+        score = float(parsed.get("score", 0.5))
+        feedback = str(parsed.get("feedback", ""))
+        return (max(0.0, min(1.0, score)), feedback)
+    except Exception as exc:
+        _log(f"quality_score for '{step_id}': scoring failed: {exc}")
+        return (1.0, f"Scoring unavailable: {exc}")  # Pass through on error
+
+
+# ---------------------------------------------------------------------------
+# Step executors
+# ---------------------------------------------------------------------------
+
+async def _exec_agent(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute an agent step."""
+    from ..patterns.refinement import _spawn_and_wait, _get_agent_output
+
+    cfg = step.resolve_agent_config()
+    prompt = interpolate(cfg.prompt, state)
+
+    # Pre-resolve skill krefs into inline content so agents don't waste turns
+    # trying to fetch them via MCP tools.
+    skill_context = ""
+    if step.skills:
+        skill_context = await _resolve_skills_inline(step.skills)
+
+    full_prompt = compose_agent_prompt(
+        step.id, cfg.role, skill_context, [], prompt,
+    )
+
+    # Determine MCP injection level from step config
+    include_memory = cfg.tools in ("all", "memory")
+    include_operator = cfg.tools == "all"
+
+    agent, output = await _spawn_and_wait(
+        cfg.agent_type, f"wf-{state.run_id[:8]}-{step.id}",
+        cwd, full_prompt,
+        model=cfg.model, timeout=cfg.timeout,
+        max_turns=cfg.max_turns,
+        include_memory=include_memory,
+        include_operator=include_operator,
+    )
+
+    agent_output, files = _get_agent_output(agent.id)
+    effective = agent_output or output
+
+    # Use sidecar_id as agent_id — it matches the RunLog filename and WS events.
+    # Fall back to Python-side agent.id if sidecar wasn't used.
+    effective_agent_id = getattr(agent, "_sidecar_id", "") or agent.id
+
+    # Guard: agent completed but returned empty output — treat as failure.
+    # This catches rate-limited or timed-out agents that silently produce nothing.
+    agent_succeeded = agent.status in ("completed", "idle")
+    if agent_succeeded and not effective.strip():
+        _log(f"agent step '{step.id}': agent completed but returned empty output — marking as failed")
+        agent_succeeded = False
+
+    # Persist full agent output to disk immediately.  The in-memory output
+    # can be lost on daemon restart and the Kumiho metadata only stores a
+    # 400-char preview.  Writing to disk + artifact means recovery and
+    # downstream steps can always read the full text.
+    artifact_path = ""
+    if effective.strip():
+        try:
+            art_dir = os.path.expanduser(
+                f"~/.construct/artifacts/{state.workflow_name}/{state.run_id}"
+            )
+            os.makedirs(art_dir, exist_ok=True)
+            artifact_path = os.path.join(art_dir, f"{step.id}.md")
+            with open(artifact_path, "w", encoding="utf-8") as f:
+                f.write(effective)
+        except Exception as e:
+            _log(f"agent step '{step.id}': failed to write artifact: {e}")
+            artifact_path = ""
+
+    result = StepResult(
+        step_id=step.id,
+        status="completed" if agent_succeeded else "failed",
+        output=effective[:50000],
+        agent_id=effective_agent_id,
+        agent_type=cfg.agent_type,
+        role=cfg.role,
+        action=step.action,
+        files_touched=files,
+        error=(effective[:2000] if agent.status == "error"
+               else "Agent returned empty output" if not agent_succeeded and not effective.strip()
+               else ""),
+    )
+    # Store template name for Kumiho pool cross-referencing
+    result.output_data["template_name"] = cfg.template or ""
+    result.output_data["agent_type"] = cfg.agent_type
+    result.output_data["role"] = cfg.role
+    if artifact_path:
+        result.output_data["artifact_path"] = artifact_path
+    # Store skills so they persist to Kumiho metadata for live/historical views
+    if step.skills:
+        result.output_data["skills"] = step.skills
+
+    # If the agent output contains structured data, merge keys into output_data
+    # for downstream access via ${step_id.output_data.field}.
+    # Supports two formats:
+    #   1. Entire output is JSON object → parse directly
+    #   2. Markdown with a fenced ```json block → extract and parse the block
+    stripped = effective.strip()
+    parsed_json: dict | None = None
+
+    # Format 1: entire output is a JSON object
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            obj = json.loads(stripped)
+            if isinstance(obj, dict):
+                parsed_json = obj
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Format 2: markdown with fenced ```json block (extract LAST one)
+    if parsed_json is None:
+        json_blocks = re.findall(r'```json\s*\n(.*?)\n\s*```', effective, re.DOTALL)
+        if json_blocks:
+            try:
+                obj = json.loads(json_blocks[-1])  # Use the last JSON block
+                if isinstance(obj, dict):
+                    parsed_json = obj
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    if parsed_json is not None:
+        for k, v in parsed_json.items():
+            if k not in result.output_data:  # Don't clobber executor fields
+                result.output_data[k] = v
+        _log(f"agent step '{step.id}': extracted {len(parsed_json)} structured fields into output_data")
+
+    # Quality check: if configured, run a lightweight validator on the output.
+    # A score below threshold marks the step as failed, triggering retry.
+    qc = cfg.quality_check
+    if qc and qc.enabled and result.status == "completed" and effective.strip():
+        try:
+            score, feedback = await _quality_score(
+                output=effective,
+                criteria=qc.criteria,
+                step_id=step.id,
+                model=qc.model,
+                prompt_hint=cfg.prompt[:500] if cfg.prompt else "",
+            )
+            result.output_data["quality_score"] = score
+            result.output_data["quality_feedback"] = feedback
+            if score < qc.threshold:
+                _log(
+                    f"agent step '{step.id}': quality score {score:.2f} below "
+                    f"threshold {qc.threshold:.2f}, marking as failed for retry"
+                )
+                result.status = "failed"
+                result.error = (
+                    f"Quality score {score:.2f} below threshold {qc.threshold:.2f}. "
+                    f"Feedback: {feedback}"
+                )
+        except Exception as exc:
+            _log(f"agent step '{step.id}': quality check failed: {exc} — passing through")
+            # Don't block the pipeline if the quality check itself fails
+
+    return result
+
+
+async def _exec_shell(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a shell command step."""
+    cfg: ShellStepConfig = step.shell  # type: ignore
+    command = interpolate(cfg.command, state)
+
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=cfg.timeout,
+        )
+        output = stdout.decode("utf-8", errors="replace")[:4000]
+        err = stderr.decode("utf-8", errors="replace")[:2000]
+
+        success = proc.returncode == 0 or cfg.allow_failure
+        return StepResult(
+            step_id=step.id,
+            status="completed" if success else "failed",
+            output=output,
+            error=err if proc.returncode != 0 else "",
+            output_data={"exit_code": proc.returncode},
+        )
+    except asyncio.TimeoutError:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=f"Shell command timed out after {cfg.timeout}s",
+        )
+    except Exception as exc:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=str(exc)[:2000],
+        )
+
+
+async def _exec_output(step: StepDef, state: WorkflowState) -> StepResult:
+    """Execute an output step — render template with interpolation."""
+    cfg: OutputStepConfig = step.output  # type: ignore
+    rendered = interpolate(cfg.template, state)
+
+    result = StepResult(
+        step_id=step.id,
+        status="completed",
+        output=rendered[:6000],
+        output_data={"format": cfg.format},
+    )
+
+    # Entity production — register output as a Kumiho entity
+    if cfg.entity_name and cfg.entity_kind:
+        from operator_mcp.workflow.memory import publish_workflow_entity
+        entity_name = interpolate(cfg.entity_name, state)
+
+        # Interpolate entity_metadata values so ${inputs.*} and ${step.output} resolve
+        resolved_metadata: dict[str, str] | None = None
+        if cfg.entity_metadata:
+            resolved_metadata = {
+                k: interpolate(v, state) for k, v in cfg.entity_metadata.items()
+            }
+            # Warn if most metadata values resolved to empty — likely upstream failure
+            non_system = {k: v for k, v in resolved_metadata.items()
+                         if k not in ("source_workflow", "source_run_id", "source_step")}
+            empty_count = sum(1 for v in non_system.values() if not v.strip())
+            if non_system and empty_count > len(non_system) // 2:
+                _log(
+                    f"output step '{step.id}': WARNING — {empty_count}/{len(non_system)} "
+                    f"entity metadata fields are empty: {[k for k, v in non_system.items() if not v.strip()]}"
+                )
+
+        entity_result = await publish_workflow_entity(
+            entity_name=entity_name,
+            entity_kind=cfg.entity_kind,
+            entity_tag=cfg.entity_tag,
+            entity_space=cfg.entity_space,
+            entity_metadata=resolved_metadata,
+            content=rendered,
+            content_format=cfg.format,
+            workflow_name=state.workflow_name,
+            run_id=state.run_id,
+            step_id=step.id,
+        )
+        if entity_result:
+            result.output_data["entity_kref"] = entity_result["item_kref"]
+            result.output_data["entity_revision_kref"] = entity_result["revision_kref"]
+            result.output_data["entity_name"] = entity_name
+            result.output_data["entity_kind"] = cfg.entity_kind
+            result.output_data["entity_tag"] = cfg.entity_tag
+
+    return result
+
+
+async def _exec_resolve(step: StepDef, state: WorkflowState) -> StepResult:
+    """Resolve a Kumiho entity by kind+tag — deterministic, no LLM."""
+    cfg: ResolveStepConfig = step.resolve or ResolveStepConfig(kind="")
+    if not cfg.kind:
+        return StepResult(step_id=step.id, status="failed", error="resolve step requires 'kind'")
+
+    try:
+        from operator_mcp.workflow.memory import resolve_entity
+        entity = await resolve_entity(
+            kind=interpolate(cfg.kind, state),
+            tag=interpolate(cfg.tag, state),
+            name_pattern=interpolate(cfg.name_pattern, state) if cfg.name_pattern else "",
+            space=interpolate(cfg.space, state) if cfg.space else "",
+            mode=cfg.mode,
+        )
+    except Exception as exc:
+        if cfg.fail_if_missing:
+            return StepResult(step_id=step.id, status="failed", error=f"resolve failed: {exc}")
+        entity = None
+
+    if entity is None and cfg.fail_if_missing:
+        return StepResult(
+            step_id=step.id, status="failed",
+            error=f"No entity found for kind={cfg.kind!r} tag={cfg.tag!r}",
+        )
+
+    output_data: dict[str, Any] = {}
+    if entity is None:
+        output_data["found"] = False
+    elif cfg.mode == "latest":
+        output_data["found"] = True
+        output_data["item_kref"] = entity.get("item_kref") or entity.get("kref", "")
+        output_data["revision_kref"] = entity.get("kref", "")
+        output_data["name"] = entity.get("name", "")
+        # Extract metadata
+        meta = entity.get("metadata", {})
+        if cfg.fields:
+            for f in cfg.fields:
+                output_data[f] = meta.get(f, "")
+        else:
+            output_data["metadata"] = meta
+            # Also flatten top-level metadata keys for easy interpolation
+            for k, v in meta.items():
+                if k not in output_data:
+                    output_data[k] = v
+        # Auto-load artifact content from disk if available.
+        # Agents in max_turns=1 mode can't fetch kref content, so we
+        # inline the artifact text as output_data["artifact_content"].
+        art_path = meta.get("artifact_path", "")
+        if art_path and os.path.isfile(art_path):
+            try:
+                with open(art_path, "r", encoding="utf-8") as fh:
+                    output_data["artifact_content"] = fh.read()
+                output_data["artifact_path"] = art_path
+            except Exception as exc:
+                _log(f"resolve: failed to read artifact {art_path}: {exc}")
+    else:  # mode == "all"
+        entities = entity if isinstance(entity, list) else [entity]
+        output_data["found"] = True
+        output_data["count"] = len(entities)
+        output_data["entities"] = entities
+        # Build a formatted summary for agent prompts
+        lines = []
+        for ent in entities:
+            ent_name = ent.get("name", "unknown")
+            ent_kref = ent.get("item_kref", ent.get("kref", ""))
+            meta = ent.get("metadata", {})
+            meta_str = ", ".join(f"{k}={v}" for k, v in meta.items()
+                                if k not in ("source_workflow", "source_run_id", "source_step",
+                                             "content_preview", "content_length", "artifact_path"))
+            lines.append(f"- {ent_name} (kref: {ent_kref}) [{meta_str}]")
+        output_data["summary"] = "\n".join(lines)
+        # Also expose individual entity krefs as a comma-separated list for iteration
+        output_data["item_krefs"] = ",".join(
+            ent.get("item_kref", ent.get("kref", "")) for ent in entities
+        )
+
+    summary = f"Resolved {cfg.kind}:{cfg.tag}"
+    if output_data.get("found"):
+        summary += f" → {output_data.get('name', output_data.get('item_kref', ''))}"
+    else:
+        summary += " → not found"
+
+    return StepResult(
+        step_id=step.id,
+        status="completed",
+        output=summary,
+        output_data=output_data,
+        action=step.action or "resolve",
+    )
+
+
+async def _exec_tag(step: StepDef, state: WorkflowState) -> StepResult:
+    """Re-tag an existing Kumiho entity revision."""
+    cfg: TagStepConfig = step.tag_step or TagStepConfig(item_kref="", tag="")
+    if not cfg.item_kref:
+        return StepResult(step_id=step.id, status="failed", error="tag step requires 'item_kref'")
+    if not cfg.tag:
+        return StepResult(step_id=step.id, status="failed", error="tag step requires 'tag'")
+
+    item_kref = interpolate(cfg.item_kref, state)
+    new_tag = interpolate(cfg.tag, state)
+    old_tag = interpolate(cfg.untag, state) if cfg.untag else ""
+
+    try:
+        from operator_mcp.workflow.memory import tag_entity
+        result = await tag_entity(
+            item_kref=item_kref,
+            tag=new_tag,
+            untag=old_tag,
+        )
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=f"tag failed: {exc}")
+
+    return StepResult(
+        step_id=step.id,
+        status="completed",
+        output=f"Tagged {item_kref}: {old_tag + ' → ' if old_tag else ''}{new_tag}",
+        output_data=result,
+    )
+
+
+async def _exec_deprecate(step: StepDef, state: WorkflowState) -> StepResult:
+    """Deprecate a Kumiho item."""
+    cfg: DeprecateStepConfig = step.deprecate_step or DeprecateStepConfig(item_kref="")
+    if not cfg.item_kref:
+        return StepResult(step_id=step.id, status="failed", error="deprecate step requires 'item_kref'")
+
+    item_kref = interpolate(cfg.item_kref, state)
+    reason = interpolate(cfg.reason, state) if cfg.reason else ""
+
+    try:
+        from operator_mcp.workflow.memory import deprecate_entity
+        result = await deprecate_entity(item_kref=item_kref, reason=reason)
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=f"deprecate failed: {exc}")
+
+    return StepResult(
+        step_id=step.id,
+        status="completed",
+        output=f"Deprecated {item_kref}" + (f" ({reason})" if reason else ""),
+        output_data=result,
+    )
+
+
+async def _exec_for_each(
+    step: StepDef,
+    state: WorkflowState,
+    cwd: str,
+    wf: WorkflowDef,
+) -> StepResult:
+    """Execute a for_each step — sequential iteration over a range or list.
+
+    For each iteration:
+      1. Inject for_each context (variable, index, total) into state.inputs
+      2. Inject previous iteration results as ``__previous__``
+      3. Execute each sub-step sequentially
+      4. Store sub-step results as ``<step_id>__iter_<N>`` in workflow state
+      5. On completion, also store the latest iteration results under the
+         original step IDs so downstream steps can reference them directly
+    """
+    cfg: ForEachStepConfig = step.for_each  # type: ignore
+    if not cfg:
+        return StepResult(step_id=step.id, status="failed", error="for_each config missing")
+
+    # Resolve iteration values from range or items list.
+    # If range resolves to an empty string, fall through to items.
+    values: list[str] = []
+    range_str = ""
+    if cfg.range:
+        range_str = interpolate(cfg.range, state).strip()
+
+    if range_str:
+        # Support both ".." (1..8) and "-" (101-109) as range separators
+        sep = None
+        if ".." in range_str:
+            sep = ".."
+        elif "-" in range_str:
+            # Handle negative start: skip leading minus for detection
+            rest = range_str.lstrip().lstrip("-")
+            if "-" in rest:
+                sep = "-"
+        if sep:
+            try:
+                lo, hi = range_str.split(sep, 1) if sep == ".." else range_str.rsplit("-", 1)
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+                if lo_i > hi_i:
+                    return StepResult(
+                        step_id=step.id, status="failed",
+                        error=f"Invalid range: '{range_str}' — start ({lo_i}) > end ({hi_i}). Use ascending ranges only.",
+                    )
+                values = [str(i) for i in range(lo_i, hi_i + 1)]
+            except ValueError:
+                return StepResult(
+                    step_id=step.id, status="failed",
+                    error=f"Invalid range: '{range_str}' (expected 'N..M' or 'N-M' where N and M are integers)",
+                )
+        else:
+            # Single value (no separator found)
+            values = [range_str]
+    elif cfg.items:
+        values = [interpolate(item, state) for item in cfg.items]
+    elif cfg.range:
+        # Range expression was set but resolved to empty
+        return StepResult(
+            step_id=step.id, status="failed",
+            error=f"for_each range resolved to empty (expression: '{cfg.range}'). "
+                  f"Provide a valid range via inputs or add 'items' as fallback.",
+        )
+    else:
+        return StepResult(step_id=step.id, status="failed", error="for_each needs 'range' or 'items'")
+
+    if not values:
+        return StepResult(step_id=step.id, status="completed", output="for_each: 0 iterations (empty range)")
+
+    # Safety cap
+    if len(values) > cfg.max_iterations:
+        return StepResult(
+            step_id=step.id, status="failed",
+            error=f"for_each range has {len(values)} items but max_iterations={cfg.max_iterations}. Increase max_iterations if intentional.",
+        )
+
+    total = len(values)
+    _log(f"for_each '{step.id}': {total} iterations, sub-steps={cfg.steps}, variable={cfg.variable}")
+
+    # Validate sub-steps exist
+    for sub_id in cfg.steps:
+        if not wf.step_by_id(sub_id):
+            return StepResult(
+                step_id=step.id, status="failed",
+                error=f"for_each sub-step '{sub_id}' not found in workflow",
+            )
+
+    # Save original inputs so we can restore after loop
+    original_for_each = state.inputs.get("__for_each__")
+    original_previous = state.inputs.get("__previous__")
+
+    # Resume support: check if we're resuming from a paused state.
+    # __for_each_resume__ stores {step_id, iteration, sub_step} so we can
+    # skip already-completed iterations and sub-steps.
+    resume_ctx = state.inputs.pop("__for_each_resume__", None)
+    resume_iter: int = 0          # 1-based iteration to resume from (0 = fresh start)
+    resume_sub_idx: int = 0       # index into cfg.steps to resume from
+    if isinstance(resume_ctx, dict) and resume_ctx.get("step_id") == step.id:
+        resume_iter = resume_ctx.get("iteration", 0)
+        resume_sub_name = resume_ctx.get("sub_step", "")
+        if resume_sub_name in cfg.steps:
+            resume_sub_idx = cfg.steps.index(resume_sub_name)
+        _log(f"for_each '{step.id}': resuming from iteration {resume_iter}, sub-step '{resume_sub_name}'")
+
+    iteration_summaries: list[str] = []
+    previous_results: dict[str, dict] = {}  # step_id -> result dict from prior iteration
+    completed_iterations = 0
+
+    for idx, value in enumerate(values):
+        iter_num = idx + 1
+
+        # If resuming, skip fully completed iterations
+        if resume_iter and iter_num < resume_iter:
+            # Reconstruct previous_results from stored iteration results
+            if cfg.carry_forward:
+                for sid in cfg.steps:
+                    iter_key = f"{sid}__iter_{iter_num}"
+                    sr = state.step_results.get(iter_key)
+                    if sr:
+                        previous_results[sid] = sr.model_dump()
+            iteration_summaries.append(f"iter {iter_num} ({cfg.variable}={value}): completed (prior run)")
+            completed_iterations += 1
+            continue
+
+        _log(f"for_each '{step.id}': iteration {iter_num}/{total} ({cfg.variable}={value})")
+
+        # Inject for_each context
+        state.inputs["__for_each__"] = {
+            cfg.variable: value,
+            "index": idx,
+            "iteration": iter_num,
+            "total": total,
+        }
+
+        # Inject previous iteration results (or clear if carry_forward=False)
+        if cfg.carry_forward and previous_results:
+            state.inputs["__previous__"] = previous_results
+        else:
+            state.inputs.pop("__previous__", None)
+
+        # Execute sub-steps sequentially within this iteration
+        current_results: dict[str, dict] = {}
+        iteration_failed = False
+
+        for sub_step_idx, sub_id in enumerate(cfg.steps):
+            sub_step = wf.step_by_id(sub_id)
+            if not sub_step:
+                continue
+
+            # If resuming within this iteration, skip already-completed sub-steps
+            if resume_iter and iter_num == resume_iter and sub_step_idx < resume_sub_idx:
+                iter_key = f"{sub_id}__iter_{iter_num}"
+                sr = state.step_results.get(iter_key)
+                if sr and sr.status == "completed":
+                    current_results[sub_id] = sr.model_dump()
+                    continue
+
+            # Check sub-step's depends_on within the iteration context
+            # Dependencies refer to other sub-steps in the same iteration
+            deps_ok = True
+            for dep in sub_step.depends_on:
+                if dep in cfg.steps:
+                    # Internal dependency — check this iteration's results
+                    iter_key = f"{dep}__iter_{iter_num}"
+                    dep_result = state.step_results.get(iter_key)
+                    if not dep_result or dep_result.status != "completed":
+                        deps_ok = False
+                        break
+                else:
+                    # External dependency — check global results
+                    dep_result = state.step_results.get(dep)
+                    if not dep_result or dep_result.status != "completed":
+                        deps_ok = False
+                        break
+
+            if not deps_ok:
+                iter_key = f"{sub_id}__iter_{iter_num}"
+                state.step_results[iter_key] = StepResult(
+                    step_id=sub_id, status="skipped",
+                    error="Dependencies not satisfied within iteration",
+                )
+                iteration_failed = True
+                break
+
+            # Temporarily set the sub-step result under its original ID
+            # so interpolation within the iteration works naturally
+            # (e.g. one sub-step referencing another via ${sub_step_id.output})
+            state.current_step = sub_id
+            result = await _execute_step_with_retry(sub_step, state, cwd, wf)
+
+            # Store under iteration-qualified key for history
+            iter_key = f"{sub_id}__iter_{iter_num}"
+            state.step_results[iter_key] = result
+            # Also store under original key so intra-iteration refs work
+            state.step_results[sub_id] = result
+            current_results[sub_id] = result.model_dump()
+
+            # Handle human approval / input pause within for_each
+            if result.status == "pending":
+                _log(f"for_each '{step.id}': sub-step '{sub_id}' requires human action, pausing at iteration {iter_num}")
+                # Save resume context so we can pick up from the NEXT sub-step
+                # when the workflow is resumed (the pending step will be marked
+                # completed by tool_resume_workflow before re-entering).
+                # If this is the last sub-step, advance to next iteration.
+                next_sub_idx = sub_step_idx + 1
+                if next_sub_idx < len(cfg.steps):
+                    # Resume from the next sub-step in the same iteration
+                    state.inputs["__for_each_resume__"] = {
+                        "step_id": step.id,
+                        "iteration": iter_num,
+                        "sub_step": cfg.steps[next_sub_idx],
+                    }
+                else:
+                    # Last sub-step — resume from the start of the NEXT iteration
+                    state.inputs["__for_each_resume__"] = {
+                        "step_id": step.id,
+                        "iteration": iter_num + 1,
+                        "sub_step": cfg.steps[0] if cfg.steps else "",
+                    }
+
+                # Checkpoint so resume can find our state
+                state.status = WorkflowStatus.PAUSED
+                state.error = f"Awaiting human action in for_each '{step.id}' iteration {iter_num}"
+                if wf.checkpoint:
+                    _save_checkpoint(state)
+                ACTIVE_WORKFLOWS[state.run_id] = state
+
+                # Restore original inputs (except resume context, which must survive)
+                if original_for_each is not None:
+                    state.inputs["__for_each__"] = original_for_each
+                if original_previous is not None:
+                    state.inputs["__previous__"] = original_previous
+
+                return StepResult(
+                    step_id=step.id,
+                    status="pending",
+                    output=f"Paused at iteration {iter_num}/{total}, sub-step '{sub_id}'",
+                    output_data={"awaiting_approval": True, "paused_iteration": iter_num, "paused_sub_step": sub_id},
+                )
+
+            if result.status == "failed":
+                _log(f"for_each '{step.id}': sub-step '{sub_id}' failed at iteration {iter_num}")
+                iteration_failed = True
+                break
+
+        if iteration_failed:
+            iteration_summaries.append(f"iter {iter_num} ({cfg.variable}={value}): FAILED")
+            if cfg.fail_fast:
+                break
+        else:
+            iteration_summaries.append(f"iter {iter_num} ({cfg.variable}={value}): completed")
+            completed_iterations += 1
+
+        # Clear resume context after completing the resumed iteration
+        if resume_iter and iter_num == resume_iter:
+            resume_iter = 0
+            resume_sub_idx = 0
+
+        # Carry forward: snapshot this iteration's results for next iteration
+        previous_results = current_results
+
+        # Checkpoint + persist after each iteration so UI sees progress
+        if wf.checkpoint:
+            _save_checkpoint(state)
+        try:
+            from .memory import persist_workflow_run
+            step_dicts = {k: v.model_dump() for k, v in state.step_results.items()}
+            await persist_workflow_run(
+                workflow_name=state.workflow_name,
+                run_id=state.run_id,
+                status="running",
+                inputs=state.inputs,
+                step_results=step_dicts,
+                started_at=state.started_at,
+                steps_total=len(wf.steps),
+                workflow_item_kref=state.workflow_item_kref,
+                workflow_revision_kref=state.workflow_revision_kref,
+            )
+        except Exception:
+            pass  # Non-fatal
+
+    # Restore original inputs
+    if original_for_each is not None:
+        state.inputs["__for_each__"] = original_for_each
+    else:
+        state.inputs.pop("__for_each__", None)
+    if original_previous is not None:
+        state.inputs["__previous__"] = original_previous
+    else:
+        state.inputs.pop("__previous__", None)
+
+    summary = (
+        f"for_each '{step.id}': {completed_iterations}/{total} iterations completed\n"
+        + "\n".join(iteration_summaries)
+    )
+    _log(summary)
+
+    status = "completed" if completed_iterations == total else "failed"
+    return StepResult(
+        step_id=step.id,
+        status=status,
+        output=summary,
+        output_data={
+            "completed": completed_iterations,
+            "total": total,
+            "iterations": iteration_summaries,
+        },
+        error="" if status == "completed" else f"{total - completed_iterations} iteration(s) failed",
+    )
+
+
+async def _exec_a2a(step: StepDef, state: WorkflowState) -> StepResult:
+    """Execute an A2A step — send task to external A2A agent via outbound client."""
+    cfg: A2AStepConfig = step.a2a  # type: ignore
+    message = interpolate(cfg.message, state)
+
+    try:
+        from ..a2a.a2a_client import get_client, A2AClientError
+        client = get_client(timeout=cfg.timeout)
+
+        task = await client.send_task(
+            cfg.url,
+            message=message,
+            skill_id=cfg.skill_id,
+        )
+
+        task_id = task.get("id", "")
+        status = task.get("status", {})
+        state_val = status.get("state", "unknown")
+
+        # Poll until complete if not already terminal
+        if state_val not in ("completed", "failed", "canceled"):
+            task = await client.poll_until_complete(
+                cfg.url, task_id,
+                poll_interval=5.0,
+                max_polls=int(cfg.timeout / 5),
+            )
+            status = task.get("status", {})
+            state_val = status.get("state", "unknown")
+
+        # Extract output text from artifacts
+        output_text = ""
+        for artifact in task.get("artifacts", []):
+            for part in artifact.get("parts", []):
+                if part.get("type") == "text":
+                    output_text += part.get("text", "") + "\n"
+
+        return StepResult(
+            step_id=step.id,
+            status="completed" if state_val == "completed" else "failed",
+            output=output_text[:6000] or json.dumps(task, default=str)[:4000],
+            output_data=task,
+            error=status.get("message", "") if state_val == "failed" else "",
+        )
+    except Exception as exc:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=str(exc)[:2000],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Orchestration pattern step executors
+# ---------------------------------------------------------------------------
+
+async def _exec_map_reduce(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a map_reduce pattern step."""
+    cfg: MapReduceStepConfig = step.map_reduce  # type: ignore
+    task = interpolate(cfg.task, state)
+    splits = [interpolate(s, state) for s in cfg.splits]
+
+    try:
+        from ..patterns.map_reduce import tool_map_reduce
+        result = await tool_map_reduce({
+            "task": task,
+            "splits": splits,
+            "mapper": cfg.mapper,
+            "reducer": cfg.reducer,
+            "cwd": cwd,
+            "concurrency": cfg.concurrency,
+            "timeout": cfg.timeout,
+        })
+        status = result.get("status", "")
+        reducer = result.get("reducer", {})
+        output = reducer.get("output", "") if isinstance(reducer, dict) else ""
+        return StepResult(
+            step_id=step.id,
+            status="completed" if status == "completed" else "failed",
+            output=output[:6000] or json.dumps(result, default=str)[:4000],
+            output_data=result,
+            error=result.get("error", "") if status != "completed" else "",
+        )
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=str(exc)[:2000])
+
+
+async def _exec_supervisor(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a supervisor delegation pattern step."""
+    cfg: SupervisorStepConfig = step.supervisor  # type: ignore
+    task = interpolate(cfg.task, state)
+
+    try:
+        from ..patterns.supervisor import tool_supervisor_run
+        result = await tool_supervisor_run({
+            "task": task,
+            "cwd": cwd,
+            "max_iterations": cfg.max_iterations,
+            "supervisor_type": cfg.supervisor_type,
+            "timeout": cfg.timeout,
+        })
+        status = result.get("status", "")
+        summary = result.get("final_summary", "")
+        return StepResult(
+            step_id=step.id,
+            status="completed" if status == "completed" else "failed",
+            output=summary[:6000] or json.dumps(result, default=str)[:4000],
+            output_data=result,
+        )
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=str(exc)[:2000])
+
+
+async def _exec_group_chat(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a group chat discussion step."""
+    cfg: GroupChatStepConfig = step.group_chat  # type: ignore
+    topic = interpolate(cfg.topic, state)
+
+    # Callback to stream intermediate transcript into workflow state
+    def _on_turn(transcript: list[dict[str, str]]) -> None:
+        state.step_results[step.id] = StepResult(
+            step_id=step.id,
+            status="running",
+            output=f"Discussion in progress... ({len(transcript)} messages)",
+            output_data={"transcript": transcript, "topic": topic},
+        )
+
+    try:
+        from ..patterns.group_chat import tool_group_chat
+        result = await tool_group_chat({
+            "topic": topic,
+            "participants": cfg.participants,
+            "moderator": cfg.moderator,
+            "strategy": cfg.strategy,
+            "max_rounds": cfg.max_rounds,
+            "cwd": cwd,
+            "timeout": cfg.timeout,
+        }, on_turn=_on_turn)
+        summary = result.get("summary", "")
+        conclusion = result.get("conclusion", "")
+        output = f"Summary: {summary}\nConclusion: {conclusion}"
+        return StepResult(
+            step_id=step.id,
+            status="completed",
+            output=output[:6000],
+            output_data=result,
+        )
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=str(exc)[:2000])
+
+
+async def _exec_handoff(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a handoff step — transfer context from a prior agent to a new one."""
+    cfg: HandoffStepConfig = step.handoff  # type: ignore
+    reason = interpolate(cfg.reason, state)
+    task = interpolate(cfg.task, state) if cfg.task else ""
+
+    # Resolve the source agent ID from the referenced step
+    from_step_result = state.step_results.get(cfg.from_step)
+    if not from_step_result or not from_step_result.agent_id:
+        return StepResult(
+            step_id=step.id, status="failed",
+            error=f"Handoff source step '{cfg.from_step}' has no agent_id",
+        )
+
+    try:
+        from ..patterns.handoff import tool_handoff_agent
+        result = await tool_handoff_agent({
+            "from_agent_id": from_step_result.agent_id,
+            "to_agent_type": cfg.to_agent_type,
+            "reason": reason,
+            "task": task,
+            "cwd": cwd,
+            "timeout": cfg.timeout,
+        })
+
+        to_status = result.get("to_agent_status", "error")
+        output = result.get("to_agent_output", "")
+        return StepResult(
+            step_id=step.id,
+            status="completed" if to_status in ("completed", "idle") else "failed",
+            output=output[:6000],
+            output_data=result,
+            agent_id=result.get("to_agent_id"),
+            files_touched=result.get("to_agent_files", []),
+        )
+    except Exception as exc:
+        return StepResult(step_id=step.id, status="failed", error=str(exc)[:2000])
+
+
+# ---------------------------------------------------------------------------
+# Active workflow registry (for status checks and cancellation)
+# ---------------------------------------------------------------------------
+
+ACTIVE_WORKFLOWS: dict[str, WorkflowState] = {}
+
+
+# ---------------------------------------------------------------------------
+# Dry-run: plan without executing
+# ---------------------------------------------------------------------------
+
+def dry_run_workflow(wf: WorkflowDef, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Validate and plan a workflow without executing anything.
+
+    Returns execution plan with step order, estimated agent count,
+    parallel groups, and variable resolution preview.
+    """
+    vr = validate_workflow(wf)
+    if not vr.valid:
+        return {
+            "valid": False,
+            "errors": [e.to_dict() for e in vr.errors],
+            "warnings": [w.to_dict() for w in vr.warnings],
+        }
+
+    # Build execution plan
+    plan_steps: list[dict[str, Any]] = []
+    agent_count = 0
+    shell_count = 0
+    parallel_groups: list[list[str]] = []
+
+    for step_id in vr.execution_order:
+        step = wf.step_by_id(step_id)
+        if not step:
+            continue
+
+        entry: dict[str, Any] = {
+            "id": step.id,
+            "name": step.name,
+            "type": step.type.value,
+            "depends_on": step.depends_on,
+        }
+
+        if step.type == StepType.AGENT:
+            cfg = step.agent
+            if cfg:
+                entry["agent_type"] = cfg.agent_type
+                entry["role"] = cfg.role
+                entry["timeout"] = cfg.timeout
+                if cfg.template:
+                    entry["template"] = cfg.template
+            agent_count += 1
+
+        elif step.type == StepType.SHELL:
+            cfg = step.shell
+            if cfg:
+                entry["command_preview"] = cfg.command[:100]
+                entry["timeout"] = cfg.timeout
+            shell_count += 1
+
+        elif step.type == StepType.PARALLEL:
+            cfg = step.parallel
+            if cfg:
+                entry["sub_steps"] = cfg.steps
+                entry["join"] = cfg.join.value
+                parallel_groups.append(cfg.steps)
+                # Count agents in parallel sub-steps
+                for sub_id in cfg.steps:
+                    sub = wf.step_by_id(sub_id)
+                    if sub and sub.type == StepType.AGENT:
+                        agent_count += 1
+
+        elif step.type == StepType.CONDITIONAL:
+            cfg = step.conditional
+            if cfg:
+                entry["branches"] = [
+                    {"condition": b.condition, "goto": b.goto}
+                    for b in cfg.branches
+                ]
+
+        elif step.type == StepType.GOTO:
+            cfg = step.goto
+            if cfg:
+                entry["target"] = cfg.target
+                entry["max_iterations"] = cfg.max_iterations
+
+        elif step.type == StepType.A2A:
+            cfg = step.a2a
+            if cfg:
+                entry["url"] = cfg.url
+                entry["skill_id"] = cfg.skill_id
+            agent_count += 1  # External agent
+
+        elif step.type == StepType.MAP_REDUCE:
+            cfg = step.map_reduce
+            if cfg:
+                entry["splits_count"] = len(cfg.splits)
+                entry["mapper"] = cfg.mapper
+                entry["reducer"] = cfg.reducer
+                entry["concurrency"] = cfg.concurrency
+            agent_count += len(cfg.splits) + 1 if cfg else 2  # mappers + reducer
+
+        elif step.type == StepType.SUPERVISOR:
+            cfg = step.supervisor
+            if cfg:
+                entry["max_iterations"] = cfg.max_iterations
+                entry["supervisor_type"] = cfg.supervisor_type
+            agent_count += (cfg.max_iterations if cfg else 5) + 1  # specialists + supervisor
+
+        elif step.type == StepType.GROUP_CHAT:
+            cfg = step.group_chat
+            if cfg:
+                entry["participants"] = cfg.participants
+                entry["strategy"] = cfg.strategy
+                entry["max_rounds"] = cfg.max_rounds
+            agent_count += (cfg.max_rounds if cfg else 8) + 1  # turns + moderator
+
+        elif step.type == StepType.HANDOFF:
+            cfg = step.handoff
+            if cfg:
+                entry["from_step"] = cfg.from_step
+                entry["to_agent_type"] = cfg.to_agent_type
+            agent_count += 1
+
+        if step.retry > 0:
+            entry["retry"] = step.retry
+
+        plan_steps.append(entry)
+
+    # Estimate cost range (rough: $0.01-0.05 per agent call)
+    estimated_cost_low = agent_count * 0.01
+    estimated_cost_high = agent_count * 0.05
+
+    return {
+        "valid": True,
+        "workflow": wf.name,
+        "version": wf.version,
+        "description": wf.description,
+        "execution_order": vr.execution_order,
+        "plan": plan_steps,
+        "summary": {
+            "total_steps": len(wf.steps),
+            "agent_steps": agent_count,
+            "shell_steps": shell_count,
+            "parallel_groups": len(parallel_groups),
+            "has_conditionals": any(s.type == StepType.CONDITIONAL for s in wf.steps),
+            "has_loops": any(s.type == StepType.GOTO for s in wf.steps),
+            "has_human_approval": any(s.type == StepType.HUMAN_APPROVAL for s in wf.steps),
+            "max_total_time": wf.max_total_time,
+            "estimated_cost_usd": f"${estimated_cost_low:.2f}–${estimated_cost_high:.2f}",
+        },
+        "inputs_required": [
+            {"name": i.name, "type": i.type, "required": i.required, "default": i.default}
+            for i in wf.inputs
+        ],
+        "inputs_provided": list(inputs.keys()),
+        "warnings": [w.to_dict() for w in vr.warnings],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cost guard — check budget before and during execution
+# ---------------------------------------------------------------------------
+
+def _check_cost_guard(
+    max_cost_usd: float | None = None,
+) -> str | None:
+    """Check if budget allows workflow execution. Returns error string or None."""
+    if max_cost_usd is None:
+        return None
+    try:
+        from ..cost_tracker import CostTracker
+        from ..operator_mcp import COST_TRACKER
+        exceeded = COST_TRACKER.check_budget(
+            max_session_usd=max_cost_usd,
+        )
+        if exceeded:
+            return (
+                f"Budget exceeded: {exceeded['exceeded']} limit "
+                f"${exceeded['limit_usd']:.2f}, actual ${exceeded['actual_usd']:.2f}"
+            )
+        return None
+    except Exception:
+        return None  # Don't block on cost tracker errors
+
+
+# ---------------------------------------------------------------------------
+# Main executor
+# ---------------------------------------------------------------------------
+
+async def execute_workflow(
+    wf: WorkflowDef,
+    inputs: dict[str, Any],
+    cwd: str,
+    *,
+    run_id: str | None = None,
+    resume_state: WorkflowState | None = None,
+    max_cost_usd: float | None = None,
+    trigger_context: dict[str, str] | None = None,
+    workflow_item_kref: str = "",
+    workflow_revision_kref: str = "",
+) -> WorkflowState:
+    """Execute a workflow definition.
+
+    Args:
+        wf: Validated workflow definition.
+        inputs: Input parameters matching wf.inputs.
+        cwd: Working directory for agent/shell steps.
+        run_id: Optional run ID (generated if not provided).
+        resume_state: Optional state to resume from checkpoint.
+        max_cost_usd: Optional cost cap — abort if session cost exceeds this.
+
+    Returns:
+        Final WorkflowState with all step results.
+    """
+    # Validate first
+    vr = validate_workflow(wf)
+    if not vr.valid:
+        state = WorkflowState(
+            workflow_name=wf.name,
+            run_id=run_id or str(uuid.uuid4()),
+            status=WorkflowStatus.FAILED,
+            error=f"Validation failed: {vr.errors[0].message}",
+            workflow_item_kref=workflow_item_kref,
+            workflow_revision_kref=workflow_revision_kref,
+        )
+        return state
+
+    # Pre-flight cost check
+    cost_err = _check_cost_guard(max_cost_usd)
+    if cost_err:
+        return WorkflowState(
+            workflow_name=wf.name,
+            run_id=run_id or str(uuid.uuid4()),
+            status=WorkflowStatus.FAILED,
+            error=f"Cost guard: {cost_err}",
+            workflow_item_kref=workflow_item_kref,
+            workflow_revision_kref=workflow_revision_kref,
+        )
+
+    # Initialize or resume state
+    if resume_state:
+        state = resume_state
+        state.status = WorkflowStatus.RUNNING
+        # Resumed runs keep their originally pinned krefs — do not let a fresh
+        # resolution overwrite them. Only fill if the stored state is empty.
+        if not state.workflow_item_kref and workflow_item_kref:
+            state.workflow_item_kref = workflow_item_kref
+        if not state.workflow_revision_kref and workflow_revision_kref:
+            state.workflow_revision_kref = workflow_revision_kref
+    else:
+        state = WorkflowState(
+            workflow_name=wf.name,
+            run_id=run_id or str(uuid.uuid4()),
+            status=WorkflowStatus.RUNNING,
+            inputs=inputs or {},
+            started_at=datetime.now(timezone.utc).isoformat(),
+            trigger_context=trigger_context or {},
+            workflow_item_kref=workflow_item_kref,
+            workflow_revision_kref=workflow_revision_kref,
+        )
+
+    # Claim a per-run file lock BEFORE registering in ACTIVE_WORKFLOWS.
+    # This prevents duplicate execution across operator processes.
+    _run_lock_fd = None
+    if not resume_state:  # recovery already holds its own lock
+        from .recovery import _acquire_run_lock
+        _run_lock_fd = _acquire_run_lock(state.run_id)
+        if _run_lock_fd is None:
+            _log(f"workflow: run={state.run_id[:8]} already claimed by another process, skipping")
+            state.status = WorkflowStatus.CANCELLED
+            state.error = "Duplicate execution prevented by run lock"
+            return state
+
+    ACTIVE_WORKFLOWS[state.run_id] = state
+
+    effective_cwd = cwd or wf.default_cwd or "/tmp"
+    execution_order = vr.execution_order
+    start_time = time.monotonic()
+
+    _log(f"workflow: starting '{wf.name}' run={state.run_id[:8]} steps={len(wf.steps)}")
+
+    # Persist a "running" entry so the UI sees the run immediately
+    if not resume_state:
+        try:
+            from .memory import persist_workflow_run
+            await persist_workflow_run(
+                workflow_name=state.workflow_name,
+                run_id=state.run_id,
+                status="running",
+                inputs=state.inputs,
+                step_results={},
+                started_at=state.started_at,
+                steps_total=len(wf.steps),
+                workflow_item_kref=state.workflow_item_kref,
+                workflow_revision_kref=state.workflow_revision_kref,
+            )
+        except Exception as exc:
+            _log(f"workflow: failed to persist initial run entry (non-fatal): {exc}")
+
+    # Control-flow step types that must run alone (they jump/pause/branch)
+    _CONTROL_FLOW_TYPES = frozenset({
+        StepType.CONDITIONAL, StepType.GOTO,
+        StepType.HUMAN_APPROVAL, StepType.HUMAN_INPUT,
+        StepType.FOR_EACH,
+    })
+
+    try:
+        # Collect for_each sub-step IDs — these are executed internally by
+        # _exec_for_each and must be excluded from the main execution loop.
+        # Also transitively exclude parallel sub-steps nested inside for_each.
+        _for_each_owned: set[str] = set()
+        for s in wf.steps:
+            if s.type == StepType.FOR_EACH and s.for_each:
+                for sub_id in s.for_each.steps:
+                    _for_each_owned.add(sub_id)
+                    sub_step = wf.step_by_id(sub_id)
+                    if sub_step and sub_step.type == StepType.PARALLEL and sub_step.parallel:
+                        _for_each_owned.update(sub_step.parallel.steps)
+
+        # Collect all step IDs into a set for tracking
+        remaining = set(execution_order) - _for_each_owned
+
+        while remaining:
+            # Time guard
+            elapsed = time.monotonic() - start_time
+            if elapsed > wf.max_total_time:
+                state.status = WorkflowStatus.FAILED
+                state.error = f"Exceeded max_total_time ({wf.max_total_time}s)"
+                break
+
+            # Mid-execution cost guard
+            cost_err = _check_cost_guard(max_cost_usd)
+            if cost_err:
+                state.status = WorkflowStatus.FAILED
+                state.error = f"Cost guard (mid-run): {cost_err}"
+                break
+
+            # Cancellation check
+            if state.status == WorkflowStatus.CANCELLED:
+                break
+
+            # Find all ready steps: deps satisfied and not yet completed
+            ready: list[str] = []
+            for step_id in execution_order:
+                if step_id not in remaining:
+                    continue
+                existing = state.step_results.get(step_id)
+                if existing and existing.status in ("completed", "skipped"):
+                    remaining.discard(step_id)
+                    continue
+                step = wf.step_by_id(step_id)
+                if not step:
+                    remaining.discard(step_id)
+                    continue
+                deps_ok = all(
+                    state.step_results.get(dep, StepResult(step_id=dep)).status == "completed"
+                    for dep in step.depends_on
+                )
+                if deps_ok:
+                    ready.append(step_id)
+
+            if not ready:
+                # No steps are ready but some remain — deps can't be satisfied
+                for sid in list(remaining):
+                    state.step_results[sid] = StepResult(
+                        step_id=sid, status="skipped",
+                        error="Dependencies not satisfied",
+                    )
+                remaining.clear()
+                break
+
+            # Separate control-flow steps (must run alone) from parallelisable ones
+            parallel_batch: list[str] = []
+            control_step: str | None = None
+            for sid in ready:
+                step = wf.step_by_id(sid)
+                if step and step.type in _CONTROL_FLOW_TYPES:
+                    control_step = sid
+                    break
+                parallel_batch.append(sid)
+
+            if control_step:
+                # Run the control-flow step alone
+                step = wf.step_by_id(control_step)
+                assert step is not None
+                state.current_step = control_step
+                _log(f"workflow: executing step '{control_step}' ({step.type.value})")
+
+                result = await _execute_step_with_retry(step, state, effective_cwd, wf)
+                state.step_results[control_step] = result
+                remaining.discard(control_step)
+
+                # Handle control flow
+                if step.type == StepType.CONDITIONAL:
+                    next_step = _resolve_conditional(step, state)
+                    if next_step == "end":
+                        break
+
+                elif step.type == StepType.GOTO:
+                    cfg_goto: GotoStepConfig = step.goto  # type: ignore
+                    count = state.iteration_counts.get(control_step, 0) + 1
+                    state.iteration_counts[control_step] = count
+                    if count <= cfg_goto.max_iterations:
+                        should_goto = True
+                        if cfg_goto.condition:
+                            should_goto = _eval_condition(cfg_goto.condition, state)
+                        if should_goto and cfg_goto.target in execution_order:
+                            target_idx = execution_order.index(cfg_goto.target)
+                            for clear_idx in range(target_idx, len(execution_order)):
+                                clear_sid = execution_order[clear_idx]
+                                if clear_sid == control_step:
+                                    break
+                                state.step_results.pop(clear_sid, None)
+                                remaining.add(clear_sid)
+                            _log(f"workflow: goto '{control_step}' -> '{cfg_goto.target}' (iteration {count}/{cfg_goto.max_iterations})")
+
+                elif step.type in (StepType.HUMAN_APPROVAL, StepType.HUMAN_INPUT):
+                    if result.status != "completed":
+                        label = "approval" if step.type == StepType.HUMAN_APPROVAL else "input"
+                        state.status = WorkflowStatus.PAUSED
+                        state.error = f"Awaiting human {label}"
+                        if wf.checkpoint:
+                            _save_checkpoint(state)
+                        ACTIVE_WORKFLOWS[state.run_id] = state
+                        return state
+
+                elif step.type == StepType.FOR_EACH:
+                    if result.status == "pending":
+                        # for_each paused internally (e.g. human_approval inside the loop).
+                        # State is already PAUSED and checkpointed by _exec_for_each.
+                        ACTIVE_WORKFLOWS[state.run_id] = state
+                        return state
+
+                if result.status == "failed" and step.type not in (
+                    StepType.CONDITIONAL, StepType.GOTO, StepType.OUTPUT
+                ):
+                    state.status = WorkflowStatus.FAILED
+                    state.error = f"Step '{control_step}' failed: {result.error[:500]}"
+                    break
+
+            else:
+                # Run all ready non-control-flow steps in parallel
+                batch_ids = parallel_batch
+                _log(f"workflow: executing {len(batch_ids)} step(s) in parallel: {batch_ids}")
+
+                async def _run_one(sid: str) -> tuple[str, StepResult]:
+                    s = wf.step_by_id(sid)
+                    assert s is not None
+                    r = await _execute_step_with_retry(s, state, effective_cwd, wf)
+                    # Persist this step immediately so recovery can see it
+                    # even if the executor is killed before the batch finishes.
+                    state.step_results[sid] = r
+                    try:
+                        from .memory import persist_workflow_run
+                        step_dicts = {
+                            k: v.model_dump() for k, v in state.step_results.items()
+                        }
+                        await persist_workflow_run(
+                            workflow_name=state.workflow_name,
+                            run_id=state.run_id,
+                            status="running",
+                            inputs=state.inputs,
+                            step_results=step_dicts,
+                            started_at=state.started_at,
+                            steps_total=len(wf.steps),
+                            workflow_item_kref=state.workflow_item_kref,
+                            workflow_revision_kref=state.workflow_revision_kref,
+                        )
+                    except Exception as exc:
+                        _log(f"workflow: per-step persist failed for '{sid}': {exc}")
+                    return sid, r
+
+                results = await asyncio.gather(
+                    *[_run_one(sid) for sid in batch_ids],
+                    return_exceptions=True,
+                )
+
+                failed_step: str | None = None
+                for item in results:
+                    if isinstance(item, BaseException):
+                        _log(f"workflow: parallel step raised: {item}")
+                        continue
+                    sid, result = item
+                    state.step_results[sid] = result
+                    remaining.discard(sid)
+                    if result.status == "failed":
+                        step = wf.step_by_id(sid)
+                        if step and step.type not in (
+                            StepType.CONDITIONAL, StepType.GOTO, StepType.OUTPUT
+                        ):
+                            failed_step = sid
+
+                if failed_step:
+                    fr = state.step_results[failed_step]
+                    state.status = WorkflowStatus.FAILED
+                    state.error = f"Step '{failed_step}' failed: {fr.error[:500]}"
+                    break
+
+            # Checkpoint + incremental persist after each wave
+            if wf.checkpoint:
+                _save_checkpoint(state)
+            try:
+                from .memory import persist_workflow_run
+                step_dicts = {
+                    sid: sr.model_dump() for sid, sr in state.step_results.items()
+                }
+                _log(f"workflow: incremental persist {len(step_dicts)} step(s) for run={state.run_id[:8]}")
+                await persist_workflow_run(
+                    workflow_name=state.workflow_name,
+                    run_id=state.run_id,
+                    status="running",
+                    inputs=state.inputs,
+                    step_results=step_dicts,
+                    started_at=state.started_at,
+                    steps_total=len(wf.steps),
+                    workflow_item_kref=state.workflow_item_kref,
+                    workflow_revision_kref=state.workflow_revision_kref,
+                )
+            except Exception as exc:
+                _log(f"workflow: incremental persist failed: {exc}")
+
+        # Finalize
+        if state.status == WorkflowStatus.RUNNING:
+            state.status = WorkflowStatus.COMPLETED
+        state.completed_at = datetime.now(timezone.utc).isoformat()
+        state.current_step = None
+
+        if wf.checkpoint:
+            _save_checkpoint(state)
+
+        # Persist to Kumiho memory (best-effort, fire-and-forget)
+        if state.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED):
+            try:
+                from .memory import persist_workflow_run, link_agents_to_run
+                step_dicts = {
+                    sid: sr.model_dump() for sid, sr in state.step_results.items()
+                }
+                run_kref = await persist_workflow_run(
+                    workflow_name=state.workflow_name,
+                    run_id=state.run_id,
+                    status=state.status.value,
+                    inputs=state.inputs,
+                    step_results=step_dicts,
+                    started_at=state.started_at,
+                    completed_at=state.completed_at,
+                    error=state.error,
+                    workflow_item_kref=state.workflow_item_kref,
+                    workflow_revision_kref=state.workflow_revision_kref,
+                )
+                if run_kref:
+                    await link_agents_to_run(run_kref, step_dicts)
+            except Exception as mem_exc:
+                _log(f"workflow: memory persist failed (non-fatal): {mem_exc}")
+
+    except Exception as exc:
+        state.status = WorkflowStatus.FAILED
+        state.error = f"Executor error: {str(exc)[:1000]}"
+        _log(f"workflow: executor error: {exc}")
+    finally:
+        # Clean up terminal workflows so they don't linger in the active
+        # registry (which feeds the dashboard "active runs" count).
+        # Only keep truly active states (running/paused) in the dict.
+        if state.status in (
+            WorkflowStatus.COMPLETED,
+            WorkflowStatus.FAILED,
+            WorkflowStatus.CANCELLED,
+        ):
+            ACTIVE_WORKFLOWS.pop(state.run_id, None)
+        else:
+            ACTIVE_WORKFLOWS[state.run_id] = state
+
+        # Release per-run file lock so recovery can claim this run
+        # if we crash after this point.
+        if _run_lock_fd is not None:
+            try:
+                from .recovery import _release_run_lock
+                _release_run_lock(_run_lock_fd, state.run_id)
+            except Exception:
+                pass
+
+    _log(f"workflow: '{wf.name}' run={state.run_id[:8]} → {state.status.value}")
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Step dispatch with retry
+# ---------------------------------------------------------------------------
+
+async def _execute_step_with_retry(
+    step: StepDef,
+    state: WorkflowState,
+    cwd: str,
+    wf: WorkflowDef,
+) -> StepResult:
+    """Execute a step, retrying on failure up to step.retry times."""
+    last_result: StepResult | None = None
+
+    for attempt in range(step.retry + 1):
+        t0 = time.monotonic()
+        result = await _dispatch_step(step, state, cwd, wf)
+        result.duration_s = round(time.monotonic() - t0, 2)
+        result.retries_used = attempt
+
+        if result.status == "completed" or step.type in (
+            StepType.CONDITIONAL, StepType.GOTO,
+            StepType.HUMAN_APPROVAL, StepType.HUMAN_INPUT,
+            StepType.FOR_EACH,
+        ):
+            return result
+
+        last_result = result
+        if attempt < step.retry:
+            _log(f"workflow: step '{step.id}' failed (attempt {attempt+1}), retrying...")
+            await asyncio.sleep(step.retry_delay)
+
+    return last_result or StepResult(step_id=step.id, status="failed", error="No result")
+
+
+async def _dispatch_step(
+    step: StepDef,
+    state: WorkflowState,
+    cwd: str,
+    wf: WorkflowDef,
+) -> StepResult:
+    """Route a step to its type-specific executor."""
+    try:
+        if step.type == StepType.AGENT:
+            return await _exec_agent(step, state, cwd)
+        elif step.type == StepType.SHELL:
+            return await _exec_shell(step, state, cwd)
+        elif step.type == StepType.OUTPUT:
+            return await _exec_output(step, state)
+        elif step.type == StepType.A2A:
+            return await _exec_a2a(step, state)
+        elif step.type == StepType.PARALLEL:
+            return await _exec_parallel(step, state, cwd, wf)
+        elif step.type == StepType.CONDITIONAL:
+            return StepResult(step_id=step.id, status="completed")
+        elif step.type == StepType.GOTO:
+            return StepResult(step_id=step.id, status="completed")
+        elif step.type == StepType.HUMAN_APPROVAL:
+            return await _exec_human_approval(step, state)
+        elif step.type == StepType.HUMAN_INPUT:
+            return await _exec_human_input(step, state)
+        elif step.type == StepType.NOTIFY:
+            return await _exec_notify(step, state)
+        # Orchestration patterns
+        elif step.type == StepType.MAP_REDUCE:
+            return await _exec_map_reduce(step, state, cwd)
+        elif step.type == StepType.SUPERVISOR:
+            return await _exec_supervisor(step, state, cwd)
+        elif step.type == StepType.GROUP_CHAT:
+            return await _exec_group_chat(step, state, cwd)
+        elif step.type == StepType.HANDOFF:
+            return await _exec_handoff(step, state, cwd)
+        elif step.type == StepType.RESOLVE:
+            return await _exec_resolve(step, state)
+        elif step.type == StepType.FOR_EACH:
+            return await _exec_for_each(step, state, cwd, wf)
+        elif step.type == StepType.TAG:
+            return await _exec_tag(step, state)
+        elif step.type == StepType.DEPRECATE:
+            return await _exec_deprecate(step, state)
+        else:
+            return StepResult(
+                step_id=step.id, status="failed",
+                error=f"Unknown step type: {step.type}",
+            )
+    except Exception as exc:
+        return StepResult(
+            step_id=step.id, status="failed",
+            error=f"Step execution error: {str(exc)[:2000]}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Parallel execution
+# ---------------------------------------------------------------------------
+
+async def _exec_parallel(
+    step: StepDef,
+    state: WorkflowState,
+    cwd: str,
+    wf: WorkflowDef,
+) -> StepResult:
+    """Execute parallel sub-steps with join strategy."""
+    from .schema import ParallelStepConfig
+    cfg: ParallelStepConfig = step.parallel  # type: ignore
+
+    semaphore = asyncio.Semaphore(cfg.max_concurrency)
+    results: dict[str, StepResult] = {}
+
+    async def run_sub(sub_id: str) -> None:
+        sub_step = wf.step_by_id(sub_id)
+        if not sub_step:
+            results[sub_id] = StepResult(
+                step_id=sub_id, status="failed", error=f"Step '{sub_id}' not found",
+            )
+            return
+        async with semaphore:
+            r = await _dispatch_step(sub_step, state, cwd, wf)
+            results[sub_id] = r
+            state.step_results[sub_id] = r
+
+    tasks = [asyncio.create_task(run_sub(sid)) for sid in cfg.steps]
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Apply join strategy
+    completed = [r for r in results.values() if r.status == "completed"]
+    total = len(cfg.steps)
+
+    if cfg.join == JoinStrategy.ALL:
+        success = len(completed) == total
+    elif cfg.join == JoinStrategy.ANY:
+        success = len(completed) > 0
+    elif cfg.join == JoinStrategy.MAJORITY:
+        success = len(completed) > total / 2
+    else:
+        success = len(completed) == total
+
+    combined_output = "\n---\n".join(
+        f"[{r.step_id}]: {r.output[:1000]}" for r in results.values()
+    )
+
+    return StepResult(
+        step_id=step.id,
+        status="completed" if success else "failed",
+        output=combined_output[:6000],
+        output_data={
+            "sub_results": {sid: r.status for sid, r in results.items()},
+            "completed": len(completed),
+            "total": total,
+        },
+        files_touched=[f for r in results.values() for f in r.files_touched],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Control flow helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_conditional(step: StepDef, state: WorkflowState) -> str | None:
+    """Evaluate conditional branches and return the goto target."""
+    from .schema import ConditionalStepConfig
+    cfg: ConditionalStepConfig = step.conditional  # type: ignore
+    if not cfg:
+        return None
+
+    for branch in cfg.branches:
+        if _eval_condition(branch.condition, state):
+            return branch.goto
+    return None
+
+
+async def _exec_human_approval(step: StepDef, state: WorkflowState) -> StepResult:
+    """Handle human approval — always pauses workflow for external approval.
+
+    The workflow resumes when the user calls resume_workflow with approval.
+    Pushes a notification to the configured channel (dashboard/discord/slack).
+    """
+    from .schema import HumanApprovalConfig
+    cfg: HumanApprovalConfig = step.human_approval or HumanApprovalConfig()  # type: ignore
+    message = interpolate(cfg.message, state)
+
+    # Push approval request to the configured channel via gateway
+    try:
+        from ..gateway_client import ConstructGatewayClient
+        gw = ConstructGatewayClient()
+        if gw._available:
+            channels = [cfg.channel] if cfg.channel else ["dashboard"]
+            event: dict[str, Any] = {
+                "type": "human_approval_request",
+                "channels": channels,
+                "content": {
+                    "title": f"Approval Required: {step.name or step.id}",
+                    "message": message,
+                },
+                "run_id": state.run_id,
+                "step_id": step.id,
+                "timeout": cfg.timeout,
+                "workflow_name": state.workflow_name,
+                "approve_keywords": cfg.approve_keywords,
+                "reject_keywords": cfg.reject_keywords,
+            }
+            if cfg.channel_id:
+                event["channel_id"] = interpolate(cfg.channel_id, state)
+            await gw.push_channel_event(event)
+            _log(f"_exec_human_approval: pushed to channels={channels}")
+    except Exception as exc:
+        _log(f"_exec_human_approval: channel push failed (non-fatal): {exc}")
+
+    return StepResult(
+        step_id=step.id,
+        status="pending",  # Triggers PAUSED state in executor
+        output=message,
+        output_data={
+            "awaiting_approval": True,
+            "channel": cfg.channel,
+            "approve_keywords": cfg.approve_keywords,
+            "reject_keywords": cfg.reject_keywords,
+        },
+    )
+
+
+async def _exec_notify(step: StepDef, state: WorkflowState) -> StepResult:
+    """Fire-and-forget notification step.
+
+    Pushes a workflow_notification event to one or more channels
+    (dashboard/discord/slack/telegram) and returns immediately. Channel push
+    failures are logged but never fail the workflow — notifications are
+    best-effort.
+    """
+    from .schema import NotifyStepConfig
+    cfg: NotifyStepConfig = step.notify or NotifyStepConfig()  # type: ignore
+    message = interpolate(cfg.message, state)
+    title = interpolate(cfg.title, state)
+    channels = cfg.channels or ["dashboard"]
+
+    try:
+        from ..gateway_client import ConstructGatewayClient
+        gw = ConstructGatewayClient()
+        if gw._available:
+            event: dict[str, Any] = {
+                "type": "workflow_notification",
+                "channels": channels,
+                "content": {
+                    "title": title or f"Workflow: {state.workflow_name}",
+                    "message": message,
+                },
+                "run_id": state.run_id,
+                "step_id": step.id,
+                "workflow_name": state.workflow_name,
+            }
+            if cfg.channel_id:
+                event["channel_id"] = interpolate(cfg.channel_id, state)
+            await gw.push_channel_event(event)
+            _log(f"_exec_notify: pushed to channels={channels}")
+    except Exception as exc:
+        _log(f"_exec_notify: channel push failed (non-fatal): {exc}")
+
+    return StepResult(
+        step_id=step.id,
+        status="completed",
+        output=message,
+        output_data={"channels": channels},
+    )
+
+
+async def _exec_human_input(step: StepDef, state: WorkflowState) -> StepResult:
+    """Handle human input — pauses workflow and sends a prompt to a channel.
+
+    Unlike human_approval (yes/no), this collects freeform text.  The
+    response is piped into step output for downstream interpolation.
+    """
+    from .schema import HumanInputConfig
+
+    cfg: HumanInputConfig = step.human_input or HumanInputConfig()  # type: ignore
+    message = interpolate(cfg.message, state)
+
+    # Push prompt to the requested channel via gateway
+    try:
+        from ..gateway_client import ConstructGatewayClient
+        gw = ConstructGatewayClient()
+        if gw._available:
+            await gw.push_channel_event({
+                "type": "human_input_request",
+                "run_id": state.run_id,
+                "step_id": step.id,
+                "channel": cfg.channel,
+                "message": message,
+                "timeout": cfg.timeout,
+            })
+    except Exception as exc:
+        _log(f"_exec_human_input: channel push failed (non-fatal): {exc}")
+
+    return StepResult(
+        step_id=step.id,
+        status="pending",  # Triggers PAUSED state in executor
+        output=message,
+        action=step.action,
+        output_data={
+            "awaiting_input": True,
+            "channel": cfg.channel,
+            "timeout": cfg.timeout,
+        },
+    )

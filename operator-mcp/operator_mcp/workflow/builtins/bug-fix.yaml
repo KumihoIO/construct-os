@@ -1,0 +1,64 @@
+name: bug-fix
+version: "1.0"
+description: "Researcher investigates, coder fixes, tester verifies."
+tags: [bugfix, testing]
+
+inputs:
+  - name: bug_description
+    type: string
+    required: true
+    description: "Description of the bug to fix"
+
+steps:
+  - id: investigate
+    name: "Investigate bug"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Investigate this bug:
+        ${inputs.bug_description}
+
+        Find the root cause. Identify which files are affected.
+        Propose a fix strategy.
+      timeout: 300
+
+  - id: fix
+    name: "Implement fix"
+    type: agent
+    depends_on: [investigate]
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: |
+        Fix the bug based on investigation:
+        ${investigate.output}
+
+        Bug: ${inputs.bug_description}
+      timeout: 300
+
+  - id: test
+    name: "Verify fix"
+    type: agent
+    depends_on: [fix]
+    agent:
+      agent_type: codex
+      role: tester
+      prompt: |
+        Verify the bug fix:
+        Bug: ${inputs.bug_description}
+        Investigation: ${investigate.output}
+        Fix applied: ${fix.output}
+        Files changed: ${fix.files}
+
+        Run relevant tests. Confirm the bug is fixed without regressions.
+      timeout: 300
+
+outputs:
+  - name: investigation
+    source: "${investigate.output}"
+  - name: fix_summary
+    source: "${fix.output}"
+  - name: test_result
+    source: "${test.output}"

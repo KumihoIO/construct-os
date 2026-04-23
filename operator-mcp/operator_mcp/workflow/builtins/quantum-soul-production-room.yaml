@@ -1,0 +1,522 @@
+name: quantum-soul-production-room
+version: "1.2"
+description: >-
+  Deep production polish workflow for a Quantum Soul episode draft.
+  Six deep specialists (quantum-soul-*) review voice, hooks, science, structure,
+  and character integrity, then the main editor produces a final polish brief
+  and a polished draft is output. Auto-triggered by qs-episode-draft:ready.
+tags: [creative, writing, novel, multi-agent, quantum-soul, production]
+
+triggers:
+  - on_kind: "qs-episode-draft"
+    on_tag: "ready"
+    # Auto-mapped from entity metadata: part, episode_number, episode_goal
+    input_map:
+      episode_draft: "${trigger.entity_kref}"
+      carry_forward: "${trigger.metadata.carry_forward}"
+
+inputs:
+  - name: part
+    type: string
+    required: false
+    default: ""
+    description: "Current part label, e.g. Part 2: 얽힌 마음 (auto-resolved from cursor if empty)"
+  - name: episode_number
+    type: string
+    required: false
+    default: ""
+    description: "Episode number (auto-resolved from cursor if empty)"
+  - name: episode_goal
+    type: string
+    required: false
+    default: ""
+    description: "What this episode must accomplish (auto-resolved from cursor if empty)"
+  - name: episode_draft
+    type: string
+    required: false
+    default: ""
+    description: "Kref of the episode draft entity from episode-room (auto-resolved from cursor if empty)"
+  - name: carry_forward
+    type: string
+    required: false
+    default: ""
+    description: Carry-forward packet from episode-room editorial pass
+
+outputs:
+  - name: polish_report
+    source: "${production_editor.output}"
+  - name: polished_draft
+    source: "${polish_draft.output}"
+  - name: entity_kref
+    source: "${final_output.output_data.entity_kref}"
+  - name: publish_status
+    source: "${publish_episode.output_data.status}"
+
+steps:
+  # ── Phase 0: Resolve production cursor ───────────────────────────────
+
+  - id: resolve_cursor
+    name: Episode Draft to Produce
+    type: resolve
+    description: Fetch the latest ready episode draft that needs production polish.
+    resolve:
+      kind: "qs-episode-draft"
+      tag: "ready"
+      mode: latest
+      fields: [part, episode_number, episode_goal, carry_forward]
+      fail_if_missing: true
+
+  - id: resolve_last_final
+    name: Last Finalized Episode
+    type: resolve
+    description: Fetch the last finalized episode for continuity reference.
+    depends_on: []
+    resolve:
+      kind: "qs-episode-final"
+      tag: "published"
+      mode: latest
+      fields: [part, episode_number, episode_goal]
+      fail_if_missing: false
+
+  # ── Phase 1: Parallel deep specialist reviews (4 agents) ───────────────
+
+  - id: persona_review
+    name: Persona & Voice Deep Review
+    type: agent
+    depends_on: [resolve_cursor, resolve_last_final]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: persona-director
+      template: quantum-soul-persona-director
+      prompt: |
+        Perform a deep voice and persona review of this Quantum Soul episode draft.
+
+        Skills to consult (character bibles for voice axioms):
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (Jin: short/careful dialogue, recursive narration, cooling fan/cold hands motifs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (Hyun: direct/practical, warm hands, kimbap pairs)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (Nabi: precise/gentle, delayed smile, curious questions)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (Dohyun: slang-forward, emotion outruns syntax, hunger motif)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (Sora: double-meaning elegance, ring-finger motif)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (Hanul: computational strain, failed classification)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+        Carry-forward context: ${resolve_cursor.output_data.continuity_context}
+
+        Return markdown with exactly these sections:
+        1. Voice Fidelity Report (per character: pass/flag with specific lines)
+        2. Register Violations
+        3. Silence & Withholding Check
+        4. Inner Narration Texture
+        5. Motif Presence Audit
+        6. Must-Fix Voice Issues (max 5)
+      timeout: 300
+
+  - id: cliffhanger_review
+    name: Cliffhanger & Hook Deep Review
+    type: agent
+    depends_on: [resolve_cursor, resolve_last_final]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: cliffhanger-designer
+      template: quantum-soul-cliffhanger-designer
+      prompt: |
+        Perform a deep hook and ending review of this Quantum Soul episode draft.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (where this episode sits in the full narrative)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+        Carry-forward context: ${resolve_cursor.output_data.continuity_context}
+
+        Return markdown with exactly these sections:
+        1. Current Ending Assessment
+        2. Serial Pull Strength (1-10 with reasoning)
+        3. Alternative Hook Options (max 2)
+        4. Scene-End Micro-Hooks Within The Episode
+        5. What The Episode Promises For Next Time
+      timeout: 300
+
+  - id: science_deep_review
+    name: Science Deep Review
+    type: agent
+    depends_on: [resolve_cursor, resolve_last_final]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef"
+    agent:
+      agent_type: claude
+      role: science-advisor
+      template: quantum-soul-science-advisor
+      prompt: |
+        Perform a deep science and plausibility review of this Quantum Soul episode draft.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-quantum-cognition-grounding.skilldef (three-layer test: literal/perceptual/philosophical)
+        - kref://CognitiveMemory/Skills/quantum-soul-ai-agi-mesh-grounding.skilldef (Hanul discipline, mesh failure modes)
+        - kref://CognitiveMemory/Skills/quantum-soul-neuro-bioethics-grounding.skilldef (awakening discipline, border body rules)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+        Carry-forward context: ${resolve_cursor.output_data.continuity_context}
+
+        Return markdown with exactly these sections:
+        1. Three-Layer Audit (which lines are literal/perceptual/philosophical — flag any that blur carelessly)
+        2. Plausibility Slips
+        3. Stronger Scientific Rendering Suggestions
+        4. Bioethical Texture Opportunities
+        5. Must-Keep Scientific Strengths
+      timeout: 300
+
+  - id: structure_deep_review
+    name: Structural Deep Review
+    type: agent
+    depends_on: [resolve_cursor, resolve_last_final]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef"
+    agent:
+      agent_type: claude
+      role: structural-auditor
+      template: quantum-soul-structural-auditor
+      prompt: |
+        Perform a deep structural audit of this Quantum Soul episode draft.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-series-synopsis.skilldef (full narrative spine for placement context)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+        Carry-forward context: ${resolve_cursor.output_data.continuity_context}
+
+        Return markdown with exactly these sections:
+        1. Pacing Map (scene-by-scene tension curve)
+        2. Where The Episode Drags
+        3. Irreversibility Check (did the episode change something that can't be undone?)
+        4. Information Economy (what was revealed vs withheld — is the balance right?)
+        5. Placement In The Arc (does it earn its position?)
+      timeout: 300
+
+  # ── Phase 2: Character integrity check ─────────────────────────────────
+
+  - id: character_integrity
+    name: Character Integrity Check
+    type: agent
+    depends_on: [persona_review]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: character-designer
+      template: quantum-soul-character-designer
+      prompt: |
+        Review the character behavior and relationship dynamics in this episode for canon integrity.
+
+        Skills to consult (character bibles):
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (psychological rules, arc rules, non-negotiables)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (inner structure, relationship rules, non-negotiables)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (conceptual rules, naming rules, non-negotiables)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (social role rules, proof scene rules, non-negotiables)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (moral rules, re-read rules, non-negotiables)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (concept rules, emotional rules, threat rules)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Persona review findings:
+        ${persona_review.output}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+        Carry-forward context: ${resolve_cursor.output_data.continuity_context}
+
+        Return markdown with exactly these sections:
+        1. Canon Violations (any character acting against their bible axioms)
+        2. Relationship Authenticity Check
+        3. Ethical Contradiction Preservation (are the moral tensions intact?)
+        4. Arc Progression Check (does each character move correctly for this part?)
+        5. Must-Fix Character Issues (max 5, with specific scene references)
+      timeout: 300
+
+  # ── Phase 3: Production editorial synthesis ────────────────────────────
+
+  - id: production_editor
+    name: Production Editorial Synthesis
+    type: agent
+    depends_on: [persona_review, cliffhanger_review, science_deep_review, structure_deep_review, character_integrity]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-synopsis-revision.skilldef"
+    agent:
+      agent_type: claude
+      role: main-editor
+      template: quantum-soul-main-editor
+      prompt: |
+        Produce the canonical production polish brief for this Quantum Soul episode.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-editorial-agent-suite.skilldef (team coordination, editorial laws)
+        - kref://CognitiveMemory/Skills/quantum-soul-synopsis-revision.skilldef (revision workflow, failure audit)
+
+        Part: ${resolve_cursor.output_data.part}
+        Episode: ${resolve_cursor.output_data.episode_number}
+        Episode goal: ${resolve_cursor.output_data.episode_goal}
+
+        Persona review:
+        ${persona_review.output}
+
+        Cliffhanger review:
+        ${cliffhanger_review.output}
+
+        Science review:
+        ${science_deep_review.output}
+
+        Structure review:
+        ${structure_deep_review.output}
+
+        Character integrity:
+        ${character_integrity.output}
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+
+        Return markdown with exactly these sections:
+        1. Overall Verdict (pass to publish / revise first)
+        2. Keep As-Is (strengths across all reviews)
+        3. Priority Fixes (ranked, max 7, from all specialist reviews)
+        4. Voice Protections (lines or passages that must survive revision)
+        5. Ending Directive (keep current / use alternative hook)
+        6. Science Corrections
+        7. Character Corrections
+        8. Final Canon Notes For Archive
+
+        Be ruthless about priorities. Not every specialist note needs action.
+      timeout: 300
+
+  # ── Phase 4: Polish draft ──────────────────────────────────────────────
+
+  - id: polish_draft
+    name: Polished Draft
+    type: agent
+    depends_on: [production_editor]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: episode-writer
+      prompt: |
+        Apply the production polish brief to produce the final publication-ready Korean draft.
+
+        Skills to consult:
+        - kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef (voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef (voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef (voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef (voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef (voice protections)
+        - kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef (voice protections)
+
+        Episode draft entity: ${resolve_cursor.output_data.draft_kref}
+
+        Production brief:
+        ${production_editor.output}
+
+        Requirements:
+        - Output final Korean prose only.
+        - Apply only the priority fixes from the production brief.
+        - Protect all voice passages marked to keep.
+        - Implement the ending directive exactly.
+        - Apply science and character corrections without flattening prose.
+        - Do not add commentary, summaries, or notes.
+      timeout: 300
+
+  # ── Phase 5: Output entity ─────────────────────────────────────────────
+
+  - id: final_output
+    name: Production Episode Output
+    type: output
+    depends_on: [polish_draft, production_editor]
+    output:
+      format: markdown
+      template: |
+        # Quantum Soul Production Episode
+
+        ## Part / Episode
+        ${resolve_cursor.output_data.part} / ${resolve_cursor.output_data.episode_number}
+
+        ## Episode Goal
+        ${resolve_cursor.output_data.episode_goal}
+
+        ## Production Report
+        ${production_editor.output}
+
+        ## Final Polished Draft
+        ${polish_draft.output}
+      entity_name: "ep-${resolve_cursor.output_data.episode_number}-${resolve_cursor.output_data.part}-final"
+      entity_kind: "qs-episode-final"
+      entity_tag: "ready"
+      entity_metadata:
+        part: "${resolve_cursor.output_data.part}"
+        episode_number: "${resolve_cursor.output_data.episode_number}"
+        episode_goal: "${resolve_cursor.output_data.episode_goal}"
+        draft_kref: "${resolve_cursor.output_data.draft_kref}"
+        last_final_kref: "${resolve_cursor.output_data.last_final_kref}"
+
+  # ── Phase 6: Human Review & Approval Loop ──────────────────────────────
+
+  - id: review_approval
+    name: Editorial Review
+    type: human_input
+    description: Pause for human review of the polished episode. Reply 'approve' to publish or provide revision notes.
+    depends_on: [final_output]
+    human_input:
+      message: |
+        Review Quantum Soul Episode ${resolve_cursor.output_data.episode_number} (${resolve_cursor.output_data.part})
+
+        Goal: ${resolve_cursor.output_data.episode_goal}
+
+        The polished draft and production report are ready for your review.
+        Reply 'approve' to publish, or provide detailed revision notes.
+      channel: discord
+      timeout: 86400
+
+  - id: approval_gate
+    name: Approval Gate
+    type: conditional
+    description: Route to publish (approved) or revision (rejected with notes).
+    depends_on: [review_approval]
+    condition: "'approve' in '${review_approval.output}'.lower()"
+    on_true: publish_episode
+    on_false: revision_producer
+
+  - id: publish_episode
+    name: Publish Episode
+    type: agent
+    description: Tag the episode entity as published, making it available for the next arc-room cursor cycle.
+    depends_on: [approval_gate]
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        The episode has been approved for publication.
+
+        Use kumiho_tag_revision to add the "published" tag to the entity
+        created by the final_output step.
+
+        Entity kref: ${final_output.output_data.entity_kref}
+
+        After tagging, output a confirmation JSON:
+        {
+          "status": "published",
+          "entity_kref": "${final_output.output_data.entity_kref}",
+          "episode_number": "${resolve_cursor.output_data.episode_number}",
+          "part": "${resolve_cursor.output_data.part}"
+        }
+      timeout: 60
+
+  - id: revision_producer
+    name: Revision Pass
+    type: agent
+    description: Apply human revision notes to produce an improved polished draft.
+    depends_on: [approval_gate]
+    skills:
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-seo-jin.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-kang-hyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-nabi.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-park-dohyun.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-han-sora.skilldef"
+      - "kref://CognitiveMemory/Skills/quantum-soul-character-hanul.skilldef"
+    agent:
+      agent_type: claude
+      role: episode-writer
+      prompt: |
+        The human reviewer has requested revisions to the polished episode.
+
+        Revision notes from reviewer:
+        ${review_approval.output}
+
+        Previous polished draft:
+        ${polish_draft.output}
+
+        Production brief:
+        ${production_editor.output}
+
+        Apply the reviewer's notes while maintaining:
+        - Character voice consistency per skill definitions
+        - Science accuracy per production brief
+        - Hook structure and pacing
+        - Korean prose quality
+
+        Output ONLY the revised Korean prose — no commentary or notes.
+      timeout: 300
+
+  - id: revised_output
+    name: Revised Episode Output
+    type: output
+    description: Re-publish the revised episode as a new ready entity for another review cycle.
+    depends_on: [revision_producer]
+    output:
+      format: markdown
+      template: |
+        # Quantum Soul Production Episode (Revised)
+
+        ## Part / Episode
+        ${resolve_cursor.output_data.part} / ${resolve_cursor.output_data.episode_number}
+
+        ## Episode Goal
+        ${resolve_cursor.output_data.episode_goal}
+
+        ## Revision Notes Applied
+        ${review_approval.output}
+
+        ## Revised Polished Draft
+        ${revision_producer.output}
+      entity_name: "ep-${resolve_cursor.output_data.episode_number}-${resolve_cursor.output_data.part}-final-revised"
+      entity_kind: "qs-episode-final"
+      entity_tag: "ready"
+      entity_metadata:
+        part: "${resolve_cursor.output_data.part}"
+        episode_number: "${resolve_cursor.output_data.episode_number}"
+        episode_goal: "${resolve_cursor.output_data.episode_goal}"
+        draft_kref: "${resolve_cursor.output_data.draft_kref}"
+        last_final_kref: "${resolve_cursor.output_data.last_final_kref}"
+        revision_notes: "${review_approval.output}"
+
+  - id: review_loop
+    name: Review Loop
+    type: goto
+    description: Loop back to human review for the revised draft (max 3 revision cycles).
+    depends_on: [revised_output]
+    goto:
+      target: review_approval
+      max_iterations: 3

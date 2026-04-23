@@ -1,0 +1,65 @@
+name: spec-to-impl
+version: "1.0"
+description: "Architect designs, coder implements, reviewer verifies."
+tags: [architecture, review, implementation]
+
+inputs:
+  - name: task
+    type: string
+    required: true
+    description: "Feature specification or requirement"
+
+steps:
+  - id: design
+    name: "Architecture design"
+    type: agent
+    agent:
+      agent_type: claude
+      role: architect
+      prompt: |
+        Design the architecture for this feature:
+        ${inputs.task}
+
+        Produce a clear plan with:
+        - Component structure
+        - Key interfaces
+        - Implementation approach
+        - Testing strategy
+      timeout: 300
+
+  - id: implement
+    name: "Implement design"
+    type: agent
+    depends_on: [design]
+    agent:
+      agent_type: codex
+      role: coder
+      prompt: |
+        Implement the following design:
+        ${design.output}
+
+        Original requirement: ${inputs.task}
+      timeout: 300
+
+  - id: verify
+    name: "Verify implementation"
+    type: agent
+    depends_on: [implement]
+    agent:
+      agent_type: codex
+      role: reviewer
+      prompt: |
+        Verify this implementation matches the design:
+
+        Design: ${design.output}
+        Implementation files: ${implement.files}
+        Coder output: ${implement.output}
+
+        Check for correctness, completeness, and adherence to design.
+      timeout: 300
+
+outputs:
+  - name: design
+    source: "${design.output}"
+  - name: review
+    source: "${verify.output}"

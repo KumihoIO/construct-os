@@ -1,0 +1,62 @@
+name: data-pipeline-distribute
+version: "1.0"
+description: "Format and prepare an executive summary for distribution. Auto-triggered by data-pipeline-summarize."
+tags: [pipeline, data, chain]
+
+triggers:
+  - on_kind: "executive-summary"
+    on_tag: "ready"
+    # source_name auto-mapped from entity metadata (matching key name)
+    input_map:
+      source_entity: "${trigger.entity_kref}"
+
+inputs:
+  - name: source_entity
+    type: string
+    required: true
+    description: "Kref of the executive summary entity"
+  - name: source_name
+    type: string
+    required: false
+    default: "summary"
+    description: "Name of the source entity (auto-filled from entity metadata)"
+  - name: cwd
+    type: string
+    required: false
+    default: "~"
+
+steps:
+  - id: format
+    name: "Format for distribution"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        You have received an executive summary (entity: ${inputs.source_entity}, name: ${inputs.source_name}).
+
+        Format this into a distribution-ready document:
+        1. Add a professional header with date and classification
+        2. Structure with clear sections
+        3. Add a TL;DR at the top (2-3 sentences max)
+        4. Include an action items checklist at the bottom
+
+        Output the final formatted document.
+      timeout: 180
+
+  - id: publish
+    name: "Publish distribution package"
+    type: output
+    depends_on: [format]
+    output:
+      format: markdown
+      template: "${format.output}"
+      entity_name: "${inputs.source_name}-distribution"
+      entity_kind: "distribution-package"
+      entity_tag: "delivered"
+
+outputs:
+  - name: document
+    source: "${format.output}"
+  - name: entity_kref
+    source: "${publish.output_data.entity_kref}"

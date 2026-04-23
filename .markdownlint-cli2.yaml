@@ -1,0 +1,17 @@
+config:
+  default: true
+  MD013: false
+  MD007: false
+  MD031: false
+  MD032: false
+  MD033: false
+  MD040: false
+  MD041: false
+  MD060: false
+  MD024:
+    # Allow duplicate H3s under different H2 parents — used by docs with
+    # parallel subsections (e.g. docs/setup-guides/kumiho-operator-setup.md).
+    siblings_only: true
+
+ignores:
+  - "target/**"

@@ -1,0 +1,220 @@
+name: novel-writing
+version: "1.0"
+description: "Multi-agent collaborative novel writing with characters agent, story architect, event creator, and narrator. Uses Kumiho memory for cross-session continuity."
+tags: [creative, writing, novel, multi-agent]
+
+inputs:
+  - name: premise
+    type: string
+    required: true
+    description: "Novel premise, genre, themes, and any constraints (e.g. 'A cyberpunk mystery set in 2087 Tokyo, exploring identity and memory')"
+  - name: chapters
+    type: string
+    required: false
+    description: "Number of chapters to write per run (default: 3)"
+
+steps:
+  # ── Phase 1: World Building (parallel) ─────────────────────────────
+  - id: world_building
+    name: "Parallel world building"
+    type: parallel
+    parallel:
+      steps: [characters, story_arc]
+      join: all
+      max_concurrency: 2
+
+  - id: characters
+    name: "Characters & world bible"
+    type: agent
+    agent:
+      agent_type: claude
+      role: characters-agent
+      prompt: |
+        You are the Characters & World Bible agent for a novel project.
+
+        PREMISE: ${inputs.premise}
+
+        Your job:
+        1. First, use kumiho_memory_engage to check if a world bible already exists for this project (query: "novel world bible characters").
+        2. If prior world-building exists, LOAD and EXTEND it. Do not start from scratch.
+        3. If starting fresh, create:
+           - 3-5 main characters with names, backgrounds, motivations, flaws, and voice/speech patterns
+           - Key locations and their atmosphere
+           - World rules, technology/magic systems, social structures
+           - Important items or artifacts
+           - Character relationship map
+
+        4. Store the world bible via kumiho_memory_reflect with captures:
+           - type: "fact", title: "Novel World Bible - Characters", tags: ["novel", "world-bible", "characters"]
+           - One capture per major character: type: "fact", title: "Character: [Name]", tags: ["novel", "character"]
+
+        Output the complete world bible as structured markdown.
+      timeout: 300
+
+  - id: story_arc
+    name: "Story arc architecture"
+    type: agent
+    agent:
+      agent_type: claude
+      role: story-architect
+      prompt: |
+        You are the Story Arc Architect for a novel project.
+
+        PREMISE: ${inputs.premise}
+
+        Your job:
+        1. First, use kumiho_memory_engage to check if a story arc already exists (query: "novel story arc plot structure").
+        2. If a prior arc exists, LOAD it and plan the NEXT chapters. Do not repeat.
+        3. If starting fresh, design:
+           - Three-act structure with major turning points
+           - Chapter-by-chapter outline (at least 10 chapters)
+           - Subplots and how they weave together
+           - Thematic throughlines
+           - Pacing notes (tension curve)
+           - Foreshadowing elements to plant early
+
+        4. Store the arc via kumiho_memory_reflect with captures:
+           - type: "plan", title: "Novel Story Arc", tags: ["novel", "story-arc", "plot"]
+           - type: "fact", title: "Novel Chapter Outline", tags: ["novel", "outline"]
+
+        Output the complete story arc as structured markdown.
+      timeout: 300
+
+  # ── Phase 2: Chapter Writing Loop ──────────────────────────────────
+  - id: events
+    name: "Create chapter events"
+    type: agent
+    depends_on: [world_building]
+    agent:
+      agent_type: claude
+      role: event-creator
+      prompt: |
+        You are the Event Creator for a novel project. You design what HAPPENS in each chapter.
+
+        STORY ARC: ${story_arc.output}
+        CHARACTERS: ${characters.output}
+        CHAPTER ITERATION: ${loop.iteration}
+
+        Your job:
+        1. Use kumiho_memory_engage to recall what has happened so far (query: "novel chapter events previously written").
+        2. Based on the story arc and current chapter number, create:
+           - The specific events for this chapter (following the outline)
+           - Which characters appear and what they do
+           - Key dialogue beats (not full dialogue, just the beats)
+           - Emotional arc of the chapter
+           - Scene-by-scene breakdown (2-4 scenes per chapter)
+           - Cliffhanger or transition to next chapter
+        3. Ensure continuity with prior chapters — reference established facts.
+
+        4. Store via kumiho_memory_reflect:
+           - type: "fact", title: "Novel Chapter ${loop.iteration} Events", tags: ["novel", "chapter-events"]
+
+        Output the detailed chapter event plan.
+      timeout: 300
+
+  - id: narrator
+    name: "Write chapter prose"
+    type: agent
+    depends_on: [events]
+    agent:
+      agent_type: claude
+      role: narrator
+      prompt: |
+        You are the Narrator — the voice of the novel. You write the actual prose.
+
+        PREMISE: ${inputs.premise}
+        CHARACTERS: ${characters.output}
+        CHAPTER EVENTS: ${events.output}
+        CHAPTER NUMBER: ${loop.iteration}
+
+        Your job:
+        1. Use kumiho_memory_engage to recall the writing style and voice established in prior chapters (query: "novel narrator prose style chapter").
+        2. Write the full chapter prose:
+           - Rich, immersive narrative voice consistent across chapters
+           - Vivid sensory details and setting descriptions
+           - Authentic dialogue that reflects each character's unique voice
+           - Internal monologue where appropriate
+           - Show, don't tell — convey emotion through action and detail
+           - Proper scene transitions
+           - 2000-4000 words per chapter
+        3. End with a compelling hook for the next chapter.
+
+        4. Store the chapter via kumiho_memory_reflect:
+           - type: "fact", title: "Novel Chapter ${loop.iteration} - Written", content: "<brief 2-sentence summary of what happened>", tags: ["novel", "chapter", "prose"]
+
+        Output the complete chapter text in markdown with a chapter heading.
+      timeout: 600
+
+  - id: continuity_check
+    name: "Continuity & memory capture"
+    type: agent
+    depends_on: [narrator]
+    agent:
+      agent_type: claude
+      role: editor
+      prompt: |
+        You are the Continuity Editor. You ensure the novel stays internally consistent.
+
+        WORLD BIBLE: ${characters.output}
+        STORY ARC: ${story_arc.output}
+        CHAPTER JUST WRITTEN: ${narrator.output}
+        CHAPTER NUMBER: ${loop.iteration}
+
+        Your job:
+        1. Use kumiho_memory_engage to recall all prior chapter summaries (query: "novel chapter summaries continuity").
+        2. Check for:
+           - Character consistency (do they act in-character?)
+           - Plot holes or contradictions with prior chapters
+           - Timeline consistency
+           - Factual consistency with the world bible
+           - Unresolved threads that need attention
+        3. Note any issues found (the next iteration can address them).
+
+        4. Store a comprehensive chapter summary via kumiho_memory_reflect:
+           - type: "summary", title: "Novel Chapter ${loop.iteration} Summary", tags: ["novel", "chapter-summary", "continuity"]
+           - Include: characters involved, key events, plot advancement, open threads
+
+        Output: brief continuity report and chapter summary.
+      timeout: 300
+
+  - id: next_chapter
+    name: "Loop to next chapter"
+    type: goto
+    depends_on: [continuity_check]
+    goto:
+      target: events
+      max_iterations: 3
+
+  # ── Phase 3: Compilation ───────────────────────────────────────────
+  - id: compile
+    name: "Compile chapters"
+    type: output
+    depends_on: [next_chapter]
+    output:
+      format: markdown
+      template: |
+        # Novel Output
+
+        **Premise:** ${inputs.premise}
+
+        ## World Bible
+        ${characters.output}
+
+        ## Story Arc
+        ${story_arc.output}
+
+        ## Chapters Written
+        ${narrator.output}
+
+        ## Continuity Notes
+        ${continuity_check.output}
+
+outputs:
+  - name: world_bible
+    source: "${characters.output}"
+  - name: story_arc
+    source: "${story_arc.output}"
+  - name: chapters
+    source: "${narrator.output}"
+  - name: continuity
+    source: "${continuity_check.output}"

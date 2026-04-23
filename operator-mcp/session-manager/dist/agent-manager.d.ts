@@ -1,0 +1,46 @@
+/**
+ * Agent Manager — lifecycle management for SDK agent sessions.
+ *
+ * Central coordinator: creates sessions via providers, manages state transitions,
+ * dispatches events through the event emitter, and exposes the REST API surface.
+ */
+import type { AgentSessionConfig, AgentSessionInfo, AgentStreamEvent } from "./types.js";
+import { AgentEventEmitter } from "./event-emitter.js";
+export declare class AgentManager {
+    private sessions;
+    readonly emitter: AgentEventEmitter;
+    /**
+     * Create a new agent session.
+     */
+    createAgent(config: AgentSessionConfig): Promise<AgentSessionInfo>;
+    /**
+     * Send a follow-up prompt to an existing agent.
+     */
+    sendQuery(agentId: string, prompt: string): Promise<AgentSessionInfo>;
+    /**
+     * Close and cleanup an agent session.
+     */
+    closeAgent(agentId: string): Promise<void>;
+    /**
+     * Interrupt a running agent.
+     */
+    interruptAgent(agentId: string): Promise<void>;
+    /**
+     * Get info for a specific agent.
+     */
+    getAgent(agentId: string): AgentSessionInfo | null;
+    /**
+     * List all active agent sessions.
+     */
+    listAgents(): AgentSessionInfo[];
+    /**
+     * Get recent events for an agent (for activity/stream catchup).
+     */
+    getAgentEvents(agentId: string, since?: number): AgentStreamEvent[];
+    /**
+     * Resume persisted agent sessions on sidecar startup.
+     * Only resumes Claude sessions that have a session ID (Codex cannot resume).
+     */
+    resumePersistedSessions(): Promise<number>;
+    private getSessionInfo;
+}

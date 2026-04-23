@@ -1,0 +1,92 @@
+name: architecture-discussion
+version: "1.0"
+description: "Multi-perspective architecture discussion using group chat pattern."
+tags: [architecture, discussion, design]
+
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: "Architecture topic to discuss"
+  - name: context
+    type: string
+    default: ""
+    description: "Additional context about the codebase or constraints"
+
+steps:
+  - id: research
+    name: "Research current state"
+    type: agent
+    agent:
+      agent_type: claude
+      role: researcher
+      prompt: |
+        Research the codebase to understand the current architecture
+        relevant to this discussion topic:
+        ${inputs.topic}
+
+        ${inputs.context}
+
+        Identify: current patterns, dependencies, pain points,
+        and relevant prior decisions.
+      timeout: 300
+
+  - id: design_options
+    name: "Generate design options"
+    type: agent
+    depends_on: [research]
+    agent:
+      agent_type: claude
+      role: architect
+      prompt: |
+        Based on the research findings, generate 2-3 design options:
+        Topic: ${inputs.topic}
+        Research: ${research.output}
+
+        For each option provide:
+        - Description
+        - Pros/cons
+        - Risk assessment
+        - Estimated effort
+      timeout: 300
+
+  - id: evaluate
+    name: "Evaluate and recommend"
+    type: agent
+    depends_on: [design_options]
+    agent:
+      agent_type: claude
+      role: architect
+      prompt: |
+        Evaluate the design options and make a recommendation:
+        Topic: ${inputs.topic}
+        Options: ${design_options.output}
+        Current state: ${research.output}
+
+        Consider: feasibility, risk, migration path, team impact.
+        Produce a clear recommendation with rationale.
+      timeout: 300
+
+  - id: summary
+    name: "Architecture decision record"
+    type: output
+    depends_on: [evaluate]
+    output:
+      format: markdown
+      template: |
+        ## Architecture Decision: ${inputs.topic}
+
+        ### Context
+        ${research.output}
+
+        ### Options Considered
+        ${design_options.output}
+
+        ### Decision
+        ${evaluate.output}
+
+outputs:
+  - name: decision
+    source: "${evaluate.output}"
+  - name: options
+    source: "${design_options.output}"
