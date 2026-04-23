@@ -338,31 +338,6 @@ The gateway exposes 90+ REST endpoints and 5 WebSocket routes grouped by domain.
 
 ## Quick Start
 
-### From crates.io (fastest, if you already have Rust)
-
-```bash
-cargo install kumihoio-construct
-construct install --sidecars-only    # fetch Kumiho + Operator Python MCP sidecars
-construct onboard                    # interactive provider + API-key setup
-construct gateway                    # http://127.0.0.1:42617
-```
-
-Requires Rust stable 1.87+. The crate is published as `kumihoio-construct`; the installed binary is `construct`.
-
-### Prebuilt binaries
-
-Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64) under [Releases](https://github.com/KumihoIO/construct-os/releases/latest).
-
-```bash
-# Linux / macOS (x86_64 example — swap in your arch)
-curl -L https://github.com/KumihoIO/construct-os/releases/latest/download/construct-x86_64-unknown-linux-gnu.tar.gz | tar -xz
-sudo mv construct /usr/local/bin/
-construct install --sidecars-only
-construct onboard
-```
-
-Windows users: download the `.zip` for your arch from the Releases page, extract, and add `construct.exe` to `PATH`.
-
 ### One-command install (auto-handles Rust, sidecars, onboard)
 
 ```bash
@@ -407,7 +382,7 @@ Add `--features channel-matrix,channel-lark,browser-native,hardware,rag-pdf,obse
 
 > **Sidecar re-install.** To re-run sidecar install independently of the main bootstrap:
 >
-> - `construct install --sidecars-only` — cross-platform; embedded in the `construct` binary, runs the right script for your OS. Use this once you have `construct` on PATH (e.g. after `cargo install kumihoio-construct`).
+> - `construct install --sidecars-only` — cross-platform; embedded in the `construct` binary, runs the right script for your OS. Use this once you have `construct` on PATH.
 > - `./scripts/install-sidecars.sh` / `scripts\install-sidecars.bat` — same logic, straight from a source checkout.
 >
 > Both paths are idempotent — they never overwrite an existing `config.toml`, `.env`, or user-authored launcher.
