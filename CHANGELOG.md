@@ -49,7 +49,7 @@ Version numbers follow CalVer (`YYYY.M.D`).
 ### Packaging
 
 - Renamed the crates.io package from `construct` (and the half-
-  renamed `constructlabs`) to `kumihoio-construct`. `[package].name`
+  renamed `constructlabs`) to `kumiho-construct`. `[package].name`
   only — binary and lib names remain `construct`, so `construct …`
   still works at the CLI and in-repo `use construct::*` imports are
   unchanged. Verified via `cargo metadata --no-deps`.
@@ -57,7 +57,7 @@ Version numbers follow CalVer (`YYYY.M.D`).
   `publish-crates-auto.yml`, and `tweet-release.yml` to reference the
   new package name and `x.com/KumihoHQ`.
 - Updated `Dockerfile` stale-artifact cleanup to cover the new
-  `kumihoio-construct-*` fingerprint paths and
+  `kumiho-construct-*` fingerprint paths and
   `kumihoio_construct-*` dep filenames in addition to legacy
   `construct-*` paths.
 

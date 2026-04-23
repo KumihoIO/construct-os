@@ -15,7 +15,7 @@ Last verified: **2026-04-21**.
 
 ## Quick install (automated)
 
-If you already have the `construct` binary on PATH (e.g. from `cargo install kumihoio-construct` or a prior `./install.sh`):
+If you already have the `construct` binary on PATH (e.g. from `cargo install kumiho-construct` or a prior `./install.sh`):
 
 ```bash
 construct install --sidecars-only

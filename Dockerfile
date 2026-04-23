@@ -57,7 +57,7 @@ RUN touch src/main.rs
 RUN --mount=type=cache,id=construct-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=construct-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=construct-target,target=/app/target,sharing=locked \
-    rm -rf target/release/.fingerprint/kumihoio-construct-* \
+    rm -rf target/release/.fingerprint/kumiho-construct-* \
            target/release/.fingerprint/construct-* \
            target/release/deps/construct-* \
            target/release/deps/kumihoio_construct-* \

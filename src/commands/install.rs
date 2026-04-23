@@ -5,7 +5,7 @@
 //! temporary directory and runs them. This gives users a cross-platform
 //! `construct install --sidecars-only` entry point without having to know
 //! whether their checkout has the scripts or not (e.g. a `cargo install
-//! kumihoio-construct`-only user has no `scripts/` directory available).
+//! kumiho-construct`-only user has no `scripts/` directory available).
 //!
 //! The full install flow (prerequisite checks, build, onboard, dashboard
 //! launch) will migrate from `install.sh` / `setup.bat` into this module over
