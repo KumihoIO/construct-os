@@ -349,4 +349,4 @@ construct channel doctor
 - [Telegram Bot API Documentation](https://core.telegram.org/bots/api)
 - [Construct Main README](../../README.md)
 - [Contributing Guide](../../CONTRIBUTING.md)
-- [Issue Tracker](https://github.com/KumihoIO/Construct/issues)
+- [Issue Tracker](https://github.com/KumihoIO/construct-os/issues)

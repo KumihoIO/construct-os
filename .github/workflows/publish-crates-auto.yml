@@ -19,7 +19,7 @@ env:
 jobs:
   detect-version-change:
     name: Detect Version Bump
-    if: github.repository == 'KumihoIO/Construct'
+    if: github.repository == 'KumihoIO/construct-os'
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.check.outputs.changed }}

@@ -66,7 +66,7 @@ sudo apt-get update
 sudo apt-get install -y pkg-config libssl-dev
 
 # 克隆 construct（或 scp 你的项目）
-git clone https://github.com/KumihoIO/Construct.git
+git clone https://github.com/KumihoIO/construct-os.git
 cd construct
 
 # 构建（在 Uno Q 上约 15–30 分钟）
@@ -199,7 +199,7 @@ construct daemon --host 127.0.0.1 --port 42617
 | 2 | `ssh arduino@<IP>` |
 | 3 | `curl -sSf https://sh.rustup.rs \| sh -s -- -y && source ~/.cargo/env` |
 | 4 | `sudo apt-get install -y pkg-config libssl-dev` |
-| 5 | `git clone https://github.com/KumihoIO/Construct.git && cd construct` |
+| 5 | `git clone https://github.com/KumihoIO/construct-os.git && cd construct` |
 | 6 | `cargo build --release --features hardware` |
 | 7 | `construct onboard --api-key KEY --provider openrouter` |
 | 8 | 编辑 `~/.construct/config.toml`（添加 Telegram bot_token） |

@@ -88,7 +88,7 @@ pip install piper-tts
 
 ```bash
 # Clone and build
-git clone https://github.com/KumihoIO/Construct
+git clone https://github.com/KumihoIO/construct-os
 cd construct
 cargo build -p construct-robot-kit --release
 ```

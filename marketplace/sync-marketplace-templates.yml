@@ -45,7 +45,7 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           cat > templates/compose/construct.yaml << 'TEMPLATE'
-          # documentation: https://github.com/KumihoIO/Construct
+          # documentation: https://github.com/KumihoIO/construct-os
           # slogan: Fast, small, fully autonomous AI personal assistant infrastructure — deploy anywhere, swap anything
           # tags: ai, agent, assistant, self-hosted, llm, chatbot, rust
           # logo: svgs/construct.png
@@ -53,7 +53,7 @@ jobs:
 
           services:
             construct:
-              image: ghcr.io/KumihoIO/Construct:latest
+              image: ghcr.io/KumihoIO/construct-os:latest
               restart: unless-stopped
               environment:
                 - API_KEY=${SERVICE_PASSWORD_APIKEY:-}
@@ -88,7 +88,7 @@ jobs:
         run: |
           if [ ! -f svgs/construct.png ]; then
             curl -fsSL -o svgs/construct.png \
-              "https://raw.githubusercontent.com/KumihoIO/Construct/main/.github/assets/construct-logo.png"
+              "https://raw.githubusercontent.com/KumihoIO/construct-os/main/.github/assets/construct-logo.png"
           fi
 
       - name: Create PR
@@ -114,7 +114,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates the Construct one-click service template
-          - Image: `ghcr.io/KumihoIO/Construct:latest`
+          - Image: `ghcr.io/KumihoIO/construct-os:latest`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
@@ -124,7 +124,7 @@ jobs:
           - Gateway accessible on port 42617
 
           ## Links
-          - https://github.com/KumihoIO/Construct
+          - https://github.com/KumihoIO/construct-os
           - https://github.com/orgs/KumihoIO/packages/container/package/construct
           EOF
           )"
@@ -161,7 +161,7 @@ jobs:
           version: "3.8"
           services:
             construct:
-              image: ghcr.io/KumihoIO/Construct:${VERSION}
+              image: ghcr.io/KumihoIO/construct-os:${VERSION}
               restart: unless-stopped
               environment:
                 - API_KEY=\${API_KEY}
@@ -199,7 +199,7 @@ jobs:
           # Copy logo if missing
           if [ ! -f blueprints/construct/construct.png ]; then
             curl -fsSL -o blueprints/construct/construct.png \
-              "https://raw.githubusercontent.com/KumihoIO/Construct/main/.github/assets/construct-logo.png"
+              "https://raw.githubusercontent.com/KumihoIO/construct-os/main/.github/assets/construct-logo.png"
           fi
 
       - name: Update meta.json
@@ -215,9 +215,9 @@ jobs:
             "description": "Fast, small, and fully autonomous AI personal assistant infrastructure. Deploy anywhere, swap anything. 100% Rust.",
             "logo": "construct.png",
             "links": {
-              "github": "https://github.com/KumihoIO/Construct",
+              "github": "https://github.com/KumihoIO/construct-os",
               "website": "https://construct.com/",
-              "docs": "https://github.com/KumihoIO/Construct#readme"
+              "docs": "https://github.com/KumihoIO/construct-os#readme"
             },
             "tags": ["ai", "self-hosted"]
           }
@@ -262,7 +262,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates Construct template to v${VERSION}
-          - Image: `ghcr.io/KumihoIO/Construct:${VERSION}`
+          - Image: `ghcr.io/KumihoIO/construct-os:${VERSION}`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
@@ -277,7 +277,7 @@ jobs:
           - Health check passes
 
           ## Links
-          - https://github.com/KumihoIO/Construct
+          - https://github.com/KumihoIO/construct-os
           - https://github.com/orgs/KumihoIO/packages/container/package/construct
           EOF
           )"
@@ -312,7 +312,7 @@ jobs:
           # Copy logo if missing
           if [ ! -f templates/construct/assets/logo.png ]; then
             curl -fsSL -o templates/construct/assets/logo.png \
-              "https://raw.githubusercontent.com/KumihoIO/Construct/main/.github/assets/construct-logo.png"
+              "https://raw.githubusercontent.com/KumihoIO/construct-os/main/.github/assets/construct-logo.png"
           fi
 
           # meta.yaml — update version and changelog
@@ -342,9 +342,9 @@ jobs:
             - label: Website
               url: https://construct.com
             - label: Documentation
-              url: https://github.com/KumihoIO/Construct#readme
+              url: https://github.com/KumihoIO/construct-os#readme
             - label: Github
-              url: https://github.com/KumihoIO/Construct
+              url: https://github.com/KumihoIO/construct-os
 
           contributors:
             - name: Kumiho Inc.
@@ -365,7 +365,7 @@ jobs:
               appServiceImage:
                 type: string
                 title: App Service Image
-                default: ghcr.io/KumihoIO/Construct:${VERSION}
+                default: ghcr.io/KumihoIO/construct-os:${VERSION}
               apiKey:
                 type: string
                 title: LLM Provider API Key
@@ -495,7 +495,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates Construct template to v${VERSION}
-          - Image: `ghcr.io/KumihoIO/Construct:${VERSION}`
+          - Image: `ghcr.io/KumihoIO/construct-os:${VERSION}`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
@@ -512,7 +512,7 @@ jobs:
           - Health check passes
 
           ## Links
-          - https://github.com/KumihoIO/Construct
+          - https://github.com/KumihoIO/construct-os
           - https://github.com/orgs/KumihoIO/packages/container/package/construct
           EOF
           )"

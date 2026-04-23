@@ -10,7 +10,7 @@ setlocal enabledelayedexpansion
 set "VERSION=0.6.2"
 set "RUST_MIN_VERSION=1.87"
 set "TARGET=x86_64-pc-windows-msvc"
-set "REPO=https://github.com/KumihoIO/Construct"
+set "REPO=https://github.com/KumihoIO/construct-os"
 
 :: Colors via ANSI (Windows 10+ Terminal)
 set "GREEN=[32m"
@@ -158,7 +158,7 @@ if %ERRORLEVEL% EQU 0 (
 
 if not defined DOWNLOAD_URL (
     :: Fallback: construct URL from known release pattern
-    set "DOWNLOAD_URL=https://github.com/KumihoIO/Construct/releases/latest/download/construct-%TARGET%.zip"
+    set "DOWNLOAD_URL=https://github.com/KumihoIO/construct-os/releases/latest/download/construct-%TARGET%.zip"
 )
 
 echo   Downloading from release...

@@ -298,6 +298,6 @@ If all tests pass:
 
 ## 📞 Support
 
-- Issues: https://github.com/KumihoIO/Construct/issues
+- Issues: https://github.com/KumihoIO/construct-os/issues
 - Docs: [testing-telegram.md](../../tests/telegram/testing-telegram.md)
 - Help: `construct --help`

@@ -52,7 +52,7 @@ try {
     Write-Host ""
     Write-Host "=========================================================="
     Write-Host "Add these two values to GitHub repository secrets:"
-    Write-Host "  https://github.com/KumihoIO/Construct/settings/secrets/actions"
+    Write-Host "  https://github.com/KumihoIO/construct-os/settings/secrets/actions"
     Write-Host "=========================================================="
     Write-Host ""
     Write-Host "Secret name:  WIN_SIGNING_PFX_PASSWORD"

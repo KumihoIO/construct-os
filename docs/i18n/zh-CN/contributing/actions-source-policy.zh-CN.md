@@ -50,8 +50,8 @@
 使用以下命令导出当前有效政策：
 
 ```bash
-gh api repos/KumihoIO/Construct/actions/permissions
-gh api repos/KumihoIO/Construct/actions/permissions/selected-actions
+gh api repos/KumihoIO/construct-os/actions/permissions
+gh api repos/KumihoIO/construct-os/actions/permissions/selected-actions
 ```
 
 ## 护栏

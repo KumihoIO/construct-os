@@ -218,7 +218,7 @@ journalctl --user -u construct.service -f
 ## Installer URL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KumihoIO/Construct/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh | bash
 ```
 
 ## Still Stuck?

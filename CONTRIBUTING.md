@@ -24,7 +24,7 @@ git push origin --delete master 2>/dev/null
 
 All PRs must target **`main`**. PRs targeting `master` will be rejected.
 
-**Background:** Construct previously used `master` in some documentation and scripts, which caused 404 errors, broken CI refs, and contributor confusion (see [#2929](https://github.com/KumihoIO/Construct/issues/2929), [#3061](https://github.com/KumihoIO/Construct/issues/3061), [#3194](https://github.com/KumihoIO/Construct/pull/3194)). As of March 2026, all references have been corrected, stale branches cleaned up, and the `master` branch permanently deleted.
+**Background:** Construct previously used `master` in some documentation and scripts, which caused 404 errors, broken CI refs, and contributor confusion (see [#2929](https://github.com/KumihoIO/construct-os/issues/2929), [#3061](https://github.com/KumihoIO/construct-os/issues/3061), [#3194](https://github.com/KumihoIO/construct-os/pull/3194)). As of March 2026, all references have been corrected, stale branches cleaned up, and the `master` branch permanently deleted.
 
 ---
 
@@ -43,7 +43,7 @@ All PRs must target **`main`**. PRs targeting `master` will be rejected.
 
 Welcome — contributions of all sizes are valued. If this is your first contribution, here is how to get started:
 
-1. **Find an issue.** Look for issues labeled [`good first issue`](https://github.com/KumihoIO/Construct/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — these are scoped for newcomers and include context to get moving quickly.
+1. **Find an issue.** Look for issues labeled [`good first issue`](https://github.com/KumihoIO/construct-os/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — these are scoped for newcomers and include context to get moving quickly.
 
 2. **Pick a scope.** Good first contributions include:
    - Typo and documentation fixes
@@ -64,7 +64,7 @@ If you get stuck, open a draft PR early and ask questions in the description.
 
 ```bash
 # Clone the repo
-git clone https://github.com/KumihoIO/Construct.git
+git clone https://github.com/KumihoIO/construct-os.git
 cd Construct
 
 # Enable the pre-push hook (runs fmt, clippy, tests before every push)

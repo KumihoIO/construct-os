@@ -1,4 +1,4 @@
-# documentation: https://github.com/KumihoIO/Construct
+# documentation: https://github.com/KumihoIO/construct-os
 # slogan: Fast, small, fully autonomous AI personal assistant infrastructure — deploy anywhere, swap anything
 # tags: ai, agent, assistant, self-hosted, llm, chatbot, rust
 # logo: svgs/construct.png
@@ -6,7 +6,7 @@
 
 services:
   construct:
-    image: ghcr.io/KumihoIO/Construct:latest
+    image: ghcr.io/KumihoIO/construct-os:latest
     restart: unless-stopped
     environment:
       - API_KEY=${SERVICE_PASSWORD_APIKEY:-}

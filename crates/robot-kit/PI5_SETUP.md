@@ -171,7 +171,7 @@ sudo usermod -aG dialout $USER
 
 ```bash
 # Clone repo (or copy from USB)
-git clone https://github.com/KumihoIO/Construct
+git clone https://github.com/KumihoIO/construct-os
 cd construct
 
 # Build robot kit

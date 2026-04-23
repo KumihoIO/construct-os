@@ -23,9 +23,9 @@ links:
   - label: Website
     url: https://construct.com
   - label: Documentation
-    url: https://github.com/KumihoIO/Construct#readme
+    url: https://github.com/KumihoIO/construct-os#readme
   - label: Github
-    url: https://github.com/KumihoIO/Construct
+    url: https://github.com/KumihoIO/construct-os
 
 contributors:
   - name: Kumiho Inc.
@@ -48,7 +48,7 @@ schema:
     appServiceImage:
       type: string
       title: App Service Image
-      default: ghcr.io/KumihoIO/Construct:2026.4.21
+      default: ghcr.io/KumihoIO/construct-os:2026.4.21
     apiKey:
       type: string
       title: LLM Provider API Key

@@ -349,7 +349,7 @@ should_attempt_prebuilt_for_resources() {
 
 resolve_asset_url() {
   local asset_name="$1"
-  local api_url="https://api.github.com/repos/KumihoIO/Construct/releases"
+  local api_url="https://api.github.com/repos/KumihoIO/construct-os/releases"
   local releases_json download_url
 
   # Fetch up to 10 recent releases (includes prereleases) and find the first
@@ -459,7 +459,7 @@ verify_release_artifact() {
     return 0
   fi
 
-  identity_regexp='^https://github\.com/KumihoIO/Construct/\.github/workflows/release-.*\.yml@refs/'
+  identity_regexp='^https://github\.com/KumihoIO/construct-os/\.github/workflows/release-.*\.yml@refs/'
   issuer_url='https://token.actions.githubusercontent.com'
 
   if ! COSIGN_EXPERIMENTAL=1 cosign verify-blob \
@@ -510,7 +510,7 @@ install_prebuilt_binary() {
   # that actually contains the asset, then fall back to /releases/latest/.
   archive_url="$(resolve_asset_url "$asset_name" || true)"
   if [[ -z "$archive_url" ]]; then
-    archive_url="https://github.com/KumihoIO/Construct/releases/latest/download/${asset_name}"
+    archive_url="https://github.com/KumihoIO/construct-os/releases/latest/download/${asset_name}"
   fi
 
   temp_dir="$(mktemp -d -t construct-prebuilt-XXXXXX)"
@@ -1168,7 +1168,7 @@ run_docker_bootstrap() {
   local config_mount workspace_mount
   local -a container_run_user_args container_run_namespace_args
   docker_image="${CONSTRUCT_DOCKER_IMAGE:-construct-bootstrap:local}"
-  fallback_image="ghcr.io/KumihoIO/Construct:latest"
+  fallback_image="ghcr.io/KumihoIO/construct-os:latest"
   if [[ "$TEMP_CLONE" == true ]]; then
     default_data_dir="$HOME/.construct-docker"
   else
@@ -1262,7 +1262,7 @@ run_docker_bootstrap() {
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd || pwd)"
 ROOT_DIR="$SCRIPT_DIR"
-REPO_URL="https://github.com/KumihoIO/Construct.git"
+REPO_URL="https://github.com/KumihoIO/construct-os.git"
 ORIGINAL_ARG_COUNT=$#
 GUIDED_MODE="auto"
 

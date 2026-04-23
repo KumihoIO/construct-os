@@ -26,7 +26,7 @@ terms of this CLA.
 - **"You"** means the individual or legal entity submitting a Contribution.
 
 - **"Kumiho Inc."** means the maintainers and organization responsible
-  for the Construct project at https://github.com/KumihoIO/Construct.
+  for the Construct project at https://github.com/KumihoIO/construct-os.
 
 ---
 
@@ -124,7 +124,7 @@ and a maintainer will follow up.
 ## 10. Questions
 
 If you have questions about this CLA, open an issue at:
-https://github.com/KumihoIO/Construct/issues
+https://github.com/KumihoIO/construct-os/issues
 
 ---
 

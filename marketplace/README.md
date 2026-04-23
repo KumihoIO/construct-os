@@ -39,7 +39,7 @@ on self-hosted PaaS platforms.
       - Fork `easypanel-io/templates` -> `KumihoIO/easypanel-templates`
 - [ ] **Create a GitHub PAT** (`MARKETPLACE_PAT`) with `repo` + `workflow` scopes
       that can push to the forks and create PRs on the upstream repos
-- [ ] **Add the secret** `MARKETPLACE_PAT` to the `KumihoIO/Construct` repo secrets
+- [ ] **Add the secret** `MARKETPLACE_PAT` to the `KumihoIO/construct-os` repo secrets
 
 ### 2. Install the Workflow
 

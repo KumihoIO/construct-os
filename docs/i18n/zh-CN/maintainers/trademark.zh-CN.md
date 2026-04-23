@@ -21,14 +21,14 @@
 
 **唯一**官方 Construct 仓库是：
 
-> https://github.com/KumihoIO/Construct
+> https://github.com/KumihoIO/construct-os
 
 任何其他声称是"Construct"或暗示与 Kumiho Inc. 有关联的仓库、组织、域名或产品均未经授权，可能构成商标侵权。
 
 **已知未经授权的分支：**
 - `openagen/construct` — 与 Kumiho Inc. 无关
 
-如果您发现未经授权的使用，请通过在 https://github.com/KumihoIO/Construct/issues 提交 Issue 进行报告。
+如果您发现未经授权的使用，请通过在 https://github.com/KumihoIO/construct-os/issues 提交 Issue 进行报告。
 
 ---
 
@@ -81,7 +81,7 @@
 
 如果您认为有人侵犯了 Construct 商标：
 
-1. 在 https://github.com/KumihoIO/Construct/issues 提交 Issue
+1. 在 https://github.com/KumihoIO/construct-os/issues 提交 Issue
 2. 包含侵权内容的 URL
 3. 描述其如何违反本政策
 

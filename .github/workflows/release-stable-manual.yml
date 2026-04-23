@@ -597,8 +597,8 @@ jobs:
           curl -fsSL -X POST \
             -H "Authorization: token $PAT" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/KumihoIO/Construct-website/dispatches \
-            -d '{"event_type":"new-release","client_payload":{"install_script_url":"https://raw.githubusercontent.com/KumihoIO/Construct/main/install.sh"}}'
+            https://api.github.com/repos/KumihoIO/construct-os-website/dispatches \
+            -d '{"event_type":"new-release","client_payload":{"install_script_url":"https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh"}}'
 
   docker:
     name: Push Docker Image
@@ -755,7 +755,7 @@ jobs:
     uses: ./.github/workflows/tweet-release.yml
     with:
       release_tag: ${{ needs.validate.outputs.tag }}
-      release_url: https://github.com/KumihoIO/Construct/releases/tag/${{ needs.validate.outputs.tag }}
+      release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
     secrets: inherit
 
   discord:
@@ -765,5 +765,5 @@ jobs:
     uses: ./.github/workflows/discord-release.yml
     with:
       release_tag: ${{ needs.validate.outputs.tag }}
-      release_url: https://github.com/KumihoIO/Construct/releases/tag/${{ needs.validate.outputs.tag }}
+      release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
     secrets: inherit

@@ -305,6 +305,6 @@ RUST_LOG=debug construct channel start
 
 ## 📞 支持
 
-- Issue：<https://github.com/KumihoIO/Construct/issues>
+- Issue：<https://github.com/KumihoIO/construct-os/issues>
 - 文档：[testing-telegram.md](../../../../tests/telegram/testing-telegram.md)
 - 帮助：`construct --help`

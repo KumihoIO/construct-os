@@ -19,7 +19,7 @@
 
 - **"你"** 指提交贡献的个人或法律实体。
 
-- **"Kumiho Inc."** 指负责 Construct 项目（位于 https://github.com/KumihoIO/Construct）的维护者和组织。
+- **"Kumiho Inc."** 指负责 Construct 项目（位于 https://github.com/KumihoIO/construct-os）的维护者和组织。
 
 ---
 
@@ -91,7 +91,7 @@ Kumiho Inc. 会在仓库提交历史和 NOTICE 文件中保留贡献者的署名
 ## 10. 问题
 
 如果你对本 CLA 有疑问，请在以下地址打开 Issue：
-https://github.com/KumihoIO/Construct/issues
+https://github.com/KumihoIO/construct-os/issues
 
 ---
 

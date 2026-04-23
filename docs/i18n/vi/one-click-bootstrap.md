@@ -15,7 +15,7 @@ brew install construct
 ## Cách A (Khuyến nghị): Clone + chạy script cục bộ
 
 ```bash
-git clone https://github.com/KumihoIO/Construct.git
+git clone https://github.com/KumihoIO/construct-os.git
 cd construct
 ./install.sh
 ```
@@ -71,7 +71,7 @@ Lưu ý:
 ## Cách B: Lệnh từ xa một dòng
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KumihoIO/Construct/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh | bash
 ```
 
 Với môi trường yêu cầu bảo mật cao, nên dùng Cách A để kiểm tra script trước khi chạy.

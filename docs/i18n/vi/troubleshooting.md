@@ -212,7 +212,7 @@ journalctl --user -u construct.service -f
 ## URL cài đặt
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KumihoIO/Construct/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh | bash
 ```
 
 ## Vẫn chưa giải quyết được?

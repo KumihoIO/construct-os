@@ -23,7 +23,7 @@ env:
 jobs:
   version:
     name: Resolve Version
-    if: github.repository == 'KumihoIO/Construct'
+    if: github.repository == 'KumihoIO/construct-os'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
@@ -64,7 +64,7 @@ jobs:
   release-notes:
     name: Generate Release Notes
     needs: [version]
-    if: github.repository == 'KumihoIO/Construct' && needs.version.outputs.skip != 'true'
+    if: github.repository == 'KumihoIO/construct-os' && needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     outputs:
       notes: ${{ steps.notes.outputs.body }}
@@ -88,7 +88,7 @@ jobs:
   web:
     name: Build Web Dashboard
     needs: [version]
-    if: github.repository == 'KumihoIO/Construct' && needs.version.outputs.skip != 'true'
+    if: github.repository == 'KumihoIO/construct-os' && needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -479,8 +479,8 @@ jobs:
           curl -fsSL -X POST \
             -H "Authorization: token $PAT" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/KumihoIO/Construct-website/dispatches \
-            -d '{"event_type":"new-release","client_payload":{"install_script_url":"https://raw.githubusercontent.com/KumihoIO/Construct/main/install.sh"}}'
+            https://api.github.com/repos/KumihoIO/construct-os-website/dispatches \
+            -d '{"event_type":"new-release","client_payload":{"install_script_url":"https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh"}}'
 
   docker:
     name: Push Docker Image

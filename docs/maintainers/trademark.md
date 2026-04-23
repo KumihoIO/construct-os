@@ -16,7 +16,7 @@ If that status changes, this document will be updated.
 
 The canonical Construct repository is:
 
-> https://github.com/KumihoIO/Construct
+> https://github.com/KumihoIO/construct-os
 
 Other repositories, organizations, domains, or products using the "Construct" name are not affiliated with this project unless explicitly noted here.
 
@@ -68,7 +68,7 @@ Contributing code does not transfer any naming or brand rights to third parties.
 
 ## Reporting Misrepresentation
 
-If you see a project or content that clearly misrepresents itself as the official Construct — not a fork, not a derivative, but an impersonator — please open an issue at <https://github.com/KumihoIO/Construct/issues> with the URL and a short description.
+If you see a project or content that clearly misrepresents itself as the official Construct — not a fork, not a derivative, but an impersonator — please open an issue at <https://github.com/KumihoIO/construct-os/issues> with the URL and a short description.
 
 ---
 

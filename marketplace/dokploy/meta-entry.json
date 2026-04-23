@@ -5,9 +5,9 @@
   "description": "Fast, small, and fully autonomous AI personal assistant infrastructure. Deploy anywhere, swap anything. 100% Rust.",
   "logo": "construct.png",
   "links": {
-    "github": "https://github.com/KumihoIO/Construct",
+    "github": "https://github.com/KumihoIO/construct-os",
     "website": "https://construct.com/",
-    "docs": "https://github.com/KumihoIO/Construct#readme"
+    "docs": "https://github.com/KumihoIO/construct-os#readme"
   },
   "tags": ["ai", "self-hosted"]
 }

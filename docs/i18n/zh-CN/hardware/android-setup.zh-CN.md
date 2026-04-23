@@ -28,11 +28,11 @@ uname -m
 
 # 下载对应的二进制文件
 # 64 位（aarch64）：
-curl -LO https://github.com/KumihoIO/Construct/releases/latest/download/construct-aarch64-linux-android.tar.gz
+curl -LO https://github.com/KumihoIO/construct-os/releases/latest/download/construct-aarch64-linux-android.tar.gz
 tar xzf construct-aarch64-linux-android.tar.gz
 
 # 32 位（armv7）：
-curl -LO https://github.com/KumihoIO/Construct/releases/latest/download/construct-armv7-linux-androideabi.tar.gz
+curl -LO https://github.com/KumihoIO/construct-os/releases/latest/download/construct-armv7-linux-androideabi.tar.gz
 tar xzf construct-armv7-linux-androideabi.tar.gz
 ```
 

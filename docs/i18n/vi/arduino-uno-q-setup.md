@@ -66,7 +66,7 @@ sudo apt-get update
 sudo apt-get install -y pkg-config libssl-dev
 
 # Clone construct (hoặc scp project của bạn)
-git clone https://github.com/KumihoIO/Construct.git
+git clone https://github.com/KumihoIO/construct-os.git
 cd construct
 
 # Build (~15–30 phút trên Uno Q)
@@ -199,7 +199,7 @@ Giờ khi bạn nhắn tin cho Telegram bot *"Turn on the LED"* hoặc *"Set pin
 | 2 | `ssh arduino@<IP>` |
 | 3 | `curl -sSf https://sh.rustup.rs \| sh -s -- -y && source ~/.cargo/env` |
 | 4 | `sudo apt-get install -y pkg-config libssl-dev` |
-| 5 | `git clone https://github.com/KumihoIO/Construct.git && cd construct` |
+| 5 | `git clone https://github.com/KumihoIO/construct-os.git && cd construct` |
 | 6 | `cargo build --release --no-default-features` |
 | 7 | `construct onboard --api-key KEY --provider openrouter` |
 | 8 | Chỉnh sửa `~/.construct/config.toml` (thêm Telegram bot_token) |
