@@ -23,5 +23,5 @@ repository = "https://github.com/KumihoIO/construct-os"
 # See crates/aardvark-sys/README.md for details.
 
 [dependencies]
-libloading = "0.8"
+libloading = "0.9"
 thiserror = "2.0"
