@@ -1,731 +1,486 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/KumihoIO/construct-os/main/docs/assets/construct-banner.png" alt="Construct" width="600" />
+  <img src="docs/assets/construct-banner.png" alt="Construct" width="600" />
 </p>
 
-<h1 align="center">🦀 Construct — 개인 AI 어시스턴트</h1>
+<h1 align="center">Construct</h1>
 
 <p align="center">
-  <strong>오버헤드 없음. 타협 없음. 100% Rust. 100% 독립적.</strong><br>
-  ⚡️ <strong>$10 하드웨어에서 <5MB RAM으로 실행: OpenClaw보다 99% 적은 메모리, Mac mini보다 98% 저렴!</strong>
+  <strong>메모리 네이티브 에이전트 런타임. 그래프 기반 오케스트레이션, 신뢰 점수가 부여된 에이전트, 완전한 Web UI — 그리고 에이전트가 수행한 모든 작업의 완전한 기록.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/KumihoIO/construct-os/actions/workflows/ci-run.yml"><img src="https://img.shields.io/github/actions/workflow/status/KumihoIO/construct-os/ci-run.yml?branch=main&label=build" alt="Build Status" /></a>
-  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust" alt="Rust Edition 2024" /></a>
-  <a href="https://github.com/KumihoIO/construct-os/releases/latest"><img src="https://img.shields.io/badge/version-v2026.4.21-blue" alt="Version v2026.4.21" /></a>
-  <a href="https://github.com/KumihoIO/construct-os/graphs/contributors"><img src="https://img.shields.io/github/contributors/KumihoIO/construct-os?color=green" alt="Contributors" /></a>
-  <a href="https://x.com/KumihoHQ"><img src="https://img.shields.io/badge/X-%40KumihoHQ-000000?style=flat&logo=x&logoColor=white" alt="X: @KumihoHQ" /></a>
-  <a href="https://www.threads.com/@kumihohq"><img src="https://img.shields.io/badge/Threads-%40kumihohq-000000?style=flat&logo=threads&logoColor=white" alt="Threads: @kumihohq" /></a>
-  <a href="https://www.reddit.com/r/KumihoIO"><img src="https://img.shields.io/badge/Reddit-r%2FKumihoIO-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/KumihoIO" /></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
 </p>
 
 <p align="center">
-Harvard, MIT, 그리고 Sundai.Club 커뮤니티의 학생들과 멤버들이 만들었습니다.
+  <a href="README.md">🇺🇸 English</a> · <a href="README.ko.md">🇰🇷 한국어</a>
 </p>
 
-<p align="center">
-  🌐 <strong>언어:</strong>
-  <a href="README.md">🇺🇸 English</a> ·
-  <a href="README.zh-CN.md">🇨🇳 简体中文</a> ·
-  <a href="README.ja.md">🇯🇵 日本語</a> ·
-  <a href="README.ko.md">🇰🇷 한국어</a> ·
-  <a href="README.vi.md">🇻🇳 Tiếng Việt</a> ·
-  <a href="README.tl.md">🇵🇭 Tagalog</a> ·
-  <a href="README.es.md">🇪🇸 Español</a> ·
-  <a href="README.pt.md">🇧🇷 Português</a> ·
-  <a href="README.it.md">🇮🇹 Italiano</a> ·
-  <a href="README.de.md">🇩🇪 Deutsch</a> ·
-  <a href="README.fr.md">🇫🇷 Français</a> ·
-  <a href="README.ar.md">🇸🇦 العربية</a> ·
-  <a href="README.hi.md">🇮🇳 हिन्दी</a> ·
-  <a href="README.ru.md">🇷🇺 Русский</a> ·
-  <a href="README.bn.md">🇧🇩 বাংলা</a> ·
-  <a href="README.he.md">🇮🇱 עברית</a> ·
-  <a href="README.pl.md">🇵🇱 Polski</a> ·
-  <a href="README.cs.md">🇨🇿 Čeština</a> ·
-  <a href="README.nl.md">🇳🇱 Nederlands</a> ·
-  <a href="README.tr.md">🇹🇷 Türkçe</a> ·
-  <a href="README.uk.md">🇺🇦 Українська</a> ·
-  <a href="README.id.md">🇮🇩 Bahasa Indonesia</a> ·
-  <a href="README.th.md">🇹🇭 ไทย</a> ·
-  <a href="README.ur.md">🇵🇰 اردو</a> ·
-  <a href="README.ro.md">🇷🇴 Română</a> ·
-  <a href="README.sv.md">🇸🇪 Svenska</a> ·
-  <a href="README.el.md">🇬🇷 Ελληνικά</a> ·
-  <a href="README.hu.md">🇭🇺 Magyar</a> ·
-  <a href="README.fi.md">🇫🇮 Suomi</a> ·
-  <a href="README.da.md">🇩🇰 Dansk</a> ·
-  <a href="README.nb.md">🇳🇴 Norsk</a>
-</p>
+---
 
-Construct는 자신의 기기에서 실행하는 개인 AI 어시스턴트입니다. 이미 사용하고 있는 채널(WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work 등)에서 응답합니다. 실시간 제어를 위한 웹 대시보드가 있으며 하드웨어 주변기기(ESP32, STM32, Arduino, Raspberry Pi)에 연결할 수 있습니다. Gateway는 단순한 제어 평면이며, 제품은 어시스턴트 자체입니다.
+## Construct란?
 
-로컬에서 빠르고 항상 켜져 있는 개인 단일 사용자 어시스턴트를 원한다면 바로 이것입니다.
+Construct는 영속적 인지 메모리, 멀티 에이전트 오케스트레이션, 공유 스킬/템플릿 마켓플레이스를 갖춘 Rust 네이티브 AI 에이전트 런타임입니다. 모든 에이전트 세션, 계획, 스킬, 신뢰 점수가 그래프에 저장됩니다 — 일어난 일이라면 모두 쿼리할 수 있습니다. Kumiho의 그래프 네이티브 메모리 시스템 위에 구축된 Construct는 메모리를 하나의 기능이 아니라 모든 에이전트가 깨어나는 기반으로 취급합니다.
 
-> **업스트림.** Construct의 핵심 Rust 런타임은 [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw)의 포크입니다. 에이전트 루프, provider/channel/tool 아키텍처, 하드웨어 주변장치 계층, CLI 스캐폴딩이 업스트림에서 유래합니다. 전체 속성(attribution)은 [`NOTICE`](NOTICE)를 참고하세요.
+핵심 구성: **Rust 게이트웨이**(Axum)가 **React/TypeScript Web Dashboard**를 제공하고, Python **Operator**가 멀티 에이전트 오케스트레이션을 수행하며, **Kumiho**(Neo4j 기반 그래프 메모리)가 모든 영속 상태를 보관합니다. 선언적 YAML 워크플로우를 정의하고, DAG 기반 라이브 뷰를 통해 에이전트가 실시간으로 실행하는 모습을 관찰하고, 모든 툴 호출과 출력을 추적하고, 실행을 거듭하며 신뢰 점수가 진화하는 모습을 확인하세요 — 전부 브라우저에서.
 
-<p align="center">
-  <a href="https://kumiho.io">웹사이트</a> ·
-  <a href="docs/README.md">문서</a> ·
-  <a href="docs/architecture.md">아키텍처</a> ·
-  <a href="#빠른-시작-tldr">시작하기</a> ·
-  <a href="#openclaw에서-마이그레이션">OpenClaw에서 마이그레이션</a> ·
-  <a href="docs/ops/troubleshooting.md">문제 해결</a> ·
-</p>
+숨겨진 상태도, 잊힌 실행도 없습니다. 시스템이 사용자에게 요구하는 유일한 것은 주의를 기울이는 것뿐입니다.
 
-> **권장 설정:** 터미널에서 `construct onboard`를 실행하세요. Construct Onboard가 gateway, workspace, 채널, 제공자 설정을 단계별로 안내합니다. macOS, Linux, Windows(WSL2)에서 작동하는 권장 설정 경로입니다. 새로 설치하시나요? 여기서 시작하세요: [시작하기](#빠른-시작-tldr)
+> **업스트림.** Construct의 Rust 코어 런타임은 [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw)의 포크입니다. 에이전트 루프, 프로바이더/채널/툴 아키텍처, 하드웨어 주변기기 레이어, CLI 스캐폴딩은 업스트림으로 거슬러 올라갑니다. 전체 속성 표기는 [`NOTICE`](NOTICE)를 참고하세요.
 
-### Subscription Auth (OAuth)
+---
 
-- **OpenAI Codex** (ChatGPT 구독)
-- **Gemini** (Google OAuth)
-- **Anthropic** (API 키 또는 인증 토큰)
+## Web Dashboard 및 UI
 
-모델 참고: 많은 제공자/모델이 지원되지만, 최상의 경험을 위해 사용 가능한 최신 세대의 가장 강력한 모델을 사용하세요. [온보딩](#빠른-시작-tldr)을 참조하세요.
+임베디드 웹 프론트엔드(`http://127.0.0.1:42617`)는 스택의 모든 레이어를 하나의 창에 담습니다 — React, TypeScript, Tailwind CSS, Vite로 구축된 18개의 라우팅 뷰를 컴파일 타임에 `rust-embed`로 Rust 바이너리에 구워 넣습니다. 바이너리 하나. 진입점 하나. 모든 시그널.
 
-모델 구성 + CLI: [Providers reference](docs/reference/api/providers-reference.md)
-인증 프로필 교체(OAuth vs API 키) + 장애 조치: [Model failover](docs/reference/api/providers-reference.md)
+Dashboard는 세 개의 사이드바 섹션(Orchestration, Operations, Inspection — `web/src/construct/components/layout/construct-navigation.ts` 참조)으로 구성됩니다.
 
-## 설치 (권장)
+### 핵심 뷰 — Orchestration
 
-런타임: Rust stable 툴체인. 단일 바이너리, 런타임 의존성 없음.
+| 뷰 | 경로 | 설명 |
+|------|------|-------------|
+| **Dashboard** | `/dashboard` | 라이브 런타임 상태 — 활성 세션, 채널, 감사 체인, 비용, 워크플로우 지표, 최근 실행, 리스크 레일 |
+| **Workflows** | `/workflows` | YAML 에디터, DAG 워크스페이스, 스텝 정의 및 디스패치를 갖춘 선언적 YAML 워크플로우의 전체 CRUD |
+| **Workflow Runs** | `/runs` | 실행 이력, DAG + RunLog 드릴다운이 포함된 실행 상세, 재시도, 삭제, 승인, 에이전트 활동 뷰 |
+| **Agents** | `/agents` | 에이전트 템플릿 CRUD — identity, soul, 전문성, 톤, 모델, 허용 툴 |
+| **Canvas** | `/canvas` | WebSocket 기반 렌더링과 프레임 이력을 갖춘 실시간 HTML/CSS/JS 샌드박스 |
+| **Teams** | `/teams` | 에이전트 관계 및 위임 토폴로지의 그래프 뷰를 제공하는 팀 빌더 |
 
-### Homebrew (macOS/Linuxbrew)
+### 라이브 워크플로우 실행 뷰
 
-```bash
-brew install construct
+워크플로우가 실행될 때, 시그널이 전파되는 모습을 관찰할 수 있습니다:
+
+- **인터랙티브 DAG 그래프** — 노드는 스텝(agent, shell, output, notify 등)이며 엣지는 의존성입니다. 스텝이 pending → running → completed/failed로 이동함에 따라 색상이 실시간으로 변합니다. 토폴로지가 숨쉬는 것처럼 보입니다.
+- **WebSocket 이벤트 스트리밍** — `agent.started`, `agent.tool_use`, `agent.completed`, `agent.error` 이벤트가 발생 시점에 도착합니다.
+- **스텝 상세 패널**은 세 개의 탭을 제공합니다:
+  - **Live Events** — 선택된 스텝의 실시간 이벤트 피드
+  - **Tool Calls** — RunLog에서 가져온 상세 에이전트 활동(툴 이름, 인자, 결과, 상태). 필요 시 REST로 조회
+  - **Output** — 에이전트의 최종 메시지/산출물
+- **에이전트별 RunLog** — 모든 호출, 인자, 결과, 오류가 JSONL로 디스크에 기록되며, `GET /api/workflows/agent-activity/{agent_id}`로 summary, tool_calls, messages, errors, full 뷰를 쿼리할 수 있습니다.
+
+### Operations
+
+| 뷰 | 경로 | 설명 |
+|------|------|-------------|
+| **Assets** | `/assets` | Kumiho 에셋 브라우저 — 프로젝트, 스페이스, 아이템, 리비전, 아티팩트 |
+| **Skills** | `/skills` | 검색/필터 및 ClawHub 통합이 포함된 스킬 라이브러리 관리 |
+| **Tools** | `/tools` | 에이전트 툴 카탈로그 및 발견된 CLI 바이너리 카탈로그(`/api/tools`, `/api/cli-tools`) |
+| **Integrations** | `/integrations` | 외부 통합 및 채널 인터페이스 구성 |
+| **Cron** | `/cron` | 예약 작업 관리 — 생성, 편집, 삭제, 실행 이력 조회 |
+| **Pairing** | `/pairing` | 기기 등록 및 발급 토큰 관리 |
+| **Config** | `/config` | 프로바이더, 에이전트, 스킬, 팀, 워크플로우, 채널에 대한 스키마 기반 검증을 갖춘 TOML 에디터 |
+| **Cost** | `/cost` | 모델별 토큰 수, 지출 분석, 예산 거버넌스 |
+
+### Inspection
+
+| 뷰 | 경로 | 설명 |
+|------|------|-------------|
+| **Memory** | `/memory` | Kumiho 메모리 그래프 탐색기(포스 디렉티드), 리비전, 콘텐츠 검색(`/memory-auditor`는 여기로 리다이렉트) |
+| **Logs** | `/logs` | 필터링 기능이 있는 운영 로그 뷰어 |
+| **Audit** | `/audit` | 체인 검증이 가능한 Merkle 해시체인 기반 변조 감지 이벤트 로그 |
+| **Doctor** | `/doctor` | 자동화된 런타임 진단 및 복구 상태 |
+
+### 실시간 기능
+
+- **WebSocket Chat** (`/ws/chat`) — 토큰 단위 렌더링을 지원하는 스트리밍 에이전트 응답
+- **Canvas WebSocket** (`/ws/canvas/{id}`) — iframe 렌더링과 프레임 이력을 갖춘 라이브 HTML/CSS/JS 미리보기
+- **Node Status WebSocket** (`/ws/nodes`) — 멀티 노드 기능 탐색 및 상태
+- **PTY Terminal WebSocket** (`/ws/terminal`) — WebSocket을 통한 인터랙티브 셸
+- **MCP Session Event WebSocket** (`/ws/mcp/events`) — 인프로세스 MCP 서버의 세션 이벤트 프록시
+- **SSE Event Stream** (`/api/events`) — 대시보드 및 활동 업데이트를 위한 서버 전송 이벤트
+- **SSE Daemon Log Stream** (`/api/daemon/logs`) — 데몬 로그 테일 스트리밍
+
+---
+
+## Operator (워크플로우 오케스트레이션)
+
+**Operator**는 Construct의 조종간입니다 — 선언적 YAML 워크플로우를 17개 스텝 타입과 여러 고급 오케스트레이션 패턴을 통해 구동하는 Python MCP 서버입니다. 에이전트는 Construct 안에서 실행되고, Operator는 전체 보드를 봅니다.
+
+### 스텝 타입
+
+`operator-mcp/operator_mcp/workflow/schema.py`의 `StepType`에 정의된 정규 타입들입니다.
+
+| 스텝 타입 | 설명 |
+|-----------|-------------|
+| `agent` | prompt, role, model, tools, timeout을 지정하여 Construct 에이전트(claude/codex)를 스폰 |
+| `shell` | 타임아웃 및 실패 처리와 함께 셸 명령 실행 |
+| `output` | 템플릿 보간을 지원하는 구조화된 출력(text/json/markdown) 생성 |
+| `a2a` | JSON-RPC 2.0을 통해 외부 A2A 에이전트로 태스크 전송 |
+| `conditional` | 이전 스텝 출력에 대한 표현식을 기반으로 분기 |
+| `parallel` | 조인 전략(ALL, ANY, MAJORITY)과 함께 서브 스텝을 동시 실행 |
+| `goto` | `max_iterations` 가드가 있는 루프 구문 |
+| `human_approval` | yes/no 사람 확인을 위한 일시 정지(타임아웃 구성 가능) |
+| `human_input` | dashboard/Slack/Discord를 통한 자유 형식 사람 응답을 위한 일시 정지 |
+| `map_reduce` | N개의 병렬 매퍼 에이전트로 팬아웃, 리듀서가 합성(동시성 2-10) |
+| `supervisor` | 동적 위임: supervisor가 태스크를 분해하고 반복적으로 전문가를 선택 |
+| `group_chat` | 조정된 멀티 에이전트 토론(round_robin 또는 moderator_selected) |
+| `handoff` | 전체 메시지/파일/툴 호출 이력과 함께 에이전트 간 컨텍스트 전달 |
+| `for_each` | `${for_each.*}` 변수를 사용한 범위 또는 리스트에 대한 순차 반복 |
+| `resolve` | 결정론적 Kumiho 엔티티 조회(kref/revision 반환) |
+| `tag` | 워크플로우 내부에서 Kumiho 리비전에 태그 부여 |
+| `deprecate` | 워크플로우 내부에서 Kumiho 아이템을 deprecate 처리 |
+
+`type: notify`(role: notifier인 `agent`와 동일)와 같은 단축 별칭은 로딩 시 해석됩니다 — `workflow/schema.py`의 `_ACTION_ALIASES` 참조.
+
+### 오케스트레이션 패턴
+
+**Parallel Execution** — 세 가지 조인 전략(ALL, ANY, MAJORITY)과 구성 가능한 동시성 제한(1-10)을 갖춘 동시 스텝 그룹.
+
+**Map-Reduce** — 태스크를 N개의 병렬 매퍼 에이전트로 팬아웃한 후 리듀서가 합성. 세마포 제어 동시성 및 선택적 실패 시 중단 지원.
+
+**Supervisor** — LLM 주도 동적 위임 루프. supervisor가 태스크를 분해하고 풀에서 전문가 에이전트를 선택하며(신뢰 기반), DELEGATE/COMPLETE/REQUEST_INFO 결정을 반복합니다.
+
+**Group Chat** — 주제 프레이밍을 갖춘 조정된 멀티 에이전트 토론. 라운드 로빈 턴 교대 또는 moderator가 선택한 다음 발언자를 지원합니다. 구조화된 합성(요약, 합의, 결론, 미해결 질문)을 생성합니다.
+
+**Handoff** — 마지막 메시지, 접촉한 파일, 툴 호출 요약을 보존하는 에이전트 간 컨텍스트 전달. 출처 추적을 위해 Kumiho에 `HANDED_OFF_TO` 엣지를 기록합니다.
+
+**Refinement Loop** — 구조화된 품질 점수(0-100), 판정 분류(APPROVED/NEEDS_CHANGES/BLOCKED), 폴백 래더를 갖춘 creator/critic 패턴.
+
+### 변수 보간
+
+워크플로우 스텝은 9개 네임스페이스에서 템플릿 보간을 지원합니다:
+
+```
+${inputs.field}          — 워크플로우 입력 매개변수
+${step_id.output}        — 스텝 텍스트 출력
+${step_id.status}        — 스텝 상태
+${step_id.output_data.k} — 구조화된 출력 필드
+${step_id.files}         — 쉼표로 구분된 파일 목록
+${step_id.agent_id}      — 스텝을 실행한 에이전트 ID
+${loop.iteration}        — 현재 goto 반복 횟수
+${env.VAR}               — 환경 변수
+${run_id}                — 워크플로우 실행 ID
 ```
 
-### 원클릭 부트스트랩
+### 실행 기능
+
+- **의존성 순서** — 위상 정렬 및 순환 의존성 감지를 갖춘 `depends_on`
+- **재시도** — 구성 가능한 지연과 함께 스텝별 재시도(0-5회)
+- **체크포인트** — 크래시 복구 및 재개를 위한 `~/.construct/workflow_checkpoints/`로의 자동 저장
+- **Dry run** — 실행 없이 구문 및 의존성 검증
+- **조건 평가** — 스텝 결과에 대한 표현식 기반 분기
+- **스텝별 타임아웃** — 기본 300초, 스텝별로 구성 가능
+- **RunLog JSONL** — `~/.construct/operator_mcp/runlogs/`의 에이전트별 영속 감사 추적
+
+---
+
+## Agent Pool 및 템플릿
+
+재사용 가능한 에이전트 정의는 `~/.construct/agent_pool.json`에 저장되며 `Construct/AgentPool/`하위에 Kumiho로 동기화됩니다.
+
+### 템플릿 필드
+
+| 필드 | 설명 |
+|-------|-------------|
+| `name` | 고유 식별자 |
+| `agent_type` | `claude` 또는 `codex` |
+| `role` | coder, reviewer, researcher, tester, architect, planner |
+| `capabilities` | 스킬 태그 (예: `["rust", "security-audit", "testing"]`) |
+| `description` | 이 에이전트가 뛰어난 분야 |
+| `identity` | 풍부한 정체성 진술 |
+| `soul` | 성격 및 가치관 |
+| `tone` | 커뮤니케이션 스타일 |
+| `model` | 모델 오버라이드 (예: `claude-opus-4-6`) |
+| `system_hint` | 추가 프롬프트 컨텍스트 |
+| `allowed_tools` | 툴 화이트리스트 (None = 전체) |
+| `max_turns` | 대화 턴 제한 (기본 200) |
+| `use_count` | 사용 통계 (자동 증가) |
+
+### 풀 작업
+
+- 이름, 역할, 기능, 설명 전반에 걸친 키워드 검색
+- 사용 전 템플릿 검증 품질 게이트
+- 사용 추적을 통해 고성능 템플릿 우선 표시
+- 커뮤니티 템플릿 게시 및 설치를 위한 ClawHub 통합
+
+---
+
+## Trust & Reputation 시스템
+
+모든 에이전트 실행에는 점수가 부여됩니다. 평판은 가정되지 않습니다 — 얻어지고, 기록되며, `Construct/AgentTrust/` 하위의 Kumiho에서 쿼리할 수 있습니다.
+
+| 지표 | 설명 |
+|--------|-------------|
+| `trust_score` | 누적 평균(0.0–1.0), `total_score / total_runs`로 계산 |
+| `total_runs` | 태스크 실행 횟수 |
+| `recent_outcomes` | `outcome:task_summary:timestamp` 형식의 최근 10개 결과 |
+| `template_name` | 사용된 에이전트 템플릿 참조 |
+
+**결과 가중치:** success = 1.0, partial = 0.5, failed = 0.0
+
+신뢰 점수는 Supervisor 패턴의 에이전트 선택에 영향을 줍니다 — 신뢰도가 높은 에이전트가 위임에 우선 선택됩니다. 점수는 `tool_record_agent_outcome`으로 기록되고 `tool_get_agent_trust`로 조회됩니다(점수 내림차순 정렬).
+
+---
+
+## A2A 프로토콜 지원
+
+Construct는 외부 에이전트 시스템과의 상호운용을 위해 [Google Agent-to-Agent (A2A) 프로토콜](https://google.github.io/A2A/)을 구현합니다.
+
+- **Discovery** — `/.well-known/agent-card.json`에 대한 HTTP GET이 에이전트 기능, 스킬, 정체성을 반환
+- **Task lifecycle** — JSON-RPC 2.0: `message/send` (생성), `tasks/get` (폴링), `tasks/cancel`
+- **Registry** — 로컬 Construct 템플릿과 외부 A2A 에이전트 전반에 걸친 통합 검색
+- **Retry** — 지수 백오프를 적용한 최대 2회 재시도
+- **워크플로우 통합** — 명시적 에이전트 URL, 메시지, 타임아웃이 포함된 `type: a2a` 워크플로우 스텝
+
+---
+
+## Kumiho 메모리 통합
+
+Kumiho는 유일한 영속 백엔드입니다. 시스템이 아는 모든 것이 완전한 버저닝, 출처 추적, 엣지 관계가 있는 그래프 네이티브 아이템으로 여기에 저장됩니다. 일어난 일이라면 흔적이 남습니다.
+
+아래의 네임스페이스는 Operator/Construct **컨벤션**입니다 — `config.toml`에 설정된 `space_prefix = "Construct"` 아래의 일반 Kumiho 스페이스이며, 스킬의 경우 `KUMIHO_MEMORY_PROJECT`(기본값 `CognitiveMemory`) 아래에 있습니다. 스키마가 강제하는 타입 네임스페이스는 아닙니다.
+
+| 네임스페이스 | 용도 |
+|-----------|---------|
+| `Construct/AgentPool/` | 에이전트 템플릿(역할, 기능, 모델 선호) |
+| `Construct/Plans/` | 스텝, 의존성, 상태가 포함된 실행 계획 |
+| `Construct/Sessions/` | 세션 요약, 핸드오프 노트, 세션 간 연속성 |
+| `Construct/Goals/` | 전략적, 전술적, 태스크 수준 목표 추적 |
+| `Construct/AgentTrust/` | 신뢰 점수 및 상호작용 이력 |
+| `Construct/ClawHub/` | 게시된 템플릿, 스킬, 팀 구성 |
+| `Construct/Teams/` | 팀 번들(에이전트 구성) |
+| `Construct/WorkflowRuns/` | Operator 워크플로우 실행 기록 및 실행 이력 |
+| `Construct/Outcomes/` | 신뢰 점수에 사용되는 에이전트별 결과 기록 |
+| `CognitiveMemory/Skills/` | 모든 에이전트가 접근 가능한 공유 스킬 라이브러리 |
+
+---
+
+## 추가 기능
+
+- **ClawHub Marketplace** — 공유 레지스트리에서 에이전트 템플릿, 스킬, 팀 구성을 게시, 검색, 설치(`src/gateway/api_clawhub.rs`)
+- **Multi-Node Distribution** (`src/nodes/`) — 수평 확장을 위해 WebSocket을 통해 원격 노드에 에이전트 워크로드 분산
+- **세션 간 연속성** — 세션 저널이 핸드오프 노트를 캡처하고, Kumiho 아카이브를 통해 새 세션이 완전한 회상으로 재개
+- **목표 계층** — 그래프에 영속화된 상태, 의존성, 진행률이 있는 3계층 추적(전략/전술/태스크)
+- **Skill Library 및 SkillForge** (`src/skills/`, `src/skillforge/`) — 에이전트가 `CognitiveMemory/Skills/` 하위의 스킬을 발견, 사용, 생성, 평가. Dream State가 LLM 평가 기반 통합을 실행
+- **Audit Trail** (`src/security/audit.rs`) — 암호학적 검증이 가능한 Merkle 해시체인 변조 감지 로깅
+- **Cost Tracking** (`src/cost/`) — 에이전트 또는 시스템 수준에서의 예산 거버넌스가 포함된 모델별 토큰 및 비용 분석
+- **Cron Scheduling** (`src/cron/`) — 이력 및 캐치업 동작이 있는 반복, 일회성, 간격 작업
+- **Device Pairing** (`src/security/pairing.rs`) — 6자리 코드 기반 기기 인증, 선택적 WebAuthn 하드웨어 키(`--features webauthn`)
+- **Approval Gateway** (`src/approval/`, `/api/workflows/runs/{id}/approve`) — 대시보드 토스터를 갖춘 human-in-the-loop 승인
+- **Hooks** (`src/hooks/`) — Claude Code 훅 엔드포인트(`POST /hooks/claude-code`)가 있는 내장 및 사용자 정의 훅 러너
+- **Routines** (`src/routines/`) — 수신 이벤트에 따라 트리거되는 이벤트 매칭 루틴
+- **SOP Engine** (`src/sop/`) — 조건 및 지표가 있는 표준 운영 절차 디스패치
+- **Observability** (`src/observability/`) — OpenTelemetry, Prometheus(`/metrics`), DORA 지표, 상세/로그 싱크, 런타임 트레이스
+- **Health & Heartbeat** (`src/health/`, `src/heartbeat/`) — liveness/readiness, 데몬 자가 점검을 위한 하트비트 엔진 및 저장소
+- **Doctor** (`src/doctor/`) — 데몬/스케줄러/채널 신선도 및 모델/트레이스 서브커맨드를 위한 진단
+- **E-Stop** (`src/security/estop.rs`) — 수준별 활성화(network-kill, domain-block, tool-freeze)와 재개가 있는 비상 정지
+- **Verifiable Intent** (`src/verifiable_intent/`) — 에이전트 동작 의도 영수증에 대한 암호학적 발급/검증
+- **RAG** (`src/rag/`) — 메모리 백엔드 위에 겹쳐지는 검색 증강 헬퍼
+- **Multimodal** (`src/multimodal.rs`) — 채널 전반에 공유되는 이미지, 음성, 미디어 수집 프리미티브
+- **Runtime Sandboxing** (`src/runtime/`, `src/security/`) — native, Docker, WASM 런타임, Seatbelt/Landlock/Firejail/Bubblewrap 샌드박스 래퍼, Nevis 시크릿, 도메인 매칭, 프롬프트 가드
+- **Tunnels** (`src/tunnel/`) — 게이트웨이를 노출하기 위한 Cloudflare, ngrok, Pinggy, Tailscale, OpenVPN 및 커스텀 터널 프로바이더
+- **MCP Server** (`src/mcp_server/`) — 세션 레지스트리, 진행률 래핑, 툴로서의 스킬을 갖춘 인프로세스 MCP 서버
+- **ACP Server** — IDE 통합을 위한 stdio 기반 JSON-RPC 2.0(`construct acp`)
+- **WASM Plugins** (`src/plugins/`, `--features plugins-wasm`) — 런타임에 서명된 WASM 툴 및 채널 로드
+- **Onboard Wizard** (`src/onboard/`) — 인터랙티브 및 빠른 모드 첫 실행 구성
+- **OS 서비스 관리** (`src/service/`) — `construct daemon`을 위한 launchd/systemd/OpenRC 설치
+- **업데이트 파이프라인** (`src/commands/update.rs`) — preflight, backup, validate, swap, smoke test, auto-rollback의 6단계 업데이트
+- **국제화** (`src/i18n.rs`) — 여러 `README.<lang>.md` 번역과 함께 런타임 로케일
+
+---
+
+## 하드웨어 및 주변기기
+
+Construct는 x86_64 및 arm64 Linux(Raspberry Pi 3/4/5 포함), macOS, Windows에서 단일 Rust 바이너리로 실행됩니다 — 릴리스 프로파일은 저메모리 타겟에 맞게 튜닝되어 있습니다(`codegen-units = 1`, `opt-level = "z"`, `panic = "abort"`). 전체 기능 — 영속 메모리, 멀티 에이전트 워크플로우, 임베디드 대시보드 — 에는 아웃오브프로세스 Kumiho 메모리 서비스(FastAPI + Neo4j)와 Operator MCP를 위한 Python 3.11+가 필요합니다. 이것들이 없으면 Construct는 상태 없는 단일 에이전트 런타임으로 우아하게 다운그레이드됩니다.
+
+임베디드 보드는 **Construct 호스트에서 시리얼/USB로 구동되는 주변기기**로 지원되며, 독립형 Construct 런타임으로는 지원되지 않습니다. 베어 마이크로컨트롤러에서 전체 데몬을 실행하는 것은 명시적인 비목표입니다 — 호스트가 사고하고, 보드는 I/O를 담당합니다.
+
+| 계층 | 지원 내용 |
+|---------|--------------|
+| **호스트 타겟** | macOS, Linux(x86_64 / arm64, Raspberry Pi 3/4/5 포함), Windows — 임베디드 대시보드가 포함된 하나의 정적 바이너리 |
+| **주변기기 보드** | STM32 Nucleo, Arduino Uno / Uno Q, ESP32, Raspberry Pi Pico — 펌웨어 소스는 `firmware/arduino/`, `firmware/esp32/`, `firmware/nucleo/`, `firmware/pico/`, `firmware/uno-q-bridge/` |
+| **주변기기 런타임** | `src/peripherals/` — Arduino/Nucleo 플래셔, Uno Q 브리지, RPi 호스트, 기능 툴, 공유 시리얼 트랜스포트, `Peripheral` 트레이트 |
+| **하드웨어 어댑터** | `src/hardware/` — Total Phase Aardvark I2C/SPI 어댑터(SDK 벤더드), 장치 탐색, GPIO, UF2/Pico 플래싱, 보드 레지스트리, 데이터시트 내성(introspection) |
+| **Crates** | `crates/aardvark-sys`(FFI 바인딩, SDK는 현재 스텁됨 — Total Phase SDK를 벤더링하여 활성화), `crates/robot-kit`(Pi 5 우선 로봇 하드웨어 추상화) |
+| **Feature flags** | Aardvark/I2C/SPI용 `--features hardware`, Raspberry Pi GPIO(Linux 전용)용 `--features peripheral-rpi`, probe-rs 온칩 디버깅용 `--features probe` |
+
+에이전트 툴은 이들을 LLM 호출 가능한 인터페이스로 노출하므로, *"ACT LED를 세 번 깜박인 다음 0x48의 I2C 센서를 읽어라"* 같은 프롬프트가 파일 편집과 동일한 툴 루프를 통해 디스패치됩니다. 보드별 설정과 호스트 매개 vs 엣지 네이티브 계층 모델에 대해서는 [docs/hardware/](docs/hardware/)를 참고하세요.
+
+---
+
+## REST API
+
+게이트웨이는 도메인별로 그룹화된 90개 이상의 REST 엔드포인트와 5개의 WebSocket 라우트를 노출합니다. 모든 인증된 라우트는 `/api/` 하위에서 bearer 토큰이 필요합니다.
+
+<details>
+<summary>API 엔드포인트 그룹 (확장하려면 클릭)</summary>
+
+| 그룹 | 주요 엔드포인트 |
+|-------|--------------|
+| **Auth / Pairing** | `POST /pair`, `GET /pair/code`, `POST /api/pairing/initiate`, `POST /api/pair`, `GET /api/devices`, `DELETE /api/devices/{id}`, `POST /api/devices/{id}/token/rotate` |
+| **Admin** | `POST /admin/shutdown`, `GET /admin/paircode`, `POST /admin/paircode/new` (localhost 바인딩) |
+| **Health** | `GET /health`, `GET /api/health`, `GET /api/status`, `GET /metrics` (Prometheus) |
+| **Config** | `GET/PUT /api/config` (PUT 시 더 큰 바디 제한) |
+| **Tools** | `GET /api/tools` (에이전트 툴 명세), `GET /api/cli-tools` (발견된 CLI 바이너리) |
+| **Agents** | `GET/POST /api/agents`, `PUT/DELETE /api/agents/{*kref}`, `POST /api/agents/deprecate` |
+| **Skills** | `GET/POST /api/skills`, `GET/PUT/DELETE /api/skills/{*kref}`, `POST /api/skills/deprecate` |
+| **Teams** | `GET/POST /api/teams`, `GET/PUT/DELETE /api/teams/{*kref}`, `POST /api/teams/deprecate` |
+| **Workflows** | `GET/POST /api/workflows`, `PUT/DELETE /api/workflows/{*kref}`, `POST /api/workflows/deprecate`, `POST /api/workflows/run/{name}`, `GET /api/workflows/revisions/{*kref}`, `GET /api/workflows/runs`, `GET/DELETE /api/workflows/runs/{run_id}`, `POST /api/workflows/runs/{run_id}/approve`, `POST /api/workflows/runs/{run_id}/retry`, `GET /api/workflows/agent-activity/{agent_id}`, `GET /api/workflows/dashboard` |
+| **ClawHub** | `GET /api/clawhub/search`, `/trending`, `/skills/{slug}`, `POST /api/clawhub/install/{slug}` |
+| **Sessions** | `GET /api/sessions`, `GET /api/sessions/running`, `GET /api/sessions/{id}/messages`, `GET /api/sessions/{id}/state`, `PUT/DELETE /api/sessions/{id}` |
+| **Memory Graph** | `GET/POST/DELETE /api/memory` 및 메모리 그래프 라우트 (60초 타임아웃) |
+| **Cron** | `GET/POST /api/cron`, id별 업데이트/삭제, `GET /api/cron/{id}/runs`, settings |
+| **Audit** | `GET /api/audit`, `GET /api/audit/verify` |
+| **Cost** | `GET /api/cost` |
+| **Canvas** | `GET /api/canvas`, `GET/POST/DELETE /api/canvas/{id}`, `GET /api/canvas/{id}/history`, WebSocket `/ws/canvas/{id}` |
+| **Nodes** | `GET /api/nodes`, `POST /api/nodes/{node_id}/invoke`, WebSocket `/ws/nodes` |
+| **Channels** | `GET /api/channels`, `POST /api/channel-events` |
+| **Integrations** | `GET /api/integrations`, 통합 레지스트리 목록/구성 |
+| **MCP** | `GET /api/mcp/discovery`, `GET /api/mcp/health`, `POST /api/mcp/servers/test`, `POST /api/mcp/session`, `POST /api/mcp/call`, WebSocket `/ws/mcp/events` |
+| **Kumiho Proxy** | `GET /api/kumiho/{*path}` — Kumiho FastAPI에 대한 일반 프록시 (Asset/Memory 브라우저가 사용) |
+| **WebAuthn** | `POST /api/webauthn/{register,auth}/{start,finish}`, `GET/DELETE /api/webauthn/credentials[/{id}]` (feature: `webauthn`) |
+| **Plugins** | `GET /api/plugins` (feature: `plugins-wasm`) |
+| **실시간** | SSE `/api/events`, SSE `/api/daemon/logs`, WebSockets `/ws/chat`, `/ws/canvas/{id}`, `/ws/nodes`, `/ws/terminal`, `/ws/mcp/events` |
+| **Webhooks** | `POST /webhook`, `POST /whatsapp` (+ `GET` verify), `POST /wati` (+ `GET` verify), `POST /linq`, `POST /nextcloud-talk`, `POST /webhook/gmail`, `POST /hooks/claude-code` |
+| **Static / SPA** | `GET /_app/{*path}`, API가 아닌 GET에 대한 SPA 폴백 |
+
+</details>
+
+---
+
+## 빠른 시작
+
+### 원커맨드 설치 (Rust, 사이드카, 온보드 자동 처리)
 
 ```bash
-git clone https://github.com/KumihoIO/construct-os.git
-cd construct
-./install.sh
+git clone https://github.com/KumihoIO/construct-os
+cd construct-os
+
+./install.sh          # macOS / Linux / WSL
+# 또는
+setup.bat             # Windows
 ```
 
-`construct onboard`는 설치 후 자동으로 실행되어 workspace와 제공자를 구성합니다.
+설치 프로그램은 rustup을 통해 Rust를 자동 설치하고(없는 경우), `construct`를 빌드하고, `~/.construct/` 하위에 Kumiho + Operator Python MCP 사이드카를 설치하고, 인터랙티브 프로바이더 + API 키 설정을 위해 `construct onboard`를 실행하고, `http://127.0.0.1:42617`에서 대시보드를 엽니다.
 
-## 빠른 시작 (TL;DR)
-
-전체 초보자 가이드(인증, 페어링, 채널): [시작하기](docs/setup-guides/one-click-bootstrap.md)
+설치 후:
 
 ```bash
-# 설치 + 온보드
-./install.sh --api-key "sk-..." --provider openrouter
-
-# Gateway 시작 (webhook 서버 + 웹 대시보드)
-construct gateway                # 기본값: 127.0.0.1:42617
-construct gateway --port 0       # 랜덤 포트 (보안 강화)
-
-# 어시스턴트와 대화
-construct agent -m "Hello, Construct!"
-
-# 대화형 모드
-construct agent
-
-# 완전 자율 런타임 시작 (gateway + 채널 + cron + hands)
-construct daemon
-
-# 상태 확인
-construct status
-
-# 진단 실행
-construct doctor
+construct gateway                  # HTTP 게이트웨이 + 대시보드 시작
+construct agent -m "Hello"         # 단일 메시지
+construct status                   # 상태 점검
+construct doctor                   # 구성 / 사이드카 / 채널 문제 진단
+construct daemon                   # 장기 실행 자율 런타임 (서비스 관리)
 ```
 
-업그레이드 하셨나요? 업데이트 후 `construct doctor`를 실행하세요.
-
-### 소스에서 빌드 (개발용)
+### 소스로부터 (개발자용)
 
 ```bash
-git clone https://github.com/KumihoIO/construct-os.git
-cd construct
-
 cargo build --release --locked
-cargo install --path . --force --locked
-
-construct onboard
+./scripts/install-sidecars.sh      # 또는 Windows에서는 scripts\install-sidecars.bat
+./target/release/construct onboard
+./target/release/construct gateway
 ```
 
-> **개발 폴백 (글로벌 설치 없이):** 명령 앞에 `cargo run --release --`를 붙이세요 (예: `cargo run --release -- status`).
+전체 빌드를 위해서는 `--features channel-matrix,channel-lark,browser-native,hardware,rag-pdf,observability-otel`을 추가하세요. 전체 feature 매트릭스는 `Cargo.toml`을 참고하세요.
 
-## OpenClaw에서 마이그레이션
+### 사전 요구사항
 
-Construct는 OpenClaw workspace, 메모리, 구성을 가져올 수 있습니다:
+- **Rust stable (1.87+)** — `install.sh` / `setup.bat`가 rustup으로 설치합니다(없는 경우).
+- **Python 3.11+** — Kumiho 및 Operator Python MCP 사이드카에 필요합니다.
+- **Node.js 20+** — 선택 사항, 임베디드 React 대시보드를 소스로부터 다시 빌드할 때만 필요(`cd web && npm install && npx vite build`). 대시보드는 컴파일 타임에 `rust-embed`를 통해 Rust 바이너리에 재임베드됩니다.
+- **Kumiho 컨트롤 플레인** — `~/.construct/config.toml`의 `[kumiho].api_url`로 탐색 가능한 HTTP 엔드포인트(예: 관리형은 `https://api.kumiho.cloud`, 또는 자체 호스팅 URL). 없으면 Construct는 상태 없이 실행됩니다. [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md) 참조.
+- **디스크 / RAM** — 소스 빌드는 약 6GB의 디스크 여유 공간과 약 2GB의 RAM 여유 공간이 필요, 사전 빌드 바이너리는 약 200MB.
+
+> **사이드카 재설치.** 기본 부트스트랩과 독립적으로 사이드카 설치를 재실행하려면:
+>
+> - `construct install --sidecars-only` — 크로스 플랫폼, `construct` 바이너리에 내장되어 OS에 맞는 스크립트를 실행. `construct`가 PATH에 있을 때 사용.
+> - `./scripts/install-sidecars.sh` / `scripts\install-sidecars.bat` — 동일한 로직, 소스 체크아웃에서 직접.
+>
+> 두 경로 모두 멱등적이며, 기존 `config.toml`, `.env`, 사용자 작성 런처를 결코 덮어쓰지 않습니다.
+
+### CLI 명령어
+
+최상위 `construct` 서브커맨드(`src/main.rs`에서). 전체 참조: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md).
+
+| 명령어 | 설명 |
+|---------|-------------|
+| `onboard` | 워크스페이스 및 구성 초기화(인터랙티브 또는 `--quick`) |
+| `agent` | 인터랙티브 에이전트 루프 또는 `-m`을 사용한 단일 실행, 프로바이더/모델 오버라이드, 주변기기 연결 |
+| `gateway` | HTTP + WebSocket 게이트웨이 시작/재시작/검사, `get-paircode` |
+| `acp` | IDE/툴 통합을 위한 ACP(stdio 기반 JSON-RPC 2.0) 서버 시작 |
+| `daemon` | 장기 실행 런타임: 게이트웨이 + 채널 + 하트비트 + 스케줄러 |
+| `service` | OS 서비스 설치/관리(launchd / systemd / OpenRC) |
+| `doctor` | 진단(모델, 트레이스, 데몬/스케줄러/채널 신선도) |
+| `status` | 시스템 상태, Docker HEALTHCHECK용 `--format exit-code` |
+| `estop` | 비상 정지 활성화/재개(network-kill, domain-block, tool-freeze) |
+| `cron` | 예약 태스크 관리(cron/at/every/once, pause/resume/update) |
+| `models` | 프로바이더 모델 카탈로그(refresh, list, set, status) |
+| `providers` | 지원되는 AI 프로바이더 목록 |
+| `channel` | 채널 관리(list, add, remove, send, doctor, bind) |
+| `integrations` | 50개 이상의 통합 탐색 |
+| `skills` | 사용자 정의 스킬 관리 |
+| `migrate` | 다른 에이전트 런타임에서 데이터 마이그레이션 |
+| `auth` | 프로바이더 구독 인증 프로파일(login, paste-token, refresh, logout, use, list, status) |
+| `hardware` | USB 하드웨어 탐색/검사(probe-rs, ST-Link) |
+| `peripheral` | 하드웨어 주변기기 추가/목록/플래시/구성 |
+| `memory` | 에이전트 메모리 항목 관리(list, get, stats, clear) |
+| `config` | `schema` — 구성 파일의 전체 JSON Schema 덤프 |
+| `plugin` | WASM 플러그인 관리(feature: `plugins-wasm`) |
+| `update` | 6단계 파이프라인과 자동 롤백으로 업데이트 확인/적용 |
+| `self-test` | 진단 셀프 테스트 실행(`--quick`으로 오프라인) |
+| `completions` | 셸 완성 스크립트 생성(bash/zsh/fish/powershell/elvish) |
+| `desktop` | 컴패니언 Tauri 데스크톱 앱 실행 또는 `--install` |
+
+### 프론트엔드 개발
 
 ```bash
-# 마이그레이션 대상 미리보기 (안전, 읽기 전용)
-construct migrate openclaw --dry-run
+cd web
+npm install
+npm run dev          # 핫 리로드가 있는 Vite 개발 서버
 
-# 마이그레이션 실행
-construct migrate openclaw
+# 프로덕션 빌드 (Rust 바이너리에 임베드됨)
+npx vite build       # web/dist/로 출력
+cd .. && cargo build --release  # rust-embed를 통해 프론트엔드 재임베드
 ```
 
-이것은 메모리 항목, workspace 파일, 구성을 `~/.openclaw/`에서 `~/.construct/`로 마이그레이션합니다. 구성은 JSON에서 TOML로 자동 변환됩니다.
-
-## 보안 기본값 (DM 접근)
-
-Construct는 실제 메시징 서비스에 연결됩니다. 수신 DM을 신뢰할 수 없는 입력으로 취급하세요.
-
-전체 보안 가이드: [SECURITY.md](SECURITY.md)
-
-모든 채널의 기본 동작:
-
-- **DM 페어링** (기본값): 알 수 없는 발신자는 짧은 페어링 코드를 받으며 봇은 메시지를 처리하지 않습니다.
-- 승인: `construct pairing approve <channel> <code>` (발신자가 로컬 허용 목록에 추가됩니다).
-- 공개 수신 DM은 `config.toml`에서 명시적 옵트인이 필요합니다.
-- `construct doctor`를 실행하여 위험하거나 잘못 구성된 DM 정책을 확인하세요.
-
-**자율성 수준:**
-
-| 수준 | 동작 |
-|-------|----------|
-| `ReadOnly` | 에이전트가 관찰만 할 수 있고 행동하지 않음 |
-| `Supervised` (기본값) | 에이전트가 중/고위험 작업에 대해 승인을 받고 행동 |
-| `Full` | 에이전트가 정책 범위 내에서 자율적으로 행동 |
-
-**샌드박싱 계층:** workspace 격리, 경로 탐색 차단, 명령 허용 목록, 금지 경로 (`/etc`, `/root`, `~/.ssh`), 속도 제한 (시간당 최대 작업 수, 일일 비용 상한).
-
-<!-- BEGIN:WHATS_NEW -->
-<!-- END:WHATS_NEW -->
-
-### 📢 공지사항
-
-이 표를 사용하여 중요한 공지사항(호환성 변경, 보안 권고, 유지보수 기간, 릴리스 차단)을 확인하세요.
-
-| 날짜 (UTC) | 수준 | 공지 | 조치 |
-| ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-02-19 | _치명적_ | 우리는 `openagen/construct`, `construct.org` 또는 `construct.net`과 **관련이 없습니다**. `construct.org`과 `construct.net` 도메인은 현재 `openagen/construct` 포크를 가리키고 있으며, 해당 도메인/저장소는 우리의 공식 웹사이트/프로젝트를 사칭하고 있습니다. | 해당 소스의 정보, 바이너리, 모금, 공지를 신뢰하지 마세요. [이 저장소](https://github.com/KumihoIO/construct-os)와 검증된 소셜 계정만 사용하세요. |
-| 2026-02-21 | _중요_ | 공식 웹사이트가 이제 온라인입니다: [kumiho.io](https://kumiho.io). 기다려주셔서 감사합니다. 사칭 시도가 여전히 감지되고 있으므로, 공식 채널을 통해 게시되지 않은 Construct 이름의 투자나 모금 활동에 참여하지 **마세요**. | [이 저장소](https://github.com/KumihoIO/construct-os)를 유일한 진실의 원천으로 사용하세요. [X (@KumihoHQ)](https://x.com/KumihoHQ), [Facebook (그룹)](https://x.com/KumihoHQ), [Reddit (r/KumihoIO)](https://www.reddit.com/r/KumihoIO)을 팔로우하여 공식 업데이트를 받으세요. |
-| 2026-02-19 | _중요_ | Anthropic이 2026-02-19에 인증 및 자격증명 사용 약관을 업데이트했습니다. Claude Code OAuth 토큰(Free, Pro, Max)은 Claude Code와 Claude.ai 전용입니다. 다른 제품, 도구 또는 서비스(Agent SDK 포함)에서 Claude Free/Pro/Max OAuth 토큰을 사용하는 것은 허용되지 않으며 소비자 이용약관을 위반할 수 있습니다. | 잠재적 손실을 방지하기 위해 일시적으로 Claude Code OAuth 통합을 피하세요. 원본 조항: [Authentication and Credential Use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use). |
-
-## 주요 특징
-
-- **기본 경량 런타임** — 일반적인 CLI 및 상태 워크플로우가 릴리스 빌드에서 몇 메가바이트의 메모리 범위 내에서 실행됩니다.
-- **비용 효율적인 배포** — $10 보드와 소규모 클라우드 인스턴스를 위해 설계되었으며, 무거운 런타임 의존성이 없습니다.
-- **빠른 콜드 스타트** — 단일 바이너리 Rust 런타임으로 명령 및 데몬 시작이 거의 즉각적입니다.
-- **이식 가능한 아키텍처** — 교체 가능한 제공자/채널/도구로 ARM, x86, RISC-V에서 하나의 바이너리.
-- **로컬 우선 Gateway** — 세션, 채널, 도구, cron, SOP, 이벤트를 위한 단일 제어 평면.
-- **멀티 채널 수신함** — WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work, WebSocket 등.
-- **멀티 에이전트 오케스트레이션 (Hands)** — 스케줄에 따라 실행되고 시간이 지남에 따라 더 똑똑해지는 자율 에이전트 스웜.
-- **표준 운영 절차 (SOPs)** — MQTT, webhook, cron, 주변기기 트리거를 통한 이벤트 기반 워크플로우 자동화.
-- **웹 대시보드** — 실시간 채팅, 메모리 브라우저, 구성 편집기, cron 관리자, 도구 검사기를 갖춘 React 19 + Vite 웹 UI.
-- **하드웨어 주변기기** — `Peripheral` 트레이트를 통한 ESP32, STM32 Nucleo, Arduino, Raspberry Pi GPIO.
-- **일급 도구** — shell, file I/O, browser, git, web fetch/search, MCP, Jira, Notion, Google Workspace 등 70개 이상.
-- **라이프사이클 훅** — 모든 단계에서 LLM 호출, 도구 실행, 메시지를 가로채고 수정.
-- **스킬 플랫폼** — 번들, 커뮤니티, workspace 스킬과 보안 감사.
-- **터널 지원** — 원격 접속을 위한 Cloudflare, Tailscale, ngrok, OpenVPN, 사용자 정의 터널.
-
-### 팀이 Construct를 선택하는 이유
-
-- **기본 경량:** 작은 Rust 바이너리, 빠른 시작, 낮은 메모리 사용.
-- **기본 보안:** 페어링, 엄격한 샌드박싱, 명시적 허용 목록, workspace 범위 지정.
-- **완전히 교체 가능:** 핵심 시스템이 트레이트(제공자, 채널, 도구, 메모리, 터널).
-- **벤더 락인 없음:** OpenAI 호환 제공자 지원 + 플러그 가능한 사용자 정의 엔드포인트.
-
-## 벤치마크 스냅샷 (Construct vs OpenClaw, 재현 가능)
-
-로컬 머신 빠른 벤치마크 (macOS arm64, 2026년 2월) 0.8GHz 엣지 하드웨어로 정규화.
-
-|                           | OpenClaw      | NanoBot        | PicoClaw        | Construct 🦀          |
-| ------------------------- | ------------- | -------------- | --------------- | -------------------- |
-| **언어**              | TypeScript    | Python         | Go              | **Rust**             |
-| **RAM**                   | > 1GB         | > 100MB        | < 10MB          | **< 5MB**            |
-| **시작 (0.8GHz 코어)** | > 500s        | > 30s          | < 1s            | **< 10ms**           |
-| **바이너리 크기**           | ~28MB (dist)  | N/A (Scripts)  | ~8MB            | **~8.8 MB**          |
-| **비용**                  | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **모든 하드웨어 $10** |
-
-> 참고: Construct 결과는 `/usr/bin/time -l`을 사용한 릴리스 빌드에서 측정되었습니다. OpenClaw는 Node.js 런타임이 필요하며(일반적으로 ~390MB 추가 메모리 오버헤드), NanoBot은 Python 런타임이 필요합니다. PicoClaw와 Construct는 정적 바이너리입니다. 위 RAM 수치는 런타임 메모리이며, 빌드 시 컴파일 요구사항은 더 높습니다.
-
-<p align="center">
-  <img src="docs/assets/construct-comparison.jpeg" alt="Construct vs OpenClaw Comparison" width="800" />
-</p>
-
-### 재현 가능한 로컬 측정
-
-```bash
-cargo build --release
-ls -lh target/release/construct
-
-/usr/bin/time -l target/release/construct --help
-/usr/bin/time -l target/release/construct status
-```
-
-## 지금까지 구축한 모든 것
-
-### 핵심 플랫폼
-
-- 세션, 프레즌스, 구성, cron, webhook, 웹 대시보드, 페어링을 갖춘 Gateway HTTP/WS/SSE 제어 평면.
-- CLI 표면: `gateway`, `agent`, `onboard`, `doctor`, `status`, `service`, `migrate`, `auth`, `cron`, `channel`, `skills`.
-- 도구 디스패치, 프롬프트 구성, 메시지 분류, 메모리 로딩을 갖춘 에이전트 오케스트레이션 루프.
-- 보안 정책 적용, 자율성 수준, 승인 게이팅을 갖춘 세션 모델.
-- 20개 이상의 LLM 백엔드에 걸쳐 장애 조치, 재시도, 모델 라우팅을 갖춘 탄력적 제공자 래퍼.
-
-### 채널
-
-채널: WhatsApp (네이티브), Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, DingTalk, Lark, Mattermost, Nextcloud Talk, Nostr, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work, WATI, Mochat, Linq, Notion, WebSocket, ClawdTalk.
-
-기능 게이트: Matrix (`channel-matrix`), Lark (`channel-lark`), Nostr (`channel-nostr`).
-
-### 웹 대시보드
-
-Gateway에서 직접 제공하는 React 19 + Vite 6 + Tailwind CSS 4 웹 대시보드:
-
-- **대시보드** — 시스템 개요, 상태, 가동 시간, 비용 추적
-- **에이전트 채팅** — 에이전트와의 대화형 채팅
-- **메모리** — 메모리 항목 탐색 및 관리
-- **구성** — 구성 보기 및 편집
-- **Cron** — 예약된 작업 관리
-- **도구** — 사용 가능한 도구 탐색
-- **로그** — 에이전트 활동 로그 보기
-- **비용** — 토큰 사용량 및 비용 추적
-- **Doctor** — 시스템 상태 진단
-- **통합** — 통합 상태 및 설정
-- **페어링** — 기기 페어링 관리
-
-### 펌웨어 대상
-
-| 대상 | 플랫폼 | 용도 |
-|--------|----------|---------|
-| ESP32 | Espressif ESP32 | 무선 주변기기 에이전트 |
-| ESP32-UI | ESP32 + Display | 시각적 인터페이스를 갖춘 에이전트 |
-| STM32 Nucleo | STM32 (ARM Cortex-M) | 산업용 주변기기 |
-| Arduino | Arduino | 기본 센서/액추에이터 브릿지 |
-| Uno Q Bridge | Arduino Uno | 에이전트와의 시리얼 브릿지 |
-
-### 도구 + 자동화
-
-- **코어:** shell, file read/write/edit, git operations, glob search, content search
-- **웹:** browser control, web fetch, web search, screenshot, image info, PDF read
-- **통합:** Jira, Notion, Google Workspace, Microsoft 365, LinkedIn, Composio, Pushover
-- **MCP:** Model Context Protocol tool wrapper + deferred tool sets
-- **스케줄링:** cron add/remove/update/run, schedule tool
-- **메모리:** recall, store, forget, knowledge, project intel
-- **고급:** delegate (agent-to-agent), swarm, model switch/routing, security ops, cloud ops
-- **하드웨어:** board info, memory map, memory read (feature-gated)
-
-### 런타임 + 안전
-
-- **자율성 수준:** ReadOnly, Supervised (기본값), Full.
-- **샌드박싱:** workspace 격리, 경로 탐색 차단, 명령 허용 목록, 금지 경로, Landlock (Linux), Bubblewrap.
-- **속도 제한:** 시간당 최대 작업 수, 일일 최대 비용 (구성 가능).
-- **승인 게이팅:** 중/고위험 작업에 대한 대화형 승인.
-- **긴급 정지:** 긴급 종료 기능.
-- **129개 이상의 보안 테스트** 자동화된 CI에서.
-
-### 운영 + 패키징
-
-- Gateway에서 직접 제공하는 웹 대시보드.
-- 터널 지원: Cloudflare, Tailscale, ngrok, OpenVPN, custom command.
-- 컨테이너화된 실행을 위한 Docker 런타임 어댑터.
-- CI/CD: beta (push 시 자동) → stable (수동 디스패치) → Docker, crates.io, Scoop, AUR, Homebrew, tweet.
-- Linux (x86_64, aarch64, armv7), macOS (x86_64, aarch64), Windows (x86_64)용 사전 빌드 바이너리.
-
+전체 프론트엔드 개발 가이드는 [docs/setup-guides/dashboard-dev.md](docs/setup-guides/dashboard-dev.md)를 참조하세요.
 
 ## 구성
 
-최소 `~/.construct/config.toml`:
+Construct는 `~/.construct/config.toml`의 TOML 구성을 사용합니다:
 
 ```toml
 default_provider = "anthropic"
 api_key = "sk-ant-..."
-```
 
-전체 구성 참조: [docs/reference/api/config-reference.md](docs/reference/api/config-reference.md).
-
-### 채널 구성
-
-**Telegram:**
-```toml
-[channels.telegram]
-bot_token = "123456:ABC-DEF..."
-```
-
-**Discord:**
-```toml
-[channels.discord]
-token = "your-bot-token"
-```
-
-**Slack:**
-```toml
-[channels.slack]
-bot_token = "xoxb-..."
-app_token = "xapp-..."
-```
-
-**WhatsApp:**
-```toml
-[channels.whatsapp]
+[kumiho]
 enabled = true
+mcp_path = "~/.construct/kumiho/run_kumiho_mcp.py"
+space_prefix = "Construct"
+api_url = "http://localhost:8000"
+
+[operator]
+enabled = true
+mcp_path = "~/.construct/operator_mcp/run_operator_mcp.py"
 ```
 
-**Matrix:**
-```toml
-[channels.matrix]
-homeserver_url = "https://matrix.org"
-username = "@bot:matrix.org"
-password = "..."
-```
-
-**Signal:**
-```toml
-[channels.signal]
-phone_number = "+1234567890"
-```
-
-### 터널 구성
-
-```toml
-[tunnel]
-kind = "cloudflare"  # 또는 "tailscale", "ngrok", "openvpn", "custom", "none"
-```
-
-상세 정보: [Channel reference](docs/reference/api/channels-reference.md) · [Config reference](docs/reference/api/config-reference.md)
-
-### 현재 런타임 지원
-
-- **`native`** (기본값) — 직접 프로세스 실행, 가장 빠른 경로, 신뢰할 수 있는 환경에 적합.
-- **`docker`** — 완전한 컨테이너 격리, 강화된 보안 정책, Docker 필요.
-
-엄격한 샌드박싱이나 네트워크 격리를 위해 `runtime.kind = "docker"`를 설정하세요.
-
-## Subscription Auth (OpenAI Codex / Claude Code / Gemini)
-
-Construct는 구독 기반 인증 프로필(다중 계정, 저장 시 암호화)을 지원합니다.
-
-- 저장 파일: `~/.construct/auth-profiles.json`
-- 암호화 키: `~/.construct/.secret_key`
-- 프로필 id 형식: `<provider>:<profile_name>` (예: `openai-codex:work`)
-
-```bash
-# OpenAI Codex OAuth (ChatGPT 구독)
-construct auth login --provider openai-codex --device-code
-
-# Gemini OAuth
-construct auth login --provider gemini --profile default
-
-# Anthropic setup-token
-construct auth paste-token --provider anthropic --profile default --auth-kind authorization
-
-# 확인 / 갱신 / 프로필 전환
-construct auth status
-construct auth refresh --provider openai-codex --profile default
-construct auth use --provider openai-codex --profile work
-
-# 구독 인증으로 에이전트 실행
-construct agent --provider openai-codex -m "hello"
-construct agent --provider anthropic -m "hello"
-```
-
-## 에이전트 workspace + 스킬
-
-Workspace 루트: `~/.construct/workspace/` (구성을 통해 변경 가능).
-
-주입되는 프롬프트 파일:
-- `IDENTITY.md` — 에이전트 성격과 역할
-- `USER.md` — 사용자 컨텍스트와 선호도
-- `MEMORY.md` — 장기 사실과 교훈
-- `AGENTS.md` — 세션 규칙과 초기화 규칙
-- `SOUL.md` — 핵심 정체성과 운영 원칙
-
-스킬: `~/.construct/workspace/skills/<skill>/SKILL.md` 또는 `SKILL.toml`.
-
-```bash
-# 설치된 스킬 목록
-construct skills list
-
-# git에서 설치
-construct skills install https://github.com/user/my-skill.git
-
-# 설치 전 보안 감사
-construct skills audit https://github.com/user/my-skill.git
-
-# 스킬 제거
-construct skills remove my-skill
-```
-
-## CLI 명령어
-
-```bash
-# Workspace 관리
-construct onboard              # 안내된 설정 마법사
-construct status               # 데몬/에이전트 상태 표시
-construct doctor               # 시스템 진단 실행
-
-# Gateway + 데몬
-construct gateway              # Gateway 서버 시작 (127.0.0.1:42617)
-construct daemon               # 완전 자율 런타임 시작
-
-# 에이전트
-construct agent                # 대화형 채팅 모드
-construct agent -m "message"   # 단일 메시지 모드
-
-# 서비스 관리
-construct service install      # OS 서비스로 설치 (launchd/systemd)
-construct service start|stop|restart|status
-
-# 채널
-construct channel list         # 구성된 채널 목록
-construct channel doctor       # 채널 상태 확인
-construct channel bind-telegram 123456789
-
-# Cron + 스케줄링
-construct cron list            # 예약된 작업 목록
-construct cron add "*/5 * * * *" --prompt "Check system health"
-construct cron remove <id>
-
-# 메모리
-construct memory list          # 메모리 항목 목록
-construct memory get <key>     # 메모리 조회
-construct memory stats         # 메모리 통계
-
-# 인증 프로필
-construct auth login --provider <name>
-construct auth status
-construct auth use --provider <name> --profile <profile>
-
-# 하드웨어 주변기기
-construct hardware discover    # 연결된 기기 스캔
-construct peripheral list      # 연결된 주변기기 목록
-construct peripheral flash     # 기기에 펌웨어 플래시
-
-# 마이그레이션
-construct migrate openclaw --dry-run
-construct migrate openclaw
-
-# 셸 자동완성
-source <(construct completions bash)
-construct completions zsh > ~/.zfunc/_construct
-```
-
-전체 명령어 참조: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
-
-<!-- markdownlint-disable MD001 MD024 -->
-
-## 사전 요구사항
-
-<details>
-<summary><strong>Windows</strong></summary>
-
-#### 필수
-
-1. **Visual Studio Build Tools** (MSVC 링커와 Windows SDK 제공):
-
-    ```powershell
-    winget install Microsoft.VisualStudio.2022.BuildTools
-    ```
-
-    설치 중(또는 Visual Studio Installer를 통해) **"C++를 사용한 데스크톱 개발"** 워크로드를 선택하세요.
-
-2. **Rust 툴체인:**
-
-    ```powershell
-    winget install Rustlang.Rustup
-    ```
-
-    설치 후 새 터미널을 열고 `rustup default stable`을 실행하여 stable 툴체인이 활성화되었는지 확인하세요.
-
-3. **확인:** 둘 다 작동하는지 확인:
-    ```powershell
-    rustc --version
-    cargo --version
-    ```
-
-#### 선택사항
-
-- **Docker Desktop** — [Docker 샌드박스 런타임](#현재-런타임-지원)을 사용하는 경우에만 필요 (`runtime.kind = "docker"`). `winget install Docker.DockerDesktop`으로 설치.
-
-</details>
-
-<details>
-<summary><strong>Linux / macOS</strong></summary>
-
-#### 필수
-
-1. **빌드 필수 도구:**
-    - **Linux (Debian/Ubuntu):** `sudo apt install build-essential pkg-config`
-    - **Linux (Fedora/RHEL):** `sudo dnf group install development-tools && sudo dnf install pkg-config`
-    - **macOS:** Xcode Command Line Tools 설치: `xcode-select --install`
-
-2. **Rust 툴체인:**
-
-    ```bash
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-    ```
-
-    자세한 내용은 [rustup.rs](https://rustup.rs)를 참조하세요.
-
-3. **확인:** 둘 다 작동하는지 확인:
-    ```bash
-    rustc --version
-    cargo --version
-    ```
-
-#### 한 줄 설치
-
-위 단계를 건너뛰고 모든 것(시스템 의존성, Rust, Construct)을 한 번에 설치:
-
-```bash
-curl -LsSf https://raw.githubusercontent.com/KumihoIO/construct-os/main/install.sh | bash
-```
-
-#### 컴파일 리소스 요구사항
-
-소스에서 빌드하려면 결과 바이너리를 실행하는 것보다 더 많은 리소스가 필요합니다:
-
-| 리소스 | 최소 | 권장 |
-| -------------- | ------- | ----------- |
-| **RAM + swap** | 2 GB    | 4 GB+       |
-| **여유 디스크**  | 6 GB    | 10 GB+      |
-
-호스트가 최소 사양 미만인 경우 사전 빌드 바이너리를 사용하세요:
-
-```bash
-./install.sh --prefer-prebuilt
-```
-
-소스 빌드 폴백 없이 바이너리만 설치:
-
-```bash
-./install.sh --prebuilt-only
-```
-
-#### 선택사항
-
-- **Docker** — [Docker 샌드박스 런타임](#현재-런타임-지원)을 사용하는 경우에만 필요 (`runtime.kind = "docker"`). 패키지 관리자 또는 [docker.com](https://docs.docker.com/engine/install/)을 통해 설치.
-
-> **참고:** 기본 `cargo build --release`는 `codegen-units=1`을 사용하여 피크 컴파일 압력을 낮춥니다. 성능이 좋은 머신에서 더 빠른 빌드를 위해 `cargo build --profile release-fast`를 사용하세요.
-
-</details>
-
-<!-- markdownlint-enable MD001 MD024 -->
-
-### 사전 빌드 바이너리
-
-릴리스 에셋은 다음 플랫폼에 게시됩니다:
-
-- Linux: `x86_64`, `aarch64`, `armv7`
-- macOS: `x86_64`, `aarch64`
-- Windows: `x86_64`
-
-최신 에셋 다운로드:
-<https://github.com/KumihoIO/construct-os/releases/latest>
-
-## 문서
-
-온보딩을 마친 후 더 깊은 참조가 필요할 때 사용하세요.
-
-- [문서 인덱스](docs/README.md)에서 탐색과 "무엇이 어디에 있는지"를 확인하세요.
-- [아키텍처 개요](docs/architecture.md)에서 전체 시스템 모델을 확인하세요.
-- [구성 참조](docs/reference/api/config-reference.md)에서 모든 키와 예제를 확인하세요.
-- [운영 런북](docs/ops/operations-runbook.md)으로 Gateway를 운영하세요.
-- [Construct Onboard](#빠른-시작-tldr)를 따라 안내된 설정을 진행하세요.
-- [문제 해결 가이드](docs/ops/troubleshooting.md)로 일반적인 오류를 디버그하세요.
-- 노출하기 전에 [보안 가이드](docs/security/README.md)를 검토하세요.
-
-### 참조 문서
-
-- 문서 허브: [docs/README.md](docs/README.md)
-- 통합 문서 목차: [docs/SUMMARY.md](docs/SUMMARY.md)
-- 명령어 참조: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
-- 구성 참조: [docs/reference/api/config-reference.md](docs/reference/api/config-reference.md)
-- 제공자 참조: [docs/reference/api/providers-reference.md](docs/reference/api/providers-reference.md)
-- 채널 참조: [docs/reference/api/channels-reference.md](docs/reference/api/channels-reference.md)
-- 운영 런북: [docs/ops/operations-runbook.md](docs/ops/operations-runbook.md)
-- 문제 해결: [docs/ops/troubleshooting.md](docs/ops/troubleshooting.md)
-
-### 협업 문서
-
-- 기여 가이드: [CONTRIBUTING.md](CONTRIBUTING.md)
-- PR 워크플로 정책: [docs/contributing/pr-workflow.md](docs/contributing/pr-workflow.md)
-- CI 워크플로 가이드: [docs/contributing/ci-map.md](docs/contributing/ci-map.md)
-- 리뷰어 플레이북: [docs/contributing/reviewer-playbook.md](docs/contributing/reviewer-playbook.md)
-- 보안 공개 정책: [SECURITY.md](SECURITY.md)
-- 문서 템플릿: [docs/contributing/doc-template.md](docs/contributing/doc-template.md)
-
-### 배포 + 운영
-
-- 네트워크 배포 가이드: [docs/ops/network-deployment.md](docs/ops/network-deployment.md)
-- 프록시 에이전트 플레이북: [docs/ops/proxy-agent-playbook.md](docs/ops/proxy-agent-playbook.md)
-- 하드웨어 가이드: [docs/hardware/README.md](docs/hardware/README.md)
-
-
-## 기여하기
-
-Construct가 처음이신가요? [`good first issue`](https://github.com/KumihoIO/construct-os/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 레이블이 붙은 이슈를 찾아보세요 — 시작하는 방법은 [기여 가이드](CONTRIBUTING.md#first-time-contributors)를 참조하세요. AI/vibe-coded PR도 환영합니다! 🤖
-
-[CONTRIBUTING.md](CONTRIBUTING.md)와 [CLA.md](docs/contributing/cla.md)를 참조하세요. 트레이트를 구현하고 PR을 제출하세요:
-
-- CI 워크플로 가이드: [docs/contributing/ci-map.md](docs/contributing/ci-map.md)
-- 새 `Provider` → `src/providers/`
-- 새 `Channel` → `src/channels/`
-- 새 `Observer` → `src/observability/`
-- 새 `Tool` → `src/tools/`
-- 새 `Memory` → `src/memory/`
-- 새 `Tunnel` → `src/tunnel/`
-- 새 `Peripheral` → `src/peripherals/`
-- 새 `Skill` → `~/.construct/workspace/skills/<name>/`
-
-<!-- BEGIN:RECENT_CONTRIBUTORS -->
-<!-- END:RECENT_CONTRIBUTORS -->
-
-## ⚠️ 공식 저장소 및 사칭 경고
-
-**이것이 유일한 공식 Construct 저장소입니다:**
-
-> https://github.com/KumihoIO/construct-os
-
-"Construct"라고 주장하거나 Kumiho Inc.와의 제휴를 암시하는 다른 저장소, 조직, 도메인 또는 패키지는 **승인되지 않았으며 이 프로젝트와 관련이 없습니다**. 알려진 비인가 포크는 [TRADEMARK.md](docs/maintainers/trademark.md)에 나열됩니다.
-
-사칭이나 상표 오용을 발견하면 [이슈를 열어](https://github.com/KumihoIO/construct-os/issues) 신고해 주세요.
-
----
+프로바이더, 채널, 툴, 보안, 게이트웨이 설정을 다루는 전체 참조는 `docs/reference/api/config-reference.md`를 참고하세요.
+
+## 기술 스택
+
+| 계층 | 기술 |
+|-------|------------|
+| 런타임 및 게이트웨이 | Rust (edition 2024), Axum + Tower, Hyper, `rust-embed`를 통한 임베디드 프론트엔드 |
+| 에이전트 루프 | Rust (async/tokio, 14개 이상의 프로바이더 어댑터: Anthropic, OpenAI, OpenAI-Codex, Bedrock, Azure OpenAI, Gemini, Gemini CLI, GLM, Copilot, Ollama, OpenRouter, Kilo CLI, Telnyx, Claude Code, 그리고 reliable/router/compatible 래퍼) |
+| 오케스트레이션 | Python 3.10+ Operator MCP 서버 (17개 스텝 타입, map-reduce / supervisor / group-chat / handoff / refinement 패턴) |
+| Web Dashboard | React 18, TypeScript, Tailwind CSS, Vite, ReactFlow + react-force-graph-2d |
+| 메모리 백엔드 | Kumiho (그래프 네이티브, Neo4j + FastAPI)가 유일한 영속 저장소, Qdrant/lucid 벡터 헬퍼는 선택 사항 |
+| 로컬 저장소 | cron 저장, pairing, 하트비트, 채널 세션, WhatsApp 캐시를 위한 `rusqlite` 기반 SQLite (기본 메모리용이 아님) |
+| 데스크톱 앱 | `construct desktop`으로 실행되는 `apps/tauri` 하위의 Tauri 컴패니언(시스템 트레이 / 메뉴바) |
+| 실시간 | WebSocket (`/ws/chat`, `/ws/canvas/{id}`, `/ws/nodes`, `/ws/terminal`, `/ws/mcp/events`), SSE (`/api/events`, `/api/daemon/logs`) |
+| 프로토콜 | A2A (Google Agent-to-Agent, JSON-RPC 2.0), ACP (stdio 기반 JSON-RPC 2.0), MCP (서버 + 클라이언트) |
+| Observability | OpenTelemetry, Prometheus `/metrics`, DORA 지표, 런타임 트레이싱 |
+| 보안 | Merkle 해시체인 감사, 6자리 기기 페어링, 선택적 WebAuthn, OTP, 워크스페이스 경계, 프롬프트 가드, 시크릿 스캐닝, E-Stop, 검증 가능 의도 영수증 |
+| Sandboxing | Native / Docker / WASM 런타임, Seatbelt (macOS), Landlock (Linux), Firejail, Bubblewrap 래퍼 |
+| 터널 | Cloudflare, ngrok, Pinggy, Tailscale, OpenVPN, 커스텀 |
+| 펌웨어 / 하드웨어 | STM32 Nucleo, Arduino (Uno / Uno Q), ESP32, Raspberry Pi Pico, RPi 호스트, Aardvark I2C/SPI 어댑터 (하드웨어 섹션 참조) |
 
 ## 라이선스
 
-Construct는 최대한의 개방성과 기여자 보호를 위해 듀얼 라이선스가 적용됩니다:
+다음 중 선택하여 이중 라이선스됩니다:
 
-| 라이선스 | 사용 사례 |
-|---|---|
-| [MIT](LICENSE-MIT) | 오픈소스, 연구, 학술, 개인 사용 |
-| [Apache 2.0](LICENSE-APACHE) | 특허 보호, 기관, 상업 배포 |
-
-두 라이선스 중 하나를 선택할 수 있습니다. **기여자는 자동으로 두 가지 모두에 대한 권한을 부여합니다** — 전체 기여자 계약은 [CLA.md](docs/contributing/cla.md)를 참조하세요.
-
-### 상표
-
-**Construct** 이름과 로고는 Kumiho Inc.의 상표입니다. 이 라이선스는 승인이나 제휴를 암시하기 위해 사용할 권한을 부여하지 않습니다. 허용 및 금지 사용은 [TRADEMARK.md](docs/maintainers/trademark.md)를 참조하세요.
-
-### 기여자 보호
-
-- 기여의 **저작권을 유지**합니다
-- **특허 부여** (Apache 2.0)가 다른 기여자의 특허 청구로부터 보호합니다
-- 기여는 커밋 기록과 [NOTICE](NOTICE)에 **영구적으로 귀속**됩니다
-- 기여함으로써 상표권이 이전되지 않습니다
-
----
-
-**Construct** — 오버헤드 없음. 타협 없음. 어디서나 배포. 무엇이든 교체. 🦀
-
-## 기여자
-
-<a href="https://github.com/KumihoIO/construct-os/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=KumihoIO/construct-os" alt="Construct contributors" />
-</a>
-
-이 목록은 GitHub 기여자 그래프에서 생성되며 자동으로 업데이트됩니다.
-
-## 스타 히스토리
-
-<p align="center">
-  <a href="https://www.star-history.com/#KumihoIO/construct-os&type=date&legend=top-left">
-    <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KumihoIO/construct-os&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KumihoIO/construct-os&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=KumihoIO/construct-os&type=date&legend=top-left" />
-    </picture>
-  </a>
-</p>
+- [MIT](LICENSE-MIT)
+- [Apache 2.0](LICENSE-APACHE)
