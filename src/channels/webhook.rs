@@ -78,7 +78,7 @@ impl WebhookChannel {
         };
 
         // HMAC-SHA256 verification
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         type HmacSha256 = Hmac<Sha256>;
@@ -177,7 +177,7 @@ impl Channel for WebhookChannel {
         ) -> StatusCode {
             // Verify signature if secret is configured
             if let Some(ref secret) = state.secret {
-                use hmac::{Hmac, Mac};
+                use hmac::{Hmac, KeyInit, Mac};
                 use sha2::Sha256;
                 type HmacSha256 = Hmac<Sha256>;
 
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn verify_signature_valid() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         type HmacSha256 = Hmac<Sha256>;
 

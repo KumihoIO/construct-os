@@ -5,7 +5,7 @@ import { useT } from '@/construct/hooks/useT';
 import { parseWorkflowYaml, type TaskDefinition } from '@/components/workflows/yamlSync';
 import WorkflowEditor from '@/components/workflows/WorkflowEditor';
 import type { WorkflowCreateRequest, WorkflowDefinition, WorkflowRunDetail, WorkflowRunSummary, WorkflowUpdateRequest } from '@/types/api';
-import { createWorkflow, deleteWorkflow, fetchWorkflowRun, fetchWorkflowRuns, fetchWorkflows, runWorkflow, toggleWorkflowDeprecation, updateWorkflow } from '@/lib/api';
+import { ApiError, createWorkflow, deleteWorkflow, fetchWorkflowRun, fetchWorkflowRuns, fetchWorkflows, runWorkflow, toggleWorkflowDeprecation, updateWorkflow } from '@/lib/api';
 import {
   RunSummaryCard,
   SelectedTaskCard,
@@ -190,6 +190,36 @@ export default function Workflows() {
     [selectedRun],
   );
 
+  /* ---- Error formatting ---- */
+
+  // Turn an ApiError carrying a `{ errors: [...] }` validation payload into a
+  // human-readable, multi-line message. Falls back to the plain message for
+  // non-validation errors.
+  const formatWorkflowError = (err: unknown, fallback: string): string => {
+    if (err instanceof ApiError && err.body && typeof err.body === 'object') {
+      const body = err.body as { error?: string; errors?: unknown };
+      if (Array.isArray(body.errors) && body.errors.length > 0) {
+        const lines = body.errors.slice(0, 8).map((e) => {
+          if (e && typeof e === 'object') {
+            const entry = e as { message?: string; step_id?: string; field?: string };
+            const prefix = entry.step_id
+              ? `[${entry.step_id}] `
+              : entry.field
+                ? `[${entry.field}] `
+                : '';
+            return `• ${prefix}${entry.message ?? JSON.stringify(e)}`;
+          }
+          return `• ${String(e)}`;
+        });
+        const header = body.error ?? 'Validation failed';
+        return [header, ...lines].join('\n');
+      }
+      if (body.error) return String(body.error);
+    }
+    if (err instanceof Error) return err.message;
+    return fallback;
+  };
+
   /* ---- CRUD handlers ---- */
 
   const handleSaveWorkflow = async (values: WorkflowFormValues) => {
@@ -224,8 +254,9 @@ export default function Workflows() {
       }
       setEditorMode(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('workflows.save_failure'));
-      setNotice({ tone: 'error', message: err instanceof Error ? err.message : t('workflows.save_failure_dot') });
+      const message = formatWorkflowError(err, t('workflows.save_failure'));
+      setError(message);
+      setNotice({ tone: 'error', message });
     } finally {
       setSaving(false);
     }
@@ -262,10 +293,8 @@ export default function Workflows() {
       setSelectedRunId(response.run_id);
       await load();
     } catch (err) {
-      setNotice({
-        tone: 'error',
-        message: err instanceof Error ? err.message : t('workflows.run_failure'),
-      });
+      const message = formatWorkflowError(err, t('workflows.run_failure'));
+      setNotice({ tone: 'error', message });
     } finally {
       setRunning(false);
     }

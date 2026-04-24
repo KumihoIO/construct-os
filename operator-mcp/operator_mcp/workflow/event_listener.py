@@ -561,7 +561,21 @@ class WorkflowEventListener:
         # Tag as running
         await self._tag_run_request(item_kref, "running")
 
-        resolved = await resolve_workflow(workflow_name)
+        try:
+            resolved = await resolve_workflow(workflow_name)
+        except Exception as exc:
+            # Malformed stored YAML (Pydantic schema violation, etc.) must
+            # not escape as an unretrieved task exception — tag failed so
+            # the UI can reflect it and move on.
+            self._errors += 1
+            import traceback
+            _log(
+                f"event_listener: failed to resolve '{workflow_name}': {exc}\n"
+                f"{traceback.format_exc()}"
+            )
+            await self._tag_run_request(item_kref, "failed", status_detail=f"resolve_error: {str(exc)[:450]}")
+            return
+
         if resolved is None:
             _log(f"event_listener: workflow '{workflow_name}' not found")
             await self._tag_run_request(item_kref, "failed", status_detail="workflow_not_found")

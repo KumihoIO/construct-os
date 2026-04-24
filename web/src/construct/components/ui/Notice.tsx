@@ -27,7 +27,10 @@ export default function Notice({
     >
       <div className="flex items-start gap-3">
         <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: config.color }} />
-        <div className="text-sm" style={{ color: 'var(--construct-text-primary)' }}>
+        <div
+          className="text-sm whitespace-pre-wrap"
+          style={{ color: 'var(--construct-text-primary)' }}
+        >
           {message}
         </div>
       </div>
