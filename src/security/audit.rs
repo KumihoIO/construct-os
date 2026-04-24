@@ -340,7 +340,7 @@ impl AuditLogger {
     /// Compute HMAC-SHA256 signature over entry_hash when sign_events enabled.
     fn compute_signature(&self, entry_hash: &str) -> Result<Option<String>> {
         if let Some(ref key_bytes) = self.signing_key {
-            use hmac::{Hmac, Mac};
+            use hmac::{Hmac, KeyInit, Mac};
             use sha2::Sha256;
 
             let mut mac = Hmac::<Sha256>::new_from_slice(key_bytes)
@@ -605,7 +605,7 @@ pub fn verify_chain(log_path: &Path) -> Result<u64> {
         // Verify signature if present and key is available
         if let Some(ref signature) = entry.signature {
             if let Some(ref key_bytes) = signing_key {
-                use hmac::{Hmac, Mac};
+                use hmac::{Hmac, KeyInit, Mac};
                 use sha2::Sha256;
 
                 let mut mac = Hmac::<Sha256>::new_from_slice(key_bytes)
@@ -1174,7 +1174,7 @@ mod tests {
         let parsed: AuditEvent = serde_json::from_str(content.trim())?;
 
         // Manually recompute HMAC to verify correctness
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         let key_bytes = hex::decode(&test_key)?;
         let mut mac = Hmac::<Sha256>::new_from_slice(&key_bytes).unwrap();
@@ -1327,7 +1327,7 @@ mod tests {
         // Use a fixed entry_hash for testing
         let test_entry_hash = "test_hash_value";
 
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         let mut mac1 = Hmac::<Sha256>::new_from_slice(&key1_bytes).unwrap();
@@ -1394,7 +1394,7 @@ mod tests {
         assert_ne!(event1.signature, event2.signature);
 
         // Manually verify determinism by recomputing signature for event1
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         let key_bytes = hex::decode(&test_key)?;
         let mut mac = Hmac::<Sha256>::new_from_slice(&key_bytes).unwrap();

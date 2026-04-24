@@ -509,7 +509,7 @@ impl QQChannel {
     ) -> String {
         let mut hasher = Sha256::new();
         hasher.update(file_data);
-        let hash = format!("{:x}", hasher.finalize());
+        let hash = hex::encode(hasher.finalize());
         format!("{hash}:{scope}:{target_id}:{}", file_type as u8)
     }
 
