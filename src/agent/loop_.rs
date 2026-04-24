@@ -2546,9 +2546,15 @@ pub(crate) async fn run_tool_call_loop(
         } else {
             None
         };
+        // Stream when tools are requested if the provider can emit native tool
+        // events OR doesn't use native tool calling at all — in the latter case
+        // tool calls arrive as text and are parsed from `response_text` after
+        // the stream completes.
         let should_consume_provider_stream = on_delta.is_some()
             && provider.supports_streaming()
-            && (request_tools.is_none() || provider.supports_streaming_tool_events());
+            && (request_tools.is_none()
+                || !provider.supports_native_tools()
+                || provider.supports_streaming_tool_events());
         tracing::debug!(
             has_on_delta = on_delta.is_some(),
             supports_streaming = provider.supports_streaming(),
