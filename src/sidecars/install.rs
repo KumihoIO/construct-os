@@ -40,8 +40,7 @@ pub async fn install_sidecars(opts: &SidecarInstallOptions) -> Result<()> {
     eprintln!("    python: {}", python.display());
 
     let root = construct_root()?;
-    std::fs::create_dir_all(&root)
-        .with_context(|| format!("creating {}", root.display()))?;
+    std::fs::create_dir_all(&root).with_context(|| format!("creating {}", root.display()))?;
 
     if !opts.skip_operator {
         install_operator(&python, opts.dry_run)?;
@@ -78,7 +77,10 @@ fn install_kumiho(python: &Path, dry_run: bool) -> Result<()> {
     ensure_venv(python, &venv)?;
     let venv_py = venv_python(&venv)?;
 
-    run(&venv_py, &["-m", "pip", "install", "--quiet", "--upgrade", "pip"])?;
+    run(
+        &venv_py,
+        &["-m", "pip", "install", "--quiet", "--upgrade", "pip"],
+    )?;
     run(&venv_py, &["-m", "pip", "install", "--quiet", KUMIHO_PIN])?;
     eprintln!("    [ok] kumiho[mcp] installed");
 
@@ -110,7 +112,10 @@ fn install_operator(python: &Path, dry_run: bool) -> Result<()> {
     ensure_venv(python, &venv)?;
     let venv_py = venv_python(&venv)?;
 
-    run(&venv_py, &["-m", "pip", "install", "--quiet", "--upgrade", "pip"])?;
+    run(
+        &venv_py,
+        &["-m", "pip", "install", "--quiet", "--upgrade", "pip"],
+    )?;
     let staging_str = staging.path().to_string_lossy().to_string();
     run(&venv_py, &["-m", "pip", "install", "--quiet", &staging_str])?;
     eprintln!("    [ok] operator-mcp installed");
@@ -192,7 +197,10 @@ fn venv_python(venv: &Path) -> Result<PathBuf> {
     let candidates = if cfg!(windows) {
         vec![venv.join("Scripts").join("python.exe")]
     } else {
-        vec![venv.join("bin").join("python3"), venv.join("bin").join("python")]
+        vec![
+            venv.join("bin").join("python3"),
+            venv.join("bin").join("python"),
+        ]
     };
     for c in candidates {
         if c.exists() {
