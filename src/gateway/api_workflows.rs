@@ -234,6 +234,8 @@ pub struct WorkflowStepDetail {
     pub template_name: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub output_preview: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub artifact_path: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -599,6 +601,11 @@ fn extract_steps_from_metadata(meta: &HashMap<String, String>) -> Vec<WorkflowSt
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string(),
+                    artifact_path: parsed
+                        .get("artifact_path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     skills,
                     transcript,
                     output_data,
@@ -619,6 +626,7 @@ fn extract_steps_from_metadata(meta: &HashMap<String, String>) -> Vec<WorkflowSt
                     role: String::new(),
                     template_name: String::new(),
                     output_preview: String::new(),
+                    artifact_path: String::new(),
                     skills: Vec::new(),
                     transcript: Vec::new(),
                     output_data: None,

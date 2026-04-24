@@ -1,9 +1,9 @@
-import { RefreshCw, Trash2, Wrench, MessageSquareText, RotateCcw } from 'lucide-react';
+import { Eye, RefreshCw, Trash2, Wrench, MessageSquareText, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { TaskDefinition } from '@/components/workflows/yamlSync';
 import { parseWorkflowYaml } from '@/components/workflows/yamlSync';
-import type { WorkflowRunDetail, WorkflowRunSummary, WorkflowDefinition } from '@/types/api';
+import type { KumihoArtifact, WorkflowRunDetail, WorkflowRunSummary, WorkflowDefinition } from '@/types/api';
 import type { AgentActivity, AgentToolCall } from '@/lib/api';
 import { deleteWorkflowRun, fetchAgentActivity, fetchWorkflowByRevisionKref, fetchWorkflowRun, fetchWorkflowRuns, fetchWorkflows, retryWorkflowRun } from '@/lib/api';
 import ApprovalPanel from '@/components/workflows/ApprovalPanel';
@@ -22,6 +22,7 @@ import PageHeader from '../components/ui/PageHeader';
 import StatusPill from '../components/ui/StatusPill';
 import StateMessage from '../components/ui/StateMessage';
 import WorkflowDagWorkspace from '../components/workflows/WorkflowDagWorkspace';
+import ArtifactViewerModal from '../components/ui/ArtifactViewerModal';
 import { deriveBlockedTaskIds, deriveDependencyChainIds, toStepRunInfo } from '../lib/orchestration';
 import { formatLocalDateTime } from '../lib/datetime';
 import { useT } from '@/construct/hooks/useT';
@@ -49,6 +50,7 @@ export default function WorkflowRuns() {
   const [pathMode, setPathMode] = useState<'all' | 'failed' | 'blocked'>('all');
   const [detailTab, setDetailTab] = useState<'summary' | 'output' | 'tools' | 'transcript'>('summary');
   const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [viewerArtifact, setViewerArtifact] = useState<KumihoArtifact | null>(null);
   const [shouldScrollToWorkspace, setShouldScrollToWorkspace] = useState(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
 
@@ -423,6 +425,7 @@ export default function WorkflowRuns() {
   };
 
   return (
+    <>
     <div className="flex h-[calc(100vh-6rem)] flex-col gap-3">
       {notice ? <Notice tone={notice.tone} message={notice.message} onDismiss={() => setNotice(null)} /> : null}
 
@@ -734,7 +737,31 @@ export default function WorkflowRuns() {
                   <div className="space-y-3">
                     {selectedStep.output_preview ? (
                       <div className="rounded-[10px] border p-3" style={{ borderColor: 'var(--construct-border-soft)' }}>
-                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>{t('runs.detail.step_output')}</div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>{t('runs.detail.step_output')}</div>
+                          {selectedStep.artifact_path ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewerArtifact({
+                                kref: `step:${selectedStep.step_id}`,
+                                name: selectedStep.step_id,
+                                location: selectedStep.artifact_path ?? '',
+                                revision_kref: '',
+                                item_kref: '',
+                                deprecated: false,
+                              })}
+                              className="inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider transition"
+                              style={{
+                                background: 'var(--construct-bg-elevated)',
+                                color: 'var(--construct-text-secondary)',
+                                border: '1px solid var(--construct-border-strong)',
+                              }}
+                            >
+                              <Eye className="h-3 w-3" />
+                              View full
+                            </button>
+                          ) : null}
+                        </div>
                         <pre className="whitespace-pre-wrap text-xs leading-6" style={{ color: 'var(--construct-text-secondary)', fontFamily: 'var(--pc-font-mono)' }}>{selectedStep.output_preview}</pre>
                       </div>
                     ) : null}
@@ -833,6 +860,13 @@ export default function WorkflowRuns() {
         </div>
       </div>
     </div>
+    {viewerArtifact ? (
+      <ArtifactViewerModal
+        artifact={viewerArtifact}
+        onClose={() => setViewerArtifact(null)}
+      />
+    ) : null}
+    </>
   );
 }
 

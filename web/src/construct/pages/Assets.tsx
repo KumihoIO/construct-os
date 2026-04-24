@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Eye,
   FileText,
   FolderOpen,
   GitBranch,
@@ -35,6 +36,7 @@ import { kumihoProxy } from '@/lib/api';
 import Panel from '../components/ui/Panel';
 import PageHeader from '../components/ui/PageHeader';
 import StateMessage from '../components/ui/StateMessage';
+import ArtifactViewerModal from '../components/ui/ArtifactViewerModal';
 import { copyToClipboard } from '../lib/clipboard';
 import { useT } from '@/construct/hooks/useT';
 
@@ -184,6 +186,7 @@ export default function Assets() {
   const [selectedRevision, setSelectedRevision] = useState<KumihoRevision | null>(null);
   const [artifacts, setArtifacts] = useState<KumihoArtifact[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<KumihoArtifact | null>(null);
+  const [viewerArtifact, setViewerArtifact] = useState<KumihoArtifact | null>(null);
   const [edges, setEdges] = useState<KumihoEdge[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<KumihoSearchResult[]>([]);
@@ -396,6 +399,7 @@ export default function Assets() {
   /* ---- render ---- */
 
   return (
+    <>
     <div className="flex h-[calc(100vh-6rem)] flex-col gap-3">
       {/* Row 1 — Header + search */}
       <div className="flex items-start justify-between gap-4">
@@ -801,11 +805,18 @@ export default function Assets() {
                   ) : (
                     <div className="space-y-1.5">
                       {artifacts.map((artifact) => (
-                        <button
+                        <div
                           key={artifact.kref}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedArtifact(artifact)}
-                          className="w-full rounded-[10px] px-3 py-2 text-left transition"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedArtifact(artifact);
+                            }
+                          }}
+                          className="w-full rounded-[10px] px-3 py-2 text-left transition cursor-pointer"
                           style={{
                             background:
                               selectedArtifact?.kref === artifact.kref
@@ -816,11 +827,30 @@ export default function Assets() {
                           <div className="flex items-center gap-2">
                             <Package className="h-3.5 w-3.5 shrink-0" style={{ color: '#2dd4bf' }} />
                             <span
-                              className="truncate text-sm font-medium"
+                              className="truncate text-sm font-medium flex-1 min-w-0"
                               style={{ color: 'var(--construct-text-primary)' }}
                             >
                               {artifact.name}
                             </span>
+                            {artifact.location ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewerArtifact(artifact);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider shrink-0 transition"
+                                style={{
+                                  background: 'var(--construct-bg-elevated)',
+                                  color: 'var(--construct-text-secondary)',
+                                  border: '1px solid var(--construct-border-strong)',
+                                }}
+                                aria-label={`View ${artifact.name}`}
+                              >
+                                <Eye className="h-3 w-3" />
+                                View
+                              </button>
+                            ) : null}
                           </div>
                           {artifact.location ? (
                             <div
@@ -831,7 +861,7 @@ export default function Assets() {
                               {artifact.location}
                             </div>
                           ) : null}
-                        </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -931,5 +961,12 @@ export default function Assets() {
         ) : null}
       </div>
     </div>
+    {viewerArtifact ? (
+      <ArtifactViewerModal
+        artifact={viewerArtifact}
+        onClose={() => setViewerArtifact(null)}
+      />
+    ) : null}
+    </>
   );
 }

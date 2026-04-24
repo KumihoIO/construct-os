@@ -172,10 +172,12 @@ body {
   outline: none;
 }
 
-/* Scrollbar */
+/* Scrollbar — theme-aware via --construct-* tokens (see tokens.css).
+   Matches the sidebar's .construct-sidebar-scroll style for a consistent
+   look across dark / oled / light themes. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--pc-scrollbar-thumb) var(--pc-scrollbar-track);
+  scrollbar-color: var(--construct-border-strong) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -188,12 +190,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--pc-scrollbar-thumb);
-  border-radius: 3px;
+  background: var(--construct-border-strong);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--pc-scrollbar-thumb-hover);
+  background: var(--construct-signal-live-soft);
 }
 
 textarea::-webkit-scrollbar {
@@ -206,12 +208,12 @@ textarea::-webkit-scrollbar:horizontal {
 }
 
 textarea::-webkit-scrollbar-thumb {
-  background: var(--pc-scrollbar-thumb);
-  border-radius: 2px;
+  background: var(--construct-border-strong);
+  border-radius: 9999px;
 }
 
 textarea::-webkit-scrollbar-thumb:hover {
-  background: var(--pc-scrollbar-thumb-hover);
+  background: var(--construct-signal-live-soft);
 }
 
 textarea {
