@@ -1303,9 +1303,33 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
   // Gate branch edges
   const trueBranch = new Map<string, string>();  // gateId → target
   const falseBranch = new Map<string, string>(); // gateId → target
+  // Parallel children: parallel_node_id → [child_task_ids in edge order]
+  const parallelChildren = new Map<string, string[]>();
+
+  // Identify parallel-parent nodes so we can treat their outgoing edges as
+  // child-membership (→ parallel.steps) rather than dependency edges.
+  const parallelNodeIds = new Set(
+    nodes.filter((n) => n.data.action === 'parallel').map((n) => n.id),
+  );
+  // Map node.id → task.id (task ids are what the YAML `parallel.steps` list
+  // references; React Flow node ids may differ when tasks are renamed).
+  const nodeIdToTaskId = new Map(nodes.map((n) => [n.id, n.data.taskId]));
 
   for (const edge of edges) {
-    // Skip synthetic edges (for_each chain, parallel fan-out) — these are visual only
+    // Edges originating from a parallel node represent child membership and
+    // must be captured regardless of the `synthetic` flag — synthetic edges
+    // are created by flowFromTasks when loading a YAML that already has
+    // `parallel.steps`, and we still need to round-trip that list back out.
+    if (parallelNodeIds.has(edge.source)) {
+      const childTaskId = nodeIdToTaskId.get(edge.target);
+      if (childTaskId) {
+        const children = parallelChildren.get(edge.source) || [];
+        if (!children.includes(childTaskId)) children.push(childTaskId);
+        parallelChildren.set(edge.source, children);
+      }
+      continue;
+    }
+    // Skip other synthetic edges (for_each chain) — these are visual only
     if ((edge.data as Record<string, unknown>)?.synthetic) continue;
     if (edge.sourceHandle === 'true') {
       trueBranch.set(edge.source, edge.target);
@@ -1354,6 +1378,12 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
     if (action === 'parallel') {
       base.parallel_join = (d.parallelJoin || 'all') as TaskDefinition['parallel_join'];
       base.parallel_max_concurrency = d.parallelMaxConcurrency || 5;
+      // Children are derived from canvas edges (synthetic edges from a loaded
+      // YAML are included in `parallelChildren`, so round-trip is preserved).
+      const childrenFromEdges = parallelChildren.get(node.id);
+      if (childrenFromEdges && childrenFromEdges.length > 0) {
+        base.parallel_steps = childrenFromEdges;
+      }
     }
     if (action === 'goto') {
       if (d.gotoTarget) base.goto_target = d.gotoTarget;

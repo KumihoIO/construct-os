@@ -1676,17 +1676,21 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="validate_workflow",
-            description="Validate a workflow definition without executing. Checks for cycles, missing deps, and variable refs.",
+            description="Validate a workflow definition without executing. Checks YAML parsing, Pydantic schema, cycles, missing deps, and variable refs. Always returns a structured {valid, errors, warnings} — never raises.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "workflow": {
                         "type": "string",
-                        "description": "Workflow name to validate.",
+                        "description": "Workflow name to validate (resolves from Kumiho/disk).",
                     },
                     "workflow_def": {
                         "type": "object",
-                        "description": "Inline workflow definition to validate.",
+                        "description": "Inline workflow definition dict to validate.",
+                    },
+                    "workflow_yaml": {
+                        "type": "string",
+                        "description": "Raw YAML text to parse and validate.",
                     },
                     "cwd": {
                         "type": "string",

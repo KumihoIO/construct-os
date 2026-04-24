@@ -1327,9 +1327,28 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
   // Gate branch edges
   const trueBranch = new Map<string, string>();  // gateId → target
   const falseBranch = new Map<string, string>(); // gateId → target
+  // Parallel children: parallel_node_id → [child_task_ids in edge order]
+  const parallelChildren = new Map<string, string[]>();
+
+  const parallelNodeIds = new Set(
+    nodes.filter((n) => n.data.action === 'parallel').map((n) => n.id),
+  );
+  const nodeIdToTaskId = new Map(nodes.map((n) => [n.id, n.data.taskId]));
 
   for (const edge of edges) {
-    // Skip synthetic edges (for_each chain, parallel fan-out) — these are visual only
+    // Edges from a parallel parent define child membership (→ parallel.steps).
+    // Process before the synthetic-skip so round-tripping a YAML that already
+    // has `parallel.steps` preserves the list.
+    if (parallelNodeIds.has(edge.source)) {
+      const childTaskId = nodeIdToTaskId.get(edge.target);
+      if (childTaskId) {
+        const children = parallelChildren.get(edge.source) || [];
+        if (!children.includes(childTaskId)) children.push(childTaskId);
+        parallelChildren.set(edge.source, children);
+      }
+      continue;
+    }
+    // Skip other synthetic edges (for_each chain) — these are visual only
     if ((edge.data as Record<string, unknown>)?.synthetic) continue;
     if (edge.sourceHandle === 'true') {
       trueBranch.set(edge.source, edge.target);
@@ -1379,6 +1398,10 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
     if (action === 'parallel') {
       base.parallel_join = (d.parallelJoin || 'all') as TaskDefinition['parallel_join'];
       base.parallel_max_concurrency = d.parallelMaxConcurrency || 5;
+      const childrenFromEdges = parallelChildren.get(node.id);
+      if (childrenFromEdges && childrenFromEdges.length > 0) {
+        base.parallel_steps = childrenFromEdges;
+      }
     }
     if (action === 'goto') {
       if (d.gotoTarget) base.goto_target = d.gotoTarget;

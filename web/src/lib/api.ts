@@ -46,6 +46,21 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/// Thrown when the gateway returns a non-2xx response. `.body` carries the
+/// parsed JSON error payload when the server sent one (otherwise null); use it
+/// to render structured error details (validation errors, etc.) in the UI.
+export class ApiError extends Error {
+  public readonly status: number;
+  public readonly body: unknown;
+
+  constructor(status: number, message: string, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -75,7 +90,22 @@ export async function apiFetch<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(`API ${response.status}: ${text || response.statusText}`);
+    let parsedBody: unknown = null;
+    if (text) {
+      try {
+        parsedBody = JSON.parse(text);
+      } catch {
+        parsedBody = text;
+      }
+    }
+    const message =
+      (parsedBody && typeof parsedBody === 'object' && 'error' in parsedBody
+        ? String((parsedBody as { error: unknown }).error)
+        : null) ||
+      text ||
+      response.statusText ||
+      `API ${response.status}`;
+    throw new ApiError(response.status, `API ${response.status}: ${message}`, parsedBody);
   }
 
   // Some endpoints may return 204 No Content

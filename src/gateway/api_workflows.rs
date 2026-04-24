@@ -1036,6 +1036,94 @@ pub async fn handle_list_workflows(
     }
 }
 
+/// Result of calling the operator's `validate_workflow` MCP tool.
+///
+/// Mirrors the Python-side `ValidationResult.to_dict()` shape:
+/// `{ valid: bool, errors: [...], warnings: [...] }`. Unwraps the MCP
+/// `content[0].text` envelope.
+#[derive(Debug)]
+struct ValidationOutcome {
+    valid: bool,
+    errors: Vec<serde_json::Value>,
+    warnings: Vec<serde_json::Value>,
+}
+
+/// Call the operator's `validate_workflow` tool via MCP. Returns a structured
+/// outcome. Any transport/parse failure is returned as `Err(String)` — callers
+/// should fail-open (allow the operation) rather than block on infra errors.
+async fn validate_via_operator(
+    state: &AppState,
+    args: serde_json::Map<String, serde_json::Value>,
+) -> Result<ValidationOutcome, String> {
+    let tool_name = format!(
+        "{}__validate_workflow",
+        crate::agent::operator::OPERATOR_SERVER_NAME
+    );
+
+    let registry = state
+        .mcp_registry
+        .as_ref()
+        .ok_or_else(|| "MCP registry not available — operator not connected".to_string())?;
+
+    let fut = registry.call_tool(&tool_name, serde_json::Value::Object(args));
+    let result_str = match tokio::time::timeout(std::time::Duration::from_secs(15), fut).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(format!("operator validate_workflow failed: {e:#}")),
+        Err(_) => return Err("operator validate_workflow timed out (15s)".to_string()),
+    };
+
+    // Outer MCP envelope: { "content": [{"type":"text","text":"<json>"}], ... }
+    let outer: serde_json::Value = serde_json::from_str(&result_str)
+        .map_err(|e| format!("validate_workflow: outer JSON parse failed: {e}"))?;
+
+    let inner_text = outer
+        .get("content")
+        .and_then(|c| c.get(0))
+        .and_then(|c0| c0.get("text"))
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| "validate_workflow: missing content[0].text".to_string())?;
+
+    let inner: serde_json::Value = serde_json::from_str(inner_text)
+        .map_err(|e| format!("validate_workflow: inner JSON parse failed: {e}"))?;
+
+    let valid = inner
+        .get("valid")
+        .and_then(|v| v.as_bool())
+        .ok_or_else(|| "validate_workflow: missing `valid` field".to_string())?;
+    let errors = inner
+        .get("errors")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let warnings = inner
+        .get("warnings")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(ValidationOutcome {
+        valid,
+        errors,
+        warnings,
+    })
+}
+
+/// Build the 400 response body for a failed validation.
+fn validation_error_response(
+    outcome: &ValidationOutcome,
+    context: &str,
+) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({
+            "error": format!("Workflow validation failed: {context}"),
+            "valid": false,
+            "errors": outcome.errors,
+            "warnings": outcome.warnings,
+        })),
+    )
+}
+
 /// POST /api/workflows
 pub async fn handle_create_workflow(
     State(state): State<AppState>,
@@ -1044,6 +1132,24 @@ pub async fn handle_create_workflow(
 ) -> impl IntoResponse {
     if let Err(e) = require_auth(&state, &headers) {
         return e.into_response();
+    }
+
+    // Validate YAML before persisting — reject syntactically or schematically broken
+    // definitions so they never reach storage (and thus never silently fail at dispatch).
+    let mut v_args = serde_json::Map::new();
+    v_args.insert(
+        "workflow_yaml".to_string(),
+        serde_json::Value::String(body.definition.clone()),
+    );
+    match validate_via_operator(&state, v_args).await {
+        Ok(outcome) if !outcome.valid => {
+            return validation_error_response(&outcome, "cannot save invalid workflow")
+                .into_response();
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!("create_workflow: validation skipped (infra error): {e}");
+        }
     }
 
     let client = build_kumiho_client(&state);
@@ -1096,6 +1202,23 @@ pub async fn handle_update_workflow(
 ) -> impl IntoResponse {
     if let Err(e) = require_auth(&state, &headers) {
         return e.into_response();
+    }
+
+    // Validate YAML before persisting the new revision.
+    let mut v_args = serde_json::Map::new();
+    v_args.insert(
+        "workflow_yaml".to_string(),
+        serde_json::Value::String(body.definition.clone()),
+    );
+    match validate_via_operator(&state, v_args).await {
+        Ok(outcome) if !outcome.valid => {
+            return validation_error_response(&outcome, "cannot save invalid workflow")
+                .into_response();
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!("update_workflow: validation skipped (infra error): {e}");
+        }
     }
 
     let kref = format!("kref://{kref}");
@@ -1242,6 +1365,28 @@ pub async fn handle_run_workflow(
         .map(|b| b.inputs.clone())
         .unwrap_or(serde_json::Value::Object(Default::default()));
     let cwd = body.as_ref().and_then(|b| b.cwd.clone());
+
+    // Pre-dispatch validation: resolve the named workflow (from builtins/Kumiho)
+    // and run the schema validator. Blocks silent failures where a malformed
+    // definition gets enqueued but the async runner can't parse it.
+    let mut v_args = serde_json::Map::new();
+    v_args.insert(
+        "workflow".to_string(),
+        serde_json::Value::String(name.clone()),
+    );
+    if let Some(ref c) = cwd {
+        v_args.insert("cwd".to_string(), serde_json::Value::String(c.clone()));
+    }
+    match validate_via_operator(&state, v_args).await {
+        Ok(outcome) if !outcome.valid => {
+            return validation_error_response(&outcome, "cannot dispatch invalid workflow")
+                .into_response();
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!("run_workflow: validation skipped (infra error): {e}");
+        }
+    }
 
     let run_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();

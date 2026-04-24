@@ -309,35 +309,106 @@ async def tool_cancel_workflow(args: dict[str, Any]) -> dict[str, Any]:
 # validate_workflow
 # ---------------------------------------------------------------------------
 
+def _format_pydantic_errors(exc: Exception) -> list[dict[str, str]]:
+    """Turn a Pydantic ValidationError (or other parse error) into a list
+    of structured {message, severity, field} entries for the UI."""
+    errors: list[dict[str, str]] = []
+    pydantic_errors = getattr(exc, "errors", None)
+    if callable(pydantic_errors):
+        try:
+            for e in pydantic_errors():
+                loc = ".".join(str(p) for p in e.get("loc", ()))
+                msg = e.get("msg", "validation error")
+                entry: dict[str, str] = {
+                    "message": f"{msg} at '{loc}'" if loc else msg,
+                    "severity": "error",
+                }
+                if loc:
+                    entry["field"] = loc
+                errors.append(entry)
+        except Exception:
+            pass
+    if not errors:
+        errors.append({"message": str(exc), "severity": "error"})
+    return errors
+
+
 async def tool_validate_workflow(args: dict[str, Any]) -> dict[str, Any]:
     """Validate a workflow definition without executing it.
 
+    Always returns a structured {valid, errors, warnings} result — never
+    raises — so callers (Rust gateway dispatch/save handlers) can surface
+    issues to the UI without swallowed exceptions.
+
     Args:
-        workflow: Workflow name to validate.
+        workflow: Workflow name to validate (resolves from Kumiho/disk).
         workflow_def: Inline workflow definition dict.
+        workflow_yaml: Raw YAML text to parse and validate.
         cwd: Optional project directory for discovery.
     """
+    import yaml as _yaml
+
     from ..workflow.loader import load_workflow_from_dict, resolve_workflow
     from ..workflow.validator import validate_workflow as _validate
 
     workflow_name = args.get("workflow", "")
     workflow_def = args.get("workflow_def")
+    workflow_yaml = args.get("workflow_yaml")
     cwd = args.get("cwd")
 
     wf = None
-    if workflow_def and isinstance(workflow_def, dict):
+
+    if workflow_yaml and isinstance(workflow_yaml, str):
+        try:
+            data = _yaml.safe_load(workflow_yaml)
+        except _yaml.YAMLError as exc:
+            return {
+                "valid": False,
+                "errors": [{"message": f"YAML parse error: {exc}", "severity": "error"}],
+                "warnings": [],
+            }
+        if not isinstance(data, dict):
+            return {
+                "valid": False,
+                "errors": [{
+                    "message": f"Expected YAML mapping at root, got {type(data).__name__}",
+                    "severity": "error",
+                }],
+                "warnings": [],
+            }
+        try:
+            wf = load_workflow_from_dict(data)
+        except Exception as exc:
+            return {
+                "valid": False,
+                "errors": _format_pydantic_errors(exc),
+                "warnings": [],
+            }
+    elif workflow_def and isinstance(workflow_def, dict):
         try:
             wf = load_workflow_from_dict(workflow_def)
         except Exception as exc:
             return {
                 "valid": False,
-                "errors": [{"message": f"Parse error: {exc}", "severity": "error"}],
+                "errors": _format_pydantic_errors(exc),
                 "warnings": [],
             }
     elif workflow_name:
-        resolved = await resolve_workflow(workflow_name, project_dir=cwd)
+        try:
+            resolved = await resolve_workflow(workflow_name, project_dir=cwd)
+        except Exception as exc:
+            # Stored YAML is corrupt (e.g. Pydantic schema violation). Surface
+            # as structured errors instead of propagating — the dispatch path
+            # depends on this never raising.
+            return {
+                "workflow": workflow_name,
+                "valid": False,
+                "errors": _format_pydantic_errors(exc),
+                "warnings": [],
+            }
         if not resolved:
             return {
+                "workflow": workflow_name,
                 "valid": False,
                 "errors": [{"message": f"Workflow '{workflow_name}' not found (checked disk and Kumiho)", "severity": "error"}],
                 "warnings": [],
@@ -346,7 +417,7 @@ async def tool_validate_workflow(args: dict[str, Any]) -> dict[str, Any]:
 
     if not wf:
         return classified_error(
-            "Either 'workflow' or 'workflow_def' required",
+            "Either 'workflow', 'workflow_def', or 'workflow_yaml' required",
             code="missing_workflow", category=VALIDATION_ERROR,
         )
 
