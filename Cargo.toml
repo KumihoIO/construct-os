@@ -48,9 +48,13 @@ include = [
   "/README.md",
   "/web/dist/**/*",
   "/tool_descriptions/**/*",
-  "/operator-mcp/operator_mcp/workflow/builtins/*.yaml",
-  "/scripts/install-sidecars.sh",
-  "/scripts/install-sidecars.bat",
+  "/resources/sidecars/*.py",
+  "/operator-mcp/pyproject.toml",
+  "/operator-mcp/setup.py",
+  "/operator-mcp/requirements.txt",
+  "/operator-mcp/README.md",
+  "/operator-mcp/operator_mcp/**/*.py",
+  "/operator-mcp/operator_mcp/**/*.yaml",
 ]
 
 [[bin]]
