@@ -145,6 +145,7 @@ mod providers;
 mod runtime;
 mod security;
 mod service;
+mod sidecars;
 mod skills;
 mod sop;
 mod tools;
@@ -1109,6 +1110,10 @@ async fn main() -> Result<()> {
             println!("Initialized OTP secret for Construct.");
             println!("Enrollment URI: {uri}");
         }
+    }
+
+    if needs_sidecars(&cli.command) {
+        sidecars::ensure_sidecars_ready(true).await?;
     }
 
     match cli.command {
@@ -2743,6 +2748,22 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
 
             Ok(())
         }
+    }
+}
+
+/// Return true if the given command launches a long-running agent/gateway/daemon
+/// that talks to the Kumiho or Operator MCP sidecars. These commands trigger
+/// first-run sidecar auto-provisioning.
+fn needs_sidecars(cmd: &Commands) -> bool {
+    match cmd {
+        Commands::Agent { .. }
+        | Commands::Acp { .. }
+        | Commands::Gateway { .. }
+        | Commands::Daemon { .. } => true,
+        Commands::Channel { channel_command } => {
+            matches!(channel_command, ChannelCommands::Start)
+        }
+        _ => false,
     }
 }
 

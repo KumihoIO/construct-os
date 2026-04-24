@@ -20,6 +20,8 @@
 *.sh text eol=lf linguist-language=Shell
 *.bash text eol=lf linguist-language=Shell
 *.ps1 text eol=crlf linguist-language=PowerShell
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
 # Documentation
 *.txt text eol=lf

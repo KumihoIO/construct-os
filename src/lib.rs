@@ -106,6 +106,7 @@ pub mod rag;
 pub mod runtime;
 pub(crate) mod security;
 pub(crate) mod service;
+pub mod sidecars;
 pub(crate) mod skills;
 pub mod sop;
 pub mod tools;
