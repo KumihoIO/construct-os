@@ -125,7 +125,13 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Audit dependencies
-        run: cargo audit
+        # cargo-audit 0.22 does not auto-load repo-local config files, so we
+        # translate the ignore list in .cargo/audit.toml into CLI `--ignore`
+        # flags. See that file for rationale on each entry.
+        run: |
+          ignores=$(grep -Eo 'RUSTSEC-[0-9]+-[0-9]+' .cargo/audit.toml \
+            | awk '{ printf "--ignore %s ", $0 }')
+          cargo audit $ignores
 
       - name: Check licenses and sources
         run: cargo deny check licenses sources
