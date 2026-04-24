@@ -6,7 +6,7 @@
 
 use anyhow::{Result, bail};
 use chrono::Utc;
-use hmac::{Hmac, KeyInit, Mac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
