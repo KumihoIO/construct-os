@@ -1,7 +1,7 @@
 {
   "id": "construct",
   "name": "Construct",
-  "version": "2026.4.21",
+  "version": "2026.4.24",
   "description": "Fast, small, and fully autonomous AI personal assistant infrastructure. Deploy anywhere, swap anything. 100% Rust.",
   "logo": "construct.png",
   "links": {
