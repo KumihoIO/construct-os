@@ -9,6 +9,7 @@
 
 pub mod api;
 pub mod api_agents;
+pub mod api_artifact_body;
 pub mod api_clawhub;
 pub mod api_kumiho_proxy;
 pub mod api_mcp;
@@ -1245,6 +1246,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // NOTE: Memory graph route is merged separately with its own 60s timeout
         // ── Generic Kumiho API proxy (for Asset Browser, Memory Auditor, etc.) ──
         .route("/api/kumiho/{*path}", get(api_kumiho_proxy::handle_kumiho_proxy))
+        // ── Artifact body (serve local file bytes referenced by Kumiho) ──
+        .route("/api/artifact-body", get(api_artifact_body::handle_artifact_body))
         // ── Pairing + Device management API ──
         .route("/api/pairing/initiate", post(api_pairing::initiate_pairing))
         .route("/api/pair", post(api_pairing::submit_pairing_enhanced))

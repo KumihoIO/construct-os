@@ -359,6 +359,8 @@ export interface WorkflowStepDetail {
   role?: string;
   template_name?: string;
   output_preview?: string;
+  /** Absolute filesystem path to the step's full output artifact on disk */
+  artifact_path?: string;
   skills?: string[];
   transcript?: TranscriptEntry[];
   /** Set when the step is a human_approval step waiting for a decision */
