@@ -1377,6 +1377,39 @@ export default function TaskSidePanel({
           </div>
         )}
 
+        {/* Notify title + message (dedicated to the notify block) */}
+        {stepType === 'notify' && (
+          <>
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--pc-text-faint)' }}>
+                Notify Title
+              </label>
+              <input
+                type="text"
+                value={data.notifyTitle ?? ''}
+                onChange={(e) => onUpdate(node.id, { notifyTitle: e.target.value })}
+                placeholder="Header shown above the message"
+                className="input-electric w-full px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--pc-text-faint)' }}>
+                Notify Message
+              </label>
+              <textarea
+                value={data.notifyMessage ?? ''}
+                onChange={(e) => onUpdate(node.id, { notifyMessage: e.target.value })}
+                placeholder="Body — supports ${step_id.output} templating"
+                className="input-electric w-full px-2 py-1.5 text-sm font-mono"
+                rows={6}
+              />
+              <p className="text-[9px] mt-1" style={{ color: 'var(--pc-text-faint)' }}>
+                Use <code>{'${step_id.output}'}</code> to embed a prior step's result
+              </p>
+            </div>
+          </>
+        )}
+
         {/* Agent Hints (tasks only) */}
         {stepType !== 'conditional' && stepType !== 'human_input' && stepType !== 'notify' && data.action !== 'gate' && <div>
           <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--pc-text-faint)' }}>

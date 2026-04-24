@@ -140,6 +140,9 @@ export interface TaskDefinition {
   for_each_carry_forward?: boolean;
   for_each_fail_fast?: boolean;
   for_each_max_iterations?: number;
+  // --- Notify: first-class message/title ---
+  notify_message?: string;
+  notify_title?: string;
 }
 
 /** Step result from a workflow run — overlaid on nodes when viewing runs */
@@ -287,6 +290,9 @@ export interface TaskNodeData {
   forEachCarryForward: boolean;
   forEachFailFast: boolean;
   forEachMaxIterations: number;
+  // Notify — first-class message/title
+  notifyMessage: string;
+  notifyTitle: string;
   /** Run-mode overlay — populated when viewing a workflow run */
   runInfo?: StepRunInfo;
   [key: string]: unknown;
@@ -811,6 +817,33 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       }
     }
 
+    // Notify block — parse first-class notify.channels, notify.message, notify.title
+    {
+      const notifyMatch = block.match(/^\s{4}notify:\s*\n((?:\s{5,}.*\n?)*)/m);
+      if (notifyMatch) {
+        const nb = notifyMatch[1]!;
+        const nChannels = nb.match(/^\s+channels:\s*\[([^\]]+)\]/m);
+        if (nChannels) {
+          data.channels = dedupChannels(parseInlineArray(nChannels[1]!));
+        }
+        const nMsgMulti = nb.match(/^\s+message:\s*\|\s*\n([\s\S]*?)(?=\n\s{0,6}\S|\n$|$)/m);
+        if (nMsgMulti) {
+          const raw = nMsgMulti[1]!;
+          const msgLines = raw.split('\n');
+          const indents = msgLines
+            .filter((l) => l.trim().length > 0)
+            .map((l) => (l.match(/^(\s*)/)?.[1]?.length ?? 0));
+          const minIndent = indents.length ? Math.min(...indents) : 0;
+          data.notify_message = msgLines.map((l) => l.slice(minIndent)).join('\n').trimEnd();
+        } else {
+          const nMsgSingle = nb.match(/^\s+message:\s*(?!\|)["']?(.+?)["']?\s*$/m);
+          if (nMsgSingle) data.notify_message = nMsgSingle[1]!;
+        }
+        const nTitle = nb.match(/^\s+title:\s*["']?(.+?)["']?\s*$/m);
+        if (nTitle) data.notify_title = nTitle[1]!;
+      }
+    }
+
     // Handoff block
     if (block.match(/type:\s*handoff/)) {
       const from = block.match(/from_step:\s*(\S+)/);
@@ -962,6 +995,18 @@ function parseInlineArray(value: string): string[] {
     .filter(Boolean);
 }
 
+function dedupChannels(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
 function finalizeTask(partial: Partial<TaskDefinition>, paramCount: number): TaskDefinition {
   return {
     id: partial.id!,
@@ -1087,6 +1132,8 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
       forEachCarryForward: task.for_each_carry_forward ?? true,
       forEachFailFast: task.for_each_fail_fast ?? true,
       forEachMaxIterations: task.for_each_max_iterations || 20,
+      notifyMessage: task.notify_message || '',
+      notifyTitle: task.notify_title || '',
     },
   }));
 
@@ -1361,8 +1408,10 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
         ? d.channel as TaskDefinition['channel']
         : undefined,
       channels: st === 'notify' && d.channels.length > 0
-        ? d.channels
+        ? dedupChannels(d.channels)
         : undefined,
+      notify_message: st === 'notify' && d.notifyMessage ? d.notifyMessage : undefined,
+      notify_title: st === 'notify' && d.notifyTitle ? d.notifyTitle : undefined,
       retry: d.retry > 0 ? d.retry : undefined,
       retry_delay: d.retryDelay !== 5 ? d.retryDelay : undefined,
     };
@@ -1572,13 +1621,18 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
     }
     if (task.action === 'notify' && task.channels && task.channels.length > 0) {
       lines.push(`    notify:`);
-      lines.push(`      channels: [${task.channels.join(', ')}]`);
-      if (task.description) {
-        lines.push(`      message: ${yamlEscape(task.description)}`);
+      lines.push(`      channels: [${dedupChannels(task.channels).join(', ')}]`);
+      const notifyMessage = task.notify_message || '';
+      if (notifyMessage) {
+        if (notifyMessage.includes('\n')) {
+          lines.push(`      message: |`);
+          for (const ml of notifyMessage.split('\n')) lines.push(`        ${ml}`);
+        } else {
+          lines.push(`      message: ${yamlEscape(notifyMessage)}`);
+        }
       }
-      if (task.name && task.name !== task.id) {
-        lines.push(`      title: ${yamlEscape(task.name)}`);
-      }
+      const notifyTitle = task.notify_title || '';
+      if (notifyTitle) lines.push(`      title: ${yamlEscape(notifyTitle)}`);
     }
     // Executor-specific nested blocks
     if (stepType === 'agent' && (task.agent_type || task.role || task.prompt || task.assign)) {

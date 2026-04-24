@@ -126,6 +126,8 @@ function defaultNodeData(id: string, overrides?: Partial<TaskNodeData>): TaskNod
     forEachCarryForward: true,
     forEachFailFast: true,
     forEachMaxIterations: 20,
+    notifyMessage: '',
+    notifyTitle: '',
     ...overrides,
   };
 }

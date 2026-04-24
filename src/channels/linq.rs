@@ -417,7 +417,7 @@ impl Channel for LinqChannel {
 /// The signature is sent in `X-Webhook-Signature` (hex-encoded) and the
 /// timestamp in `X-Webhook-Timestamp`. Reject timestamps older than 300s.
 pub fn verify_linq_signature(secret: &str, body: &str, timestamp: &str, signature: &str) -> bool {
-    use hmac::{Hmac, KeyInit, Mac};
+    use hmac::{Hmac, Mac};
     use sha2::Sha256;
 
     // Reject stale timestamps (>300s old)
@@ -732,7 +732,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp().to_string();
 
         // Compute expected signature
-        use hmac::{Hmac, KeyInit, Mac};
+        use hmac::{Hmac, Mac};
         use sha2::Sha256;
         let message = format!("{now}.{body}");
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -764,7 +764,7 @@ mod tests {
         let stale_ts = (chrono::Utc::now().timestamp() - 600).to_string();
 
         // Even with correct signature, stale timestamp should fail
-        use hmac::{Hmac, KeyInit, Mac};
+        use hmac::{Hmac, Mac};
         use sha2::Sha256;
         let message = format!("{stale_ts}.{body}");
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -783,7 +783,7 @@ mod tests {
         let body = r#"{"event_type":"message.received"}"#;
         let now = chrono::Utc::now().timestamp().to_string();
 
-        use hmac::{Hmac, KeyInit, Mac};
+        use hmac::{Hmac, Mac};
         use sha2::Sha256;
         let message = format!("{now}.{body}");
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -799,7 +799,7 @@ mod tests {
         let body = r#"{"event_type":"message.received"}"#;
         let now = chrono::Utc::now().timestamp().to_string();
 
-        use hmac::{Hmac, KeyInit, Mac};
+        use hmac::{Hmac, Mac};
         use sha2::Sha256;
         let message = format!("{now}.{body}");
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
