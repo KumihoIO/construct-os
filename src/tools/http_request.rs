@@ -603,13 +603,21 @@ mod tests {
     #[tokio::test]
     async fn validate_accepts_subdomain() {
         let tool = test_tool(vec!["example.com"]);
-        assert!(tool.validate_url("https://api.example.com/v1").await.is_ok());
+        assert!(
+            tool.validate_url("https://api.example.com/v1")
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn validate_accepts_wildcard_allowlist_for_public_host() {
         let tool = test_tool(vec!["*"]);
-        assert!(tool.validate_url("https://news.ycombinator.com").await.is_ok());
+        assert!(
+            tool.validate_url("https://news.ycombinator.com")
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

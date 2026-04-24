@@ -95,14 +95,10 @@ fn validate_ssh_host_arg(host: &str) -> Result<()> {
         anyhow::bail!("ssh host cannot be empty");
     }
     if host.starts_with('-') {
-        anyhow::bail!(
-            "ssh host '{host}' cannot start with '-' (would be parsed as an option)"
-        );
+        anyhow::bail!("ssh host '{host}' cannot start with '-' (would be parsed as an option)");
     }
-    let allowed = |c: char| {
-        c.is_ascii_alphanumeric()
-            || matches!(c, '.' | '-' | '_' | '@' | ':' | '[' | ']')
-    };
+    let allowed =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '@' | ':' | '[' | ']');
     if !host.chars().all(allowed) {
         anyhow::bail!(
             "ssh host '{host}' contains disallowed characters (allowed: alphanumeric and . - _ @ : [ ])"

@@ -259,10 +259,7 @@ impl AuditLogger {
             if let Some(parent) = log_path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            let _ = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&log_path);
+            let _ = OpenOptions::new().create(true).append(true).open(&log_path);
         }
 
         let chain_state = recover_chain_state(&log_path);
@@ -835,7 +832,10 @@ mod tests {
 
         // The new current log must verify standalone: chain reset to genesis.
         let count = verify_chain(&log_path)?;
-        assert_eq!(count, 1, "post-rotation log must contain exactly the one new entry");
+        assert_eq!(
+            count, 1,
+            "post-rotation log must contain exactly the one new entry"
+        );
         Ok(())
     }
 

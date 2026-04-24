@@ -512,8 +512,8 @@ mod tests {
             level: AutonomyLevel::ReadOnly,
             ..AutonomyConfig::default()
         };
-        let readonly_mgr = ApprovalManager::from_config(&readonly_config)
-            .with_trust_tracker(Arc::clone(&trust));
+        let readonly_mgr =
+            ApprovalManager::from_config(&readonly_config).with_trust_tracker(Arc::clone(&trust));
         assert!(!readonly_mgr.needs_approval("file_write"));
     }
 

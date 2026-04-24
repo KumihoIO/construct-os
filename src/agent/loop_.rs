@@ -3771,9 +3771,7 @@ pub async fn run(
 
                     for name in &all_names {
                         if is_eager_tool(name) {
-                            if let Some(def) =
-                                registry.get_tool_def(name).await
-                            {
+                            if let Some(def) = registry.get_tool_def(name).await {
                                 let wrapper: std::sync::Arc<dyn Tool> =
                                     std::sync::Arc::new(crate::tools::McpToolWrapper::new(
                                         name.clone(),

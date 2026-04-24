@@ -507,12 +507,18 @@ pub async fn handle_list_teams(
     let project_name = team_project(&state);
     let space_path = team_space_path(&state);
 
-    let items = match client.list_teams_in(&space_path, query.include_deprecated).await {
+    let items = match client
+        .list_teams_in(&space_path, query.include_deprecated)
+        .await
+    {
         Ok(items) => items,
         Err(ref e) if matches!(e, KumihoError::Api { status: 404, .. }) => {
             let _ = client.ensure_project(&project_name).await;
             let _ = client.ensure_space(&project_name, TEAM_SPACE_NAME).await;
-            return Json(serde_json::json!({ "teams": [], "total_count": 0, "page": 1, "per_page": 9 })).into_response();
+            return Json(
+                serde_json::json!({ "teams": [], "total_count": 0, "page": 1, "per_page": 9 }),
+            )
+            .into_response();
         }
         Err(ref e) if matches!(e, KumihoError::Api { status: 500, .. }) => {
             tracing::warn!("Teams list failed (Kumiho 500, likely corrupted data): {e}");

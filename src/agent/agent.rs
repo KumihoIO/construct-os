@@ -902,8 +902,7 @@ impl Agent {
 
             // Rebuild tool_specs per iteration so newly activated deferred
             // tools (via tool_search) appear in subsequent LLM calls.
-            let mut iter_tool_specs: Vec<ToolSpec> =
-                self.tools.iter().map(|t| t.spec()).collect();
+            let mut iter_tool_specs: Vec<ToolSpec> = self.tools.iter().map(|t| t.spec()).collect();
             if let Some(at) = self.activated_tools.as_ref() {
                 for spec in at.lock().unwrap().tool_specs() {
                     iter_tool_specs.push(spec);
@@ -1093,8 +1092,7 @@ impl Agent {
             // Rebuild tool_specs each iteration so newly activated deferred
             // tools (via tool_search) appear in the next LLM call.  Matches
             // run_tool_call_loop's pattern in loop_.rs.
-            let mut iter_tool_specs: Vec<ToolSpec> =
-                self.tools.iter().map(|t| t.spec()).collect();
+            let mut iter_tool_specs: Vec<ToolSpec> = self.tools.iter().map(|t| t.spec()).collect();
             if let Some(at) = self.activated_tools.as_ref() {
                 for spec in at.lock().unwrap().tool_specs() {
                     iter_tool_specs.push(spec);
