@@ -148,17 +148,12 @@ fn validate_serial_port_arg(port: &str) -> Result<()> {
         anyhow::bail!("serial port cannot be empty");
     }
     if port.starts_with('-') {
-        anyhow::bail!(
-            "serial port '{port}' cannot start with '-' (would be parsed as an option)"
-        );
+        anyhow::bail!("serial port '{port}' cannot start with '-' (would be parsed as an option)");
     }
-    let allowed = |c: char| {
-        c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '-' | '_' | ':' | '\\')
-    };
+    let allowed =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '-' | '_' | ':' | '\\');
     if !port.chars().all(allowed) {
-        anyhow::bail!(
-            "serial port '{port}' contains disallowed characters"
-        );
+        anyhow::bail!("serial port '{port}' contains disallowed characters");
     }
     Ok(())
 }

@@ -149,7 +149,10 @@ mod tests {
         assert!(report.written > 0);
         assert_eq!(report.overwritten, 0);
         assert_eq!(report.skipped, 0);
-        let dest = tmp.path().join(WORKSPACE_WORKFLOWS_SUBDIR).join("code-review.yaml");
+        let dest = tmp
+            .path()
+            .join(WORKSPACE_WORKFLOWS_SUBDIR)
+            .join("code-review.yaml");
         assert!(dest.exists());
     }
 
@@ -167,7 +170,10 @@ mod tests {
     async fn seed_overwrites_with_force() {
         let tmp = TempDir::new().unwrap();
         seed_builtin_workflows(tmp.path(), false).await.unwrap();
-        let dest = tmp.path().join(WORKSPACE_WORKFLOWS_SUBDIR).join("code-review.yaml");
+        let dest = tmp
+            .path()
+            .join(WORKSPACE_WORKFLOWS_SUBDIR)
+            .join("code-review.yaml");
         fs::write(&dest, "# tampered\n").await.unwrap();
         let forced = seed_builtin_workflows(tmp.path(), true).await.unwrap();
         assert!(forced.overwritten > 0);

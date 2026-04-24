@@ -1519,7 +1519,10 @@ async fn handle_pair(
     }
 
     // ── Auth rate limiting (brute-force protection) ──
-    if let Err(e) = state.auth_limiter.check_rate_limit(&rate_key, peer_is_loopback) {
+    if let Err(e) = state
+        .auth_limiter
+        .check_rate_limit(&rate_key, peer_is_loopback)
+    {
         tracing::warn!("🔐 Pairing auth rate limit exceeded for {rate_key}");
         let err = serde_json::json!({
             "error": format!("Too many auth attempts. Try again in {}s.", e.retry_after_secs),
@@ -1562,7 +1565,9 @@ async fn handle_pair(
             (StatusCode::OK, Json(body))
         }
         Ok(None) => {
-            state.auth_limiter.record_attempt(&rate_key, peer_is_loopback);
+            state
+                .auth_limiter
+                .record_attempt(&rate_key, peer_is_loopback);
             tracing::warn!("🔐 Pairing attempt with invalid code");
             if let Some(ref logger) = state.audit_logger {
                 let _ = logger
@@ -1675,7 +1680,10 @@ async fn handle_webhook(
 
     // ── Bearer token auth (pairing) with auth rate limiting ──
     if state.pairing.require_pairing() {
-        if let Err(e) = state.auth_limiter.check_rate_limit(&rate_key, peer_is_loopback) {
+        if let Err(e) = state
+            .auth_limiter
+            .check_rate_limit(&rate_key, peer_is_loopback)
+        {
             tracing::warn!("Webhook: auth rate limit exceeded for {rate_key}");
             let err = serde_json::json!({
                 "error": format!("Too many auth attempts. Try again in {}s.", e.retry_after_secs),
@@ -1689,7 +1697,9 @@ async fn handle_webhook(
             .unwrap_or("");
         let token = auth.strip_prefix("Bearer ").unwrap_or("");
         if !state.pairing.is_authenticated(token) {
-            state.auth_limiter.record_attempt(&rate_key, peer_is_loopback);
+            state
+                .auth_limiter
+                .record_attempt(&rate_key, peer_is_loopback);
             tracing::warn!("Webhook: rejected — not paired / invalid bearer token");
             let err = serde_json::json!({
                 "error": "Unauthorized — pair first via POST /pair, then send Authorization: Bearer <token>"

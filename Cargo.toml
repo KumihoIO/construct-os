@@ -38,7 +38,7 @@ repository = "https://github.com/KumihoIO/construct-os"
 readme = "README.md"
 keywords = ["ai", "agent", "memory", "orchestration", "kumiho"]
 categories = ["command-line-utilities", "development-tools"]
-rust-version = "1.87"
+rust-version = "1.89"
 include = [
   "/src/**/*",
   "/build.rs",

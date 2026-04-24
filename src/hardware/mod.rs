@@ -103,8 +103,7 @@ async fn build_builtin_hardware_tools(
                 println!("[registry] loaded built-in: {name}");
                 tools.insert(name, tool);
             }
-            let tool: Box<dyn crate::tools::Tool> =
-                Box::new(self::datasheet::DatasheetTool::new());
+            let tool: Box<dyn crate::tools::Tool> = Box::new(self::datasheet::DatasheetTool::new());
             let name = tool.name().to_string();
             println!("[registry] loaded built-in: {name}");
             tools.insert(name, tool);

@@ -1574,7 +1574,9 @@ pub async fn handle_list_workflow_runs(
         }
         Err(ref e) if matches!(e, KumihoError::Api { status: 404, .. }) => {
             let _ = client.ensure_project(&project).await;
-            let _ = client.ensure_space(&project, WORKFLOW_RUNS_SPACE_NAME).await;
+            let _ = client
+                .ensure_space(&project, WORKFLOW_RUNS_SPACE_NAME)
+                .await;
             Json(serde_json::json!({ "runs": [], "count": 0 })).into_response()
         }
         Err(e) => {

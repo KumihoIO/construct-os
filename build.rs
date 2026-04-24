@@ -27,58 +27,59 @@ fn main() {
     // build still succeeds.
     let needs_build = web_build_required(web_dir, dist_dir);
 
-    if needs_build && web_dir.join("package.json").exists() {
-        if let Ok(npm) = which_npm() {
-            eprintln!("cargo:warning=Building web frontend (web/dist is missing or stale)...");
+    if needs_build
+        && web_dir.join("package.json").exists()
+        && let Ok(npm) = which_npm()
+    {
+        eprintln!("cargo:warning=Building web frontend (web/dist is missing or stale)...");
 
-            // npm ci / npm install
-            let install_status = Command::new(&npm)
-                .args(["ci", "--ignore-scripts"])
-                .current_dir(web_dir)
-                .status();
+        // npm ci / npm install
+        let install_status = Command::new(&npm)
+            .args(["ci", "--ignore-scripts"])
+            .current_dir(web_dir)
+            .status();
 
-            match install_status {
-                Ok(s) if s.success() => {}
-                Ok(s) => {
-                    // Fall back to `npm install` if `npm ci` fails (no lockfile, etc.)
-                    eprintln!("cargo:warning=npm ci exited with {s}, trying npm install...");
-                    let fallback = Command::new(&npm)
-                        .args(["install"])
-                        .current_dir(web_dir)
-                        .status();
-                    if !matches!(fallback, Ok(s) if s.success()) {
-                        eprintln!("cargo:warning=npm install failed — skipping web build");
-                        ensure_dist_dir(dist_dir);
-                        return;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("cargo:warning=Could not run npm: {e} — skipping web build");
+        match install_status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                // Fall back to `npm install` if `npm ci` fails (no lockfile, etc.)
+                eprintln!("cargo:warning=npm ci exited with {s}, trying npm install...");
+                let fallback = Command::new(&npm)
+                    .args(["install"])
+                    .current_dir(web_dir)
+                    .status();
+                if !matches!(fallback, Ok(s) if s.success()) {
+                    eprintln!("cargo:warning=npm install failed — skipping web build");
                     ensure_dist_dir(dist_dir);
                     return;
                 }
             }
+            Err(e) => {
+                eprintln!("cargo:warning=Could not run npm: {e} — skipping web build");
+                ensure_dist_dir(dist_dir);
+                return;
+            }
+        }
 
-            // npm run build
-            let build_status = Command::new(&npm)
-                .args(["run", "build"])
-                .current_dir(web_dir)
-                .status();
+        // npm run build
+        let build_status = Command::new(&npm)
+            .args(["run", "build"])
+            .current_dir(web_dir)
+            .status();
 
-            match build_status {
-                Ok(s) if s.success() => {
-                    eprintln!("cargo:warning=Web frontend built successfully.");
-                }
-                Ok(s) => {
-                    eprintln!(
-                        "cargo:warning=npm run build exited with {s} — web dashboard may be unavailable"
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "cargo:warning=Could not run npm build: {e} — web dashboard may be unavailable"
-                    );
-                }
+        match build_status {
+            Ok(s) if s.success() => {
+                eprintln!("cargo:warning=Web frontend built successfully.");
+            }
+            Ok(s) => {
+                eprintln!(
+                    "cargo:warning=npm run build exited with {s} — web dashboard may be unavailable"
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "cargo:warning=Could not run npm build: {e} — web dashboard may be unavailable"
+                );
             }
         }
     }

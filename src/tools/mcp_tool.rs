@@ -312,9 +312,9 @@ mod tests {
             "properties": { "score": { "type": "number" } }
         });
         let mut map = serde_json::Map::new();
-        map.insert("score".into(), json!("3.14"));
+        map.insert("score".into(), json!("2.5"));
         coerce_string_numerics(&mut map, &schema);
-        assert_eq!(map["score"], json!(3.14));
+        assert_eq!(map["score"], json!(2.5));
     }
 
     #[test]
