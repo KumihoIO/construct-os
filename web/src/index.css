@@ -1636,13 +1636,21 @@ code, kbd, pre {
   fill: var(--pc-text-secondary) !important;
 }
 
-/* MiniMap: dark background with visible nodes */
-.react-flow__minimap {
+/* MiniMap: dark background with visible nodes. Force-display the panel + its
+   xyflow wrapper so they aren't accidentally hidden by ancestor styles or
+   cleared by a stale build. */
+.react-flow__minimap,
+.react-flow__panel.react-flow__minimap {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
   background: var(--pc-bg-elevated) !important;
   border: 1px solid var(--pc-border) !important;
   border-radius: 0.75rem !important;
 }
 .react-flow__minimap svg {
+  display: block !important;
   background: var(--pc-bg-base) !important;
 }
 .react-flow__minimap-mask {

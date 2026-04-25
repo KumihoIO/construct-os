@@ -76,6 +76,7 @@ export default function ArtifactViewerModal({
       title={artifact.name || 'Artifact'}
       description={artifact.location}
       onClose={onClose}
+      size="2xl"
     >
       <div className="flex items-center gap-2 mb-3 text-xs" style={{ color: 'var(--construct-text-faint)' }}>
         <Icon className="h-3.5 w-3.5" />
