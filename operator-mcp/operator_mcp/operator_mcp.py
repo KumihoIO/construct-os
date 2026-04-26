@@ -1923,6 +1923,65 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="memory_engage",
+            description=(
+                "Recall + context-build in one call (operator-side equivalent of kumiho_memory_engage). "
+                "Returns {context, results, source_krefs, count}. Pass `source_krefs` to memory_reflect "
+                "to create DERIVED_FROM edges from new captures to the recalled memories. Use this before "
+                "responding to anything that might have history."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language query derived from the user's message."},
+                    "project": {"type": "string", "default": "CognitiveMemory"},
+                    "space_paths": {"type": "array", "items": {"type": "string"}, "description": "Restrict search to these space paths."},
+                    "memory_types": {"type": "array", "items": {"type": "string"}, "description": "Filter by memory_type ('decision','fact','preference',...)"},
+                    "keywords": {"type": "array", "items": {"type": "string"}},
+                    "topics": {"type": "array", "items": {"type": "string"}},
+                    "limit": {"type": "integer", "default": 5},
+                    "mode": {"type": "string", "enum": ["search", "latest"], "default": "search"},
+                    "memory_item_kind": {"type": "string", "default": "conversation"},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="memory_reflect",
+            description=(
+                "Store structured captures with provenance edges (operator-side equivalent of "
+                "kumiho_memory_reflect). Each capture is {type, title, content, tags?, space_hint?}. "
+                "Pass `source_krefs` from a prior memory_engage call so the new captures get DERIVED_FROM "
+                "edges back to the recalled memories. Use this after substantive turns to record decisions, "
+                "facts, preferences, or corrections."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session identifier for traceability."},
+                    "response": {"type": "string", "description": "The assistant response text (for context — operator does not buffer like the agent-side server does)."},
+                    "captures": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "description": "decision | fact | preference | summary | architecture | implementation | skill | outcome | correction | reflection"},
+                                "title": {"type": "string", "description": "Short title with absolute date (e.g. 'Chose gRPC on Apr 26')."},
+                                "content": {"type": "string"},
+                                "tags": {"type": "array", "items": {"type": "string"}},
+                                "space_hint": {"type": "string", "description": "Override space_path for this capture."},
+                            },
+                            "required": ["type", "title", "content"],
+                        },
+                    },
+                    "source_krefs": {"type": "array", "items": {"type": "string"}, "description": "Krefs from a prior engage — creates DERIVED_FROM edges."},
+                    "space_path": {"type": "string", "description": "Default space path for captures without a space_hint."},
+                    "project": {"type": "string", "default": "CognitiveMemory"},
+                },
+                "required": ["session_id", "response"],
+            },
+        ),
+        Tool(
             name="memory_retrieve",
             description=(
                 "Fuzzy memory retrieval — Google-like semantic search across Kumiho memory items. "
@@ -2359,6 +2418,12 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "memory_graph":
         from .tool_handlers.memory_graph import tool_memory_graph
         return await tool_memory_graph(args, KUMIHO_SDK)
+    if name == "memory_engage":
+        from .tool_handlers.memory import tool_memory_engage_op
+        return await tool_memory_engage_op(args)
+    if name == "memory_reflect":
+        from .tool_handlers.memory import tool_memory_reflect_op
+        return await tool_memory_reflect_op(args)
     if name == "memory_retrieve":
         from .tool_handlers.memory import tool_memory_retrieve_op
         return await tool_memory_retrieve_op(args)
