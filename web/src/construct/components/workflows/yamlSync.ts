@@ -1074,6 +1074,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
     type: isGate(task) ? 'gateNode' : 'taskNode',
     position: { x: 0, y: i * 150 },
     width: isGate(task) ? 220 : 280,
+    height: isGate(task) ? 96 : 140,
     data: {
       label: task.name || task.id,
       taskId: task.id,
@@ -1331,6 +1332,7 @@ export function stepsToFlow(steps: TaskDefinition[]): { nodes: Node<StepNodeData
     type: 'stepNode',
     position: { x: 0, y: i * 150 },
     width: 280,
+    height: 140,
     data: {
       label: step.id,
       stepId: step.id,
