@@ -1,15 +1,26 @@
 import type { ReactNode } from 'react';
 
+type ModalSize = 'md' | 'lg' | 'xl' | '2xl';
+
+const SIZE_CLASS: Record<ModalSize, string> = {
+  md: 'max-w-3xl',
+  lg: 'max-w-4xl',
+  xl: 'max-w-5xl',
+  '2xl': 'max-w-6xl',
+};
+
 export default function Modal({
   title,
   description,
   children,
   onClose,
+  size = 'md',
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   onClose: () => void;
+  size?: ModalSize;
 }) {
   return (
     <div
@@ -23,7 +34,7 @@ export default function Modal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="construct-panel construct-modal-shell w-full max-w-3xl p-5">
+      <div className={`construct-panel construct-modal-shell w-full ${SIZE_CLASS[size]} p-5`}>
         <div className="mb-4 shrink-0">
           <div className="construct-kicker">Action Surface</div>
           <h3 className="mt-2 text-lg font-semibold" style={{ color: 'var(--construct-text-primary)' }}>{title}</h3>

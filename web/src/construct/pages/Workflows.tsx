@@ -11,6 +11,7 @@ import {
   SelectedTaskCard,
   WorkflowMetadataCard,
 } from '../components/orchestration/InspectorCards';
+import ArtifactViewerModal from '../components/ui/ArtifactViewerModal';
 import Panel from '../components/ui/Panel';
 import Notice from '../components/ui/Notice';
 import PageHeader from '../components/ui/PageHeader';
@@ -18,6 +19,7 @@ import StateMessage from '../components/ui/StateMessage';
 import StatusPill from '../components/ui/StatusPill';
 import WorkflowDagWorkspace from '../components/workflows/WorkflowDagWorkspace';
 import { deriveBlockedTaskIds, toStepRunInfo } from '../lib/orchestration';
+import type { KumihoArtifact, WorkflowStepDetail } from '@/types/api';
 
 export default function Workflows() {
   const { t, tpl } = useT();
@@ -37,7 +39,20 @@ export default function Workflows() {
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [workflowDropdownOpen, setWorkflowDropdownOpen] = useState(false);
+  const [viewerArtifact, setViewerArtifact] = useState<KumihoArtifact | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const openStepArtifact = (step: WorkflowStepDetail) => {
+    if (!step.artifact_path) return;
+    setViewerArtifact({
+      kref: `step:${step.step_id}`,
+      name: step.step_id,
+      location: step.artifact_path,
+      revision_kref: '',
+      item_kref: '',
+      deprecated: false,
+    });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -579,6 +594,7 @@ export default function Workflows() {
                     task={selectedTask}
                     step={selectedRun?.steps.find((step) => step.step_id === selectedTask?.id) ?? null}
                     emptyText={t('workflows.select_dag_node_step')}
+                    onViewArtifact={openStepArtifact}
                   />
                 </>
               )}
@@ -586,6 +602,10 @@ export default function Workflows() {
           ) : null}
         </div>
       )}
+
+      {viewerArtifact ? (
+        <ArtifactViewerModal artifact={viewerArtifact} onClose={() => setViewerArtifact(null)} />
+      ) : null}
 
       {editorMode ? (
         <div

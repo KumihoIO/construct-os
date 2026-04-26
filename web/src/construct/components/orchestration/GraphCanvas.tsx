@@ -111,11 +111,16 @@ function GraphCanvasInner<TNode extends Node = Node>({
           }}
         />
         <MiniMap
+          position="bottom-right"
+          pannable
+          zoomable
           nodeColor={minimapColor}
           style={{
             background: 'var(--construct-bg-panel-strong)',
             border: '1px solid var(--construct-border-soft)',
             borderRadius: '12px',
+            width: 220,
+            height: 150,
           }}
           maskColor="rgba(0, 0, 0, 0.24)"
         />

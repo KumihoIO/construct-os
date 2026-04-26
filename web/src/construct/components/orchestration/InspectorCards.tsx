@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { TaskDefinition } from '@/construct/components/workflows/yamlSync';
 import type { TeamDefinition, TeamMember, WorkflowDefinition, WorkflowRunDetail, WorkflowRunSummary, WorkflowStepDetail } from '@/types/api';
@@ -37,9 +38,11 @@ interface SelectedTaskCardProps {
   title?: string;
   emptyText: string;
   footer?: ReactNode;
+  /** Open the step's full output artifact in a viewer modal. */
+  onViewArtifact?: (step: WorkflowStepDetail) => void;
 }
 
-export function SelectedTaskCard({ task, step, title = 'Selected Node', emptyText, footer }: SelectedTaskCardProps) {
+export function SelectedTaskCard({ task, step, title = 'Selected Node', emptyText, footer, onViewArtifact }: SelectedTaskCardProps) {
   return (
     <Panel className="p-4" variant="secondary">
       <div className="construct-kicker">{title}</div>
@@ -64,7 +67,27 @@ export function SelectedTaskCard({ task, step, title = 'Selected Node', emptyTex
           ) : null}
           {step?.output_preview ? (
             <div className="rounded-[12px] border p-3 text-xs leading-6" style={{ borderColor: 'var(--construct-border-soft)', color: 'var(--construct-text-secondary)' }}>
-              {step.output_preview}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>
+                  Output preview
+                </div>
+                {step.artifact_path && onViewArtifact ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewArtifact(step)}
+                    className="inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider transition"
+                    style={{
+                      background: 'var(--construct-bg-elevated)',
+                      color: 'var(--construct-text-secondary)',
+                      border: '1px solid var(--construct-border-strong)',
+                    }}
+                  >
+                    <Eye className="h-3 w-3" />
+                    View full
+                  </button>
+                ) : null}
+              </div>
+              <pre className="whitespace-pre-wrap" style={{ fontFamily: 'var(--pc-font-mono)' }}>{step.output_preview}</pre>
             </div>
           ) : null}
           {step ? (
