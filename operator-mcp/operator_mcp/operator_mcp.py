@@ -1923,6 +1923,123 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="memory_retrieve",
+            description=(
+                "Fuzzy memory retrieval — Google-like semantic search across Kumiho memory items. "
+                "Best for natural-language queries ('what did we decide about gRPC vs REST'). "
+                "Searches under CognitiveMemory by default."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language query."},
+                    "project": {"type": "string", "description": "Kumiho project (default 'CognitiveMemory')."},
+                    "space_paths": {"type": "array", "items": {"type": "string"}, "description": "Optional list of space paths to scope the search."},
+                    "keywords": {"type": "array", "items": {"type": "string"}},
+                    "topics": {"type": "array", "items": {"type": "string"}},
+                    "memory_item_kind": {"type": "string", "default": "conversation"},
+                    "memory_types": {"type": "array", "items": {"type": "string"}, "description": "Filter by memory_type ('decision','fact','preference','summary',...)"},
+                    "limit": {"type": "integer", "default": 5},
+                    "mode": {"type": "string", "enum": ["search", "latest"], "default": "search"},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="memory_search",
+            description=(
+                "Structured search by name/kind/context. Use for exact-match lookups when you "
+                "already know the item kind or partial name. For natural-language queries, prefer memory_retrieve."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "context_filter": {"type": "string", "description": "Project or space path filter, e.g. 'CognitiveMemory/Skills'."},
+                    "name_filter": {"type": "string", "description": "Wildcard name filter (e.g. 'hero*')."},
+                    "kind_filter": {"type": "string", "description": "Filter by item kind (e.g. 'workflow', 'skill')."},
+                    "include_metadata": {"type": "boolean", "default": False},
+                },
+            },
+        ),
+        Tool(
+            name="memory_fulltext",
+            description=(
+                "Full-text fuzzy search across Kumiho items (Google-like). Returns matches with "
+                "snippets. Use when you need keyword-style search rather than semantic recall."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "context": {"type": "string", "description": "Project/space path scope."},
+                    "kind": {"type": "string"},
+                    "include_deprecated": {"type": "boolean", "default": False},
+                    "include_revision_metadata": {"type": "boolean", "default": False},
+                    "limit": {"type": "integer", "default": 20},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="memory_get_item",
+            description="Fetch a Kumiho item by its kref URI (e.g. 'kref://CognitiveMemory/Skills/operator-orchestrator.skill').",
+            inputSchema={
+                "type": "object",
+                "properties": {"kref": {"type": "string"}},
+                "required": ["kref"],
+            },
+        ),
+        Tool(
+            name="memory_resolve_kref",
+            description="Resolve a kref URI into its concrete item/revision identifiers.",
+            inputSchema={
+                "type": "object",
+                "properties": {"kref": {"type": "string"}},
+                "required": ["kref"],
+            },
+        ),
+        Tool(
+            name="memory_get_revision_by_tag",
+            description="Get a specific revision of an item by tag (e.g. 'published', 'stable', 'experimental').",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "item_kref": {"type": "string"},
+                    "tag": {"type": "string", "default": "published"},
+                },
+                "required": ["item_kref"],
+            },
+        ),
+        Tool(
+            name="memory_store",
+            description=(
+                "Store a memory bundle (decision/fact/preference/summary). Auto-stacks revisions on "
+                "similar items by default. Use this to record orchestration decisions, sub-agent outcomes, "
+                "or cross-session lessons."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "memory_type": {"type": "string", "description": "'decision','fact','preference','summary','skill','outcome',...", "default": "summary"},
+                    "memory_item_kind": {"type": "string", "default": "conversation"},
+                    "project": {"type": "string", "default": "CognitiveMemory"},
+                    "space_path": {"type": "string"},
+                    "space_hint": {"type": "string"},
+                    "bundle_name": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "source_revision_krefs": {"type": "array", "items": {"type": "string"}, "description": "Krefs that this memory was derived from (provenance)."},
+                    "metadata": {"type": "object", "additionalProperties": True},
+                    "edge_type": {"type": "string", "default": "DERIVED_FROM"},
+                    "stack_revisions": {"type": "boolean", "default": True},
+                    "user_text": {"type": "string"},
+                    "assistant_text": {"type": "string"},
+                },
+                "required": ["title"],
+            },
+        ),
+        Tool(
             name="memory_graph",
             description=(
                 "Aggregate memory items, revisions, and edges into a single graph payload "
@@ -2242,6 +2359,27 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "memory_graph":
         from .tool_handlers.memory_graph import tool_memory_graph
         return await tool_memory_graph(args, KUMIHO_SDK)
+    if name == "memory_retrieve":
+        from .tool_handlers.memory import tool_memory_retrieve_op
+        return await tool_memory_retrieve_op(args)
+    if name == "memory_search":
+        from .tool_handlers.memory import tool_memory_search_op
+        return await tool_memory_search_op(args)
+    if name == "memory_fulltext":
+        from .tool_handlers.memory import tool_memory_fulltext_op
+        return await tool_memory_fulltext_op(args)
+    if name == "memory_get_item":
+        from .tool_handlers.memory import tool_memory_get_item_op
+        return await tool_memory_get_item_op(args)
+    if name == "memory_resolve_kref":
+        from .tool_handlers.memory import tool_memory_resolve_kref_op
+        return await tool_memory_resolve_kref_op(args)
+    if name == "memory_get_revision_by_tag":
+        from .tool_handlers.memory import tool_memory_get_revision_by_tag_op
+        return await tool_memory_get_revision_by_tag_op(args)
+    if name == "memory_store":
+        from .tool_handlers.memory import tool_memory_store_op
+        return await tool_memory_store_op(args)
     if name == "check_policy":
         from .policy import tool_check_policy
         return await tool_check_policy(args)
