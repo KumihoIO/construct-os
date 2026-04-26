@@ -284,6 +284,9 @@ async def tool_memory_reflect_op(args: dict[str, Any]) -> dict[str, Any]:
             failed.append({"capture": cap, "error": "title is required"})
             continue
         try:
+            # tool_memory_store requires user_text or assistant_text in addition
+            # to summary; pass content as assistant_text so the conversation
+            # artifact is well-formed.
             r = await asyncio.to_thread(
                 tool_memory_store,
                 project=project,
@@ -291,6 +294,7 @@ async def tool_memory_reflect_op(args: dict[str, Any]) -> dict[str, Any]:
                 memory_type=cap.get("type", "summary"),
                 title=title,
                 summary=content,
+                assistant_text=content,
                 tags=cap.get("tags") or [],
                 source_revision_krefs=list(source_krefs),
                 metadata={"session_id": session_id} if session_id else None,
