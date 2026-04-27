@@ -12,6 +12,8 @@ use zip::ZipArchive;
 
 mod audit;
 #[cfg(feature = "skill-creation")]
+pub mod auto_improve;
+#[cfg(feature = "skill-creation")]
 pub mod creator;
 pub mod effectiveness;
 pub mod effectiveness_cache;
