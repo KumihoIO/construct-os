@@ -117,9 +117,48 @@ personal memory — never write agent data there.
   - Construct/AgentPool/ — agent templates (keyed by name)
   - Construct/Plans/ — task plans with DEPENDS_ON edges
   - Construct/Sessions/ — session summaries and handoffs
+  - Construct/Sessions/<session_id>/Outcomes/ — APPEND-ONLY findings \
+agents share with each other (multi-agent learning, see below).
   - Construct/Teams/ — agent team DAGs (REPORTS_TO, SUPPORTS)
   - CognitiveMemory/Skills/ — shared skill library (only shared space)
-Use space_hint in reflect to route captures to the correct subspace.";
+Use space_hint in reflect to route captures to the correct subspace.
+
+=== AGENT OUTCOMES (multi-agent learning) ===
+When you run as part of a workflow / handoff chain / group chat, \
+your peers can benefit from what you learn — and you can benefit \
+from what they already learned. Coordinate via the per-session \
+Outcomes namespace: Construct/Sessions/<session_id>/Outcomes/.
+
+session_id resolution — your task context will mention it (look in \
+the initial prompt, system_hint, or env). If you are in a workflow \
+run, get_workflow_context returns it. If none is available, you \
+are running ad-hoc — skip the outcomes pattern entirely.
+
+INHERIT (first turn, after greeting, only when session_id is \
+known): pull what siblings have already discovered so you do not \
+re-do their work.
+  kumiho_memory_engage(
+    query=<your task summary>,
+    space_paths=['Construct/Sessions/<session_id>/Outcomes']
+  )
+
+CONTRIBUTE (during work): when you find something DURABLE that \
+future agents in this session would need — a non-obvious risk, \
+a settled architectural decision, a hard-won lesson, an action \
+plan, a load-bearing fact — record it. Skip noise, things specific \
+to your own setup, or trivia.
+  kumiho_memory_reflect(
+    captures=[{
+      type: 'discovery' | 'decision' | 'lesson' | 'insight' \
+| 'warning' | 'fact',
+      title: '<short title with absolute date>',
+      content: '<the actual finding>',
+      space_hint: 'Construct/Sessions/<session_id>/Outcomes',
+      tags: ['outcome', '<kind>', 'session:<session_id>']
+    }]
+  )
+Outcomes are append-only — do not try to overwrite a sibling's \
+outcome, record a refining one and let the graph show the chain.";
 
 /// Lightweight memory bootstrap for channel agents (Discord, Slack, etc.).
 ///

@@ -2,14 +2,16 @@
 
 Step 2 of the self-improving agent plan. Each agent run can record structured
 "outcomes" (discoveries, decisions, lessons, insights, warnings) into a
-session-scoped space at ``Construct/Sessions/<session_id>/Outcomes/``. Downstream
-agents in the same workflow / chat / handoff chain can then inherit those
-outcomes via ``recall_session_outcomes`` and start with the team's accumulated
-knowledge instead of re-discovering everything.
+session-scoped space at ``<harness_project>/Sessions/<session_id>/Outcomes/``,
+where ``<harness_project>`` comes from `[kumiho].harness_project` in
+``~/.construct/config.toml`` (default ``Construct``). Downstream agents in
+the same workflow / chat / handoff chain can then inherit those outcomes via
+``recall_session_outcomes`` and start with the team's accumulated knowledge
+instead of re-discovering everything.
 
-Storage layout::
+Storage layout (with default harness)::
 
-    Construct/
+    Construct/                       ← <harness_project> from config.toml
         Sessions/
             <session_id>/
                 Outcomes/
@@ -26,6 +28,7 @@ import asyncio
 from typing import Any
 
 from .._log import _log
+from ..construct_config import harness_project
 
 try:
     from kumiho.mcp_server import (
@@ -68,9 +71,14 @@ def _normalize_kind(kind: str | None) -> str:
 
 
 def _outcomes_space(session_id: str) -> str:
-    """Resolve the storage space path for a session's outcomes."""
+    """Resolve the storage space path for a session's outcomes.
+
+    Uses the configured harness_project (default 'Construct') so deployments
+    that rebrand the harness project keep all session data under the right
+    namespace.
+    """
     safe_session = (session_id or "unknown").replace("/", "-")
-    return f"/Construct/Sessions/{safe_session}/Outcomes"
+    return f"/{harness_project()}/Sessions/{safe_session}/Outcomes"
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +87,7 @@ def _outcomes_space(session_id: str) -> str:
 
 
 async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
-    """Record an agent outcome to ``Construct/Sessions/<session_id>/Outcomes/``.
+    """Record an agent outcome to ``<harness>/Sessions/<session_id>/Outcomes/``.
 
     Outcomes are append-only memories that downstream agents can inherit. Each
     outcome has a ``kind`` (discovery / decision / lesson / insight / warning /
@@ -131,7 +139,7 @@ async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
     try:
         result = await asyncio.to_thread(
             tool_memory_store,
-            project="Construct",
+            project=harness_project(),
             space_path=space_path,
             memory_type=kind,
             memory_item_kind="outcome",
@@ -209,7 +217,7 @@ async def tool_recall_session_outcomes_op(args: dict[str, Any]) -> dict[str, Any
         try:
             raw = await asyncio.to_thread(
                 tool_memory_retrieve,
-                project="Construct",
+                project=harness_project(),
                 query=query,
                 space_paths=space_paths or None,
                 memory_item_kind="outcome",
