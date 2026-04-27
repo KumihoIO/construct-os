@@ -46,6 +46,9 @@ At the core: a **Rust gateway** (Axum) serves a **React/TypeScript Web Dashboard
 
 No hidden state. No forgotten runs. The only thing the system asks of you is that you notice.
 
+<!-- TODO screenshot: Construct dashboard at http://127.0.0.1:42617 showing live runtime posture — active sessions, channels, audit chain, cost metrics, and recent workflow runs -->
+![Construct dashboard at localhost:42617 showing live runtime posture — active sessions, channels, audit chain, cost metrics, and recent workflow runs](docs/assets/dashboard/readme-01-dashboard-hero.png)
+
 ---
 
 ## Free tier, Studio trial, and referrals
@@ -80,6 +83,9 @@ The dashboard is organized into three sidebar sections (Orchestration, Operation
 | **Teams** | `/teams` | Team builder with graph view of agent relationships and delegation topology |
 
 ### Live Workflow Execution View
+
+<!-- TODO screenshot: live workflow execution view — interactive DAG with steps shifting through pending → running → completed, WebSocket event streaming, and per-step detail panel (Live Events / Tool Calls / Output) -->
+![Live workflow execution view: interactive DAG with steps shifting through pending, running, and completed states, WebSocket event streaming, and per-step detail panel](docs/assets/dashboard/readme-02-workflow-dag.png)
 
 When a workflow runs, you watch the signal propagate:
 
@@ -128,6 +134,9 @@ When a workflow runs, you watch the signal propagate:
 ## The Operator (Workflow Orchestration)
 
 The **Operator** is Construct's hand on the controls — a Python MCP server that drives declarative YAML workflows through 17 step types and several advanced orchestration patterns. Agents run inside the Construct; the Operator sees the whole board.
+
+<!-- TODO screenshot: Workflows view with YAML editor on the left and DAG workspace on the right, showing a declarative multi-agent workflow definition with step dependencies -->
+![Workflows view with YAML editor and DAG workspace for declarative multi-agent workflow definition](docs/assets/dashboard/readme-03-workflow-yaml.png)
 
 ### Step Types
 
@@ -232,6 +241,9 @@ Reusable agent definitions stored in `~/.construct/agent_pool.json` and synced t
 
 Every agent execution is scored. Reputation is not assumed — it's earned, recorded, and queryable in Kumiho under `Construct/AgentTrust/`.
 
+<!-- TODO screenshot: AgentTrust view in the dashboard showing per-agent trust score, total runs, recent outcome chips (success/partial/failed), and template attribution -->
+![AgentTrust view: per-agent trust score, total runs, recent outcomes, and template attribution](docs/assets/dashboard/readme-04-trust-scoring.png)
+
 | Metric | Description |
 |--------|-------------|
 | `trust_score` | Running average (0.0–1.0), computed as `total_score / total_runs` |
@@ -260,6 +272,9 @@ Construct implements the [Google Agent-to-Agent (A2A) protocol](https://google.g
 ## Kumiho Memory Integration
 
 Kumiho is the sole persistent backend. Everything the system knows lives here, as graph-native items with full versioning, provenance tracking, and edge relationships. If it happened, there is a trace.
+
+<!-- TODO screenshot: Memory graph explorer at /memory — force-directed visualization of nodes, revisions, and provenance edges across Construct namespaces (AgentPool, Plans, Sessions, AgentTrust, etc.) -->
+![Kumiho memory graph explorer: force-directed visualization of nodes, revisions, and provenance edges across Construct namespaces](docs/assets/dashboard/readme-05-memory-graph.png)
 
 The namespaces below are Operator/Construct **conventions** — normal Kumiho spaces under `space_prefix = "Construct"` (set in `config.toml`) and, for skills, under `KUMIHO_MEMORY_PROJECT` (default `CognitiveMemory`). They are not schema-enforced typed namespaces.
 
