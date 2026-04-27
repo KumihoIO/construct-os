@@ -61,6 +61,17 @@ pub const SKILL_ITEM_KIND: &str = "skilldef";
 /// Default tag for the current revision of a skill.
 pub const PUBLISHED_TAG: &str = "published";
 
+/// Tag attached to the immediately-prior `published` revision before a
+/// new one is promoted.  Used by [`rollback_skill_revision`] (step 6f)
+/// as the canonical rollback target when an LLM-driven improvement
+/// regresses against its predecessor.
+///
+/// Kumiho `tag_revision` is move-semantics, so re-applying this tag
+/// each publish naturally moves it to the latest "outgoing" revision —
+/// there's no manual cleanup required to keep it pointing at the
+/// previous-but-one.
+pub const PREVIOUS_PUBLISHED_TAG: &str = "previous_published";
+
 /// Default artifact name for a skill revision.  Single artifact per
 /// revision, named uniformly so consumers can locate it without a
 /// listing call.
@@ -306,6 +317,42 @@ pub async fn publish_skill_revision(
         .await
         .with_context(|| format!("create_artifact({} -> {content_uri})", revision.kref))?;
 
+    // Step 6f-A: preserve the outgoing `published` revision as
+    // `previous_published` so [`rollback_skill_revision`] has a target
+    // when the new revision regresses.  Best-effort — failure here
+    // does NOT block the publish (the rollback path simply has nothing
+    // to roll back to until the next improvement re-arms it).
+    match client.get_revision_by_tag(&item_kref, PUBLISHED_TAG).await {
+        Ok(outgoing) if outgoing.kref != revision.kref => {
+            if let Err(e) = client
+                .tag_revision(&outgoing.kref, PREVIOUS_PUBLISHED_TAG)
+                .await
+            {
+                tracing::warn!(
+                    outgoing = %outgoing.kref,
+                    new_revision = %revision.kref,
+                    error = ?e,
+                    "publish_skill_revision: failed to mark outgoing as previous_published; \
+                     rollback target may be unavailable until next publish",
+                );
+            }
+        }
+        Ok(_) => {
+            // The new revision is somehow already tagged published —
+            // shouldn't happen because we created it moments ago.
+            // Treat as a no-op; the next tag_revision call below will
+            // be a no-op too.
+        }
+        Err(e) => {
+            tracing::warn!(
+                item_kref = %item_kref,
+                error = ?e,
+                "publish_skill_revision: could not fetch current published revision \
+                 to mark as previous_published; rollback target may be unavailable",
+            );
+        }
+    }
+
     client
         .tag_revision(&revision.kref, PUBLISHED_TAG)
         .await
@@ -336,6 +383,114 @@ pub async fn publish_skill_revision(
 
     Ok(PublishedSkillRevision {
         revision_kref: revision.kref,
+        new_content_file: new_content_file_rel,
+    })
+}
+
+/// Outcome returned by [`rollback_skill_revision`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillRollback {
+    /// kref of the revision now tagged `published` (the rollback target).
+    pub restored_revision_kref: String,
+    /// kref of the revision that WAS published before the rollback —
+    /// the one whose regression triggered this call.  Useful for
+    /// audit logging.
+    pub demoted_revision_kref: String,
+    /// Relative `content_file` path SKILL.toml now points at.
+    pub new_content_file: String,
+}
+
+/// Roll back to the immediately-prior published revision (step 6f-A).
+///
+/// Symmetric to [`publish_skill_revision`]: where publish moves
+/// `published` forward and stamps the outgoing revision with
+/// `previous_published`, this function moves `published` BACK onto
+/// whatever currently holds `previous_published`, and re-syncs
+/// `SKILL.toml.content_file` so the next agent that resolves
+/// `?t=published` reads the restored body.
+///
+/// Only the tag movement and the manifest pointer are rewritten —
+/// the demoted revision and its artifact stay intact in Kumiho so
+/// step 6f-B can record per-revision regression history without
+/// losing the file.
+///
+/// Errors when:
+///   - SKILL.toml is missing or has no `[skill].kref`.
+///   - The configured `memory_project` doesn't match the manifest's
+///     kref project (same guard as `publish_skill_revision`).
+///   - Kumiho has no `previous_published` revision (e.g. this is the
+///     skill's first published version, or the prior publish failed
+///     to stamp the outgoing tag).
+///   - The `previous_published` revision IS the current `published`
+///     revision (defensive — would be a no-op rollback).
+pub async fn rollback_skill_revision(
+    skill_dir: &Path,
+    client: &KumihoClient,
+    memory_project: &str,
+) -> Result<SkillRollback> {
+    let manifest_path = skill_dir.join("SKILL.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow!("no SKILL.toml at {}", manifest_path.display()));
+    }
+    let manifest = read_manifest(&manifest_path)?;
+    let kref = manifest.skill.kref.as_deref().ok_or_else(|| {
+        anyhow!("skill not registered yet (no [skill].kref); nothing to roll back")
+    })?;
+
+    let expected_prefix = format!("kref://{memory_project}/");
+    if !kref.starts_with(&expected_prefix) {
+        return Err(anyhow!(
+            "skill kref {kref:?} does not match configured memory_project {memory_project:?}; \
+             re-register the skill or update config.kumiho.memory_project"
+        ));
+    }
+
+    let (item_kref, _) = parse_kref_tag(kref);
+    let item_kref = item_kref.to_string();
+
+    // Locate both endpoints up front so we can fail before touching
+    // the tag if either side is missing.
+    let target = client
+        .get_revision_by_tag(&item_kref, PREVIOUS_PUBLISHED_TAG)
+        .await
+        .with_context(|| format!("get_revision_by_tag({item_kref}, {PREVIOUS_PUBLISHED_TAG})"))?;
+    let current = client
+        .get_revision_by_tag(&item_kref, PUBLISHED_TAG)
+        .await
+        .with_context(|| format!("get_revision_by_tag({item_kref}, {PUBLISHED_TAG})"))?;
+
+    if target.kref == current.kref {
+        return Err(anyhow!(
+            "rollback target {target} is already the current published revision; nothing to roll back",
+            target = target.kref,
+        ));
+    }
+
+    // Move the `published` tag back onto the rollback target.
+    // tag_revision is move-semantics so this implicitly demotes the
+    // current published revision.
+    client
+        .tag_revision(&target.kref, PUBLISHED_TAG)
+        .await
+        .with_context(|| format!("tag_revision({}, {PUBLISHED_TAG})", target.kref))?;
+
+    // Re-sync SKILL.toml.content_file so the loader picks up the
+    // restored body.
+    let new_content_file_rel = match sync_published_content_path(skill_dir, client).await? {
+        SkillContentSync::Updated {
+            new_content_file, ..
+        } => new_content_file,
+        SkillContentSync::AlreadyCurrent => manifest.skill.content_file.clone().unwrap_or_default(),
+        SkillContentSync::NotRegistered => {
+            return Err(anyhow!(
+                "rollback_skill_revision: SKILL.toml lost its kref between read and sync"
+            ));
+        }
+    };
+
+    Ok(SkillRollback {
+        restored_revision_kref: target.kref,
+        demoted_revision_kref: current.kref,
         new_content_file: new_content_file_rel,
     })
 }
@@ -878,5 +1033,78 @@ kref = "kref://CognitiveMemory/Skills/ghost.skilldef?t=published"
             err.to_string().contains("canonicalising new content file"),
             "got: {err}"
         );
+    }
+
+    // ── rollback_skill_revision pre-flight checks (step 6f-A) ────────
+
+    #[tokio::test]
+    async fn rollback_skill_revision_errors_when_no_skill_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = rollback_skill_revision(dir.path(), &client, "CognitiveMemory")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("no SKILL.toml"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn rollback_skill_revision_errors_when_no_kref_in_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("SKILL.toml"),
+            r#"[skill]
+name = "unregistered"
+description = "no kref yet"
+version = "0.1.0"
+content_file = "contents/r1.md"
+"#,
+        )
+        .unwrap();
+
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = rollback_skill_revision(dir.path(), &client, "CognitiveMemory")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("nothing to roll back"),
+            "got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn rollback_skill_revision_errors_on_project_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("SKILL.toml"),
+            r#"[skill]
+name = "moved"
+description = "x"
+version = "0.1.0"
+content_file = "contents/r1.md"
+kref = "kref://OldProject/Skills/moved.skilldef?t=published"
+"#,
+        )
+        .unwrap();
+
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = rollback_skill_revision(dir.path(), &client, "NewProject")
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("does not match configured memory_project"),
+            "got: {msg}"
+        );
+        assert!(msg.contains("OldProject"), "got: {msg}");
+        assert!(msg.contains("NewProject"), "got: {msg}");
+    }
+
+    #[test]
+    fn previous_published_tag_is_distinct_from_published() {
+        // Sanity check: the rollback target tag must not collide with
+        // the live tag, otherwise tag_revision's move-semantics would
+        // make a publish + rollback indistinguishable.
+        assert_ne!(PUBLISHED_TAG, PREVIOUS_PUBLISHED_TAG);
+        assert_eq!(PREVIOUS_PUBLISHED_TAG, "previous_published");
     }
 }
