@@ -23,8 +23,8 @@ Construct is **open source**. The persistent graph memory it depends on — Kumi
 | Layer | What it is | License |
 |---|---|---|
 | **Construct** (this repo) | Rust gateway + daemon + agent loop + channels + tools + peripherals + embedded React dashboard + Tauri desktop app + CLI + Operator Python MCP | MIT **or** Apache 2.0 — your choice |
-| **Kumiho SDKs** ([KumihoIO](https://github.com/KumihoIO)) | Python, Rust, and TypeScript clients to the Kumiho graph server | Open source |
-| **Kumiho server** (`api.kumiho.cloud`) | The version-controlled, schemaless, typed-edge graph that gives Construct its memory; DreamState consolidation; control-plane infra | Managed service · Free 5k nodes → paid tiers from $40/mo · Self-host on Enterprise |
+| **Kumiho SDKs** ([kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs)) | Python, Rust, and TypeScript clients to the Kumiho graph backend | Open source |
+| **Kumiho server** (control plane) | The version-controlled, schemaless, typed-edge graph engine — DreamState consolidation runs here, Neo4j is its store. Reached by clients over HTTP through the **kumiho-FastAPI BFF** at `api.kumiho.cloud`. | Managed service · Free 5k nodes → paid tiers from $40/mo · Self-host on Enterprise |
 
 LLM inference is **bring-your-own-provider**. We don't proxy or mark up tokens. You point Construct at Anthropic, OpenAI, OpenRouter, Ollama, GLM, or any of [14+ providers](docs/reference/api/providers-reference.md), and your keys stay yours.
 
@@ -410,7 +410,7 @@ Add `--features channel-matrix,channel-lark,browser-native,hardware,rag-pdf,obse
 - **Rust stable (1.87+)** — `install.sh` / `setup.bat` will install it via rustup if missing.
 - **Python 3.11+** — required for the Kumiho and Operator Python MCP sidecars.
 - **Node.js 20+** — optional, only needed to rebuild the embedded React dashboard from source (`cd web && npm install && npx vite build`). The dashboard is re-embedded into the Rust binary at compile time via `rust-embed`.
-- **Kumiho endpoint** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml`. Default points at the managed control plane (`https://api.kumiho.cloud`); free tier is 5,000 nodes, sign up at [kumiho.io](https://kumiho.io). Self-host is available on Enterprise. Without a reachable Kumiho endpoint Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
+- **Kumiho endpoint** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml`. Default points at the **kumiho-FastAPI BFF** (`https://api.kumiho.cloud`) that fronts the managed control plane; free tier is 5,000 nodes, sign up at [kumiho.io](https://kumiho.io). Self-host is available on Enterprise. Without a reachable Kumiho endpoint Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
 - **Disk / RAM** — source build needs ~6 GB free disk and ~2 GB free RAM; prebuilt binary is ~200 MB.
 
 > **Sidecar re-install.** To re-run sidecar install independently of the main bootstrap:
@@ -496,7 +496,7 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 | Agent Loop | Rust (async/tokio, 14+ provider adapters: Anthropic, OpenAI, OpenAI-Codex, Bedrock, Azure OpenAI, Gemini, Gemini CLI, GLM, Copilot, Ollama, OpenRouter, Kilo CLI, Telnyx, Claude Code, plus reliable/router/compatible wrappers) |
 | Orchestration | Python 3.11+ Operator MCP server (17 step types, map-reduce / supervisor / group-chat / handoff / refinement patterns) |
 | Web Dashboard | React 19, TypeScript, Tailwind CSS 4, Vite 6, ReactFlow + react-force-graph-2d |
-| Memory Backend | Kumiho — graph-native, schemaless, version-controlled, typed-edge graph (managed service or Enterprise self-host); SDKs in Python / Rust / TypeScript at [github.com/KumihoIO](https://github.com/KumihoIO) |
+| Memory Backend | Kumiho — graph-native, schemaless, version-controlled, typed-edge graph (control plane fronted by kumiho-FastAPI BFF; managed service or Enterprise self-host); SDKs in Python / Rust / TypeScript at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs) |
 | Local Storage | SQLite via `rusqlite` for cron store, pairing, heartbeat, channel sessions, WhatsApp cache (not for primary memory) |
 | Desktop App | Tauri 2 companion under `apps/tauri` (system-tray / menu-bar) launched via `construct desktop` |
 | Real-time | WebSocket (`/ws/chat`, `/ws/canvas/{id}`, `/ws/nodes`, `/ws/terminal`, `/ws/mcp/events`), SSE (`/api/events`, `/api/daemon/logs`) |
@@ -524,7 +524,7 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 
 ## Related projects
 
-- **Kumiho** — graph memory backend. SDKs at [github.com/KumihoIO](https://github.com/KumihoIO); pricing and self-host at [kumiho.io/pricing](https://kumiho.io/pricing).
+- **Kumiho** — graph memory backend. SDKs at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs); pricing and self-host at [kumiho.io/pricing](https://kumiho.io/pricing).
 - **ZeroClaw** — upstream Rust agent runtime that Construct's core forks from. [github.com/zeroclaw-labs/zeroclaw](https://github.com/zeroclaw-labs/zeroclaw).
 - **OpenClaw** — separate TypeScript agent platform; Construct can import its data via `construct migrate`. [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw).
 
@@ -537,6 +537,6 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 
 Both licenses preserve the upstream `Copyright (c) 2025 ZeroClaw Labs` per fork-attribution requirements; see [`NOTICE`](NOTICE) and [`docs/upstream/zeroclaw-attribution.md`](docs/upstream/zeroclaw-attribution.md).
 
-The **Kumiho graph server** (the managed memory backend Construct talks to) is *not* covered by these licenses. It is a hosted service; the Kumiho **SDKs** are open source on their own repos at [github.com/KumihoIO](https://github.com/KumihoIO). Self-hosting the Kumiho server is available on Enterprise (closed-source license) — see [kumiho.io/pricing](https://kumiho.io/pricing).
+The **Kumiho server** (the control plane where Construct's memory ultimately lives) is *not* covered by these licenses. It is reached over HTTP through the **kumiho-FastAPI BFF** at `api.kumiho.cloud`, and is offered as a managed service; the Kumiho **SDKs** are open source at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs). Self-hosting the Kumiho server is available on Enterprise (closed-source license) — see [kumiho.io/pricing](https://kumiho.io/pricing).
 
 Contributions to this repository are accepted under the dual license model; the Apache 2.0 patent grant protects all contributors. See [`docs/contributing/cla.md`](docs/contributing/cla.md).
