@@ -23,7 +23,7 @@
 //! snapshot is published.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use parking_lot::RwLock;
@@ -36,6 +36,37 @@ use crate::skills::effectiveness::{EffectivenessScore, SkillEffectivenessProvide
 /// skill propagates to the rerank quickly) and load on Kumiho (one
 /// list-items call per skill per interval).
 pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+
+// ── Process-wide cache handle ───────────────────────────────────────────────
+//
+// The daemon installs one [`EffectivenessCache`] at startup; everything that
+// builds an agent prompt downstream reads it via [`global_provider`].  Tests
+// construct local caches and bypass this entirely.
+
+static GLOBAL_CACHE: OnceLock<Arc<EffectivenessCache>> = OnceLock::new();
+
+/// Install a process-wide [`EffectivenessCache`].  Returns `Err` if a cache
+/// has already been installed — the daemon is intended to call this exactly
+/// once during startup.
+pub fn set_global(cache: Arc<EffectivenessCache>) -> Result<(), &'static str> {
+    GLOBAL_CACHE
+        .set(cache)
+        .map_err(|_| "effectiveness_cache global already installed")
+}
+
+/// Borrow the installed cache, or `None` if the daemon hasn't installed one
+/// yet (CLI tools, tests, early startup).
+pub fn global() -> Option<&'static Arc<EffectivenessCache>> {
+    GLOBAL_CACHE.get()
+}
+
+/// Borrow the installed cache as a [`SkillEffectivenessProvider`] reference,
+/// suitable for passing into the prompt builder's reranked path.
+pub fn global_provider() -> Option<&'static dyn SkillEffectivenessProvider> {
+    GLOBAL_CACHE
+        .get()
+        .map(|arc| arc.as_ref() as &dyn SkillEffectivenessProvider)
+}
 
 /// Process-wide cache of recency-weighted skill effectiveness scores.
 ///
