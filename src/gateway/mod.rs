@@ -1222,7 +1222,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             // Future improvement: store the handle on AppState and
             // abort on shutdown so tests don't leak the task.
             drop(effectiveness_cache.clone().spawn_refresh_task(
-                kumiho_client,
+                kumiho_client.clone(),
                 memory_project,
                 skill_names,
                 crate::skills::effectiveness_cache::DEFAULT_REFRESH_INTERVAL,
@@ -1244,6 +1244,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                 let auto_provider = state.provider.clone();
                 let auto_model = state.model.clone();
                 let auto_improver_config = config.skills.skill_improvement.clone();
+                let auto_kumiho = kumiho_client.clone();
+                let auto_project = config.kumiho.memory_project.clone();
 
                 tracing::info!(
                     cooldown_secs = auto_improver_config.cooldown_secs,
@@ -1256,6 +1258,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                         provider: auto_provider,
                         model: auto_model,
                         temperature: crate::skills::auto_improve::DEFAULT_REWRITE_TEMPERATURE,
+                        kumiho_client: auto_kumiho,
+                        memory_project: auto_project,
                     };
                     let mut improver = crate::skills::improver::SkillImprover::new(
                         auto_workspace,
@@ -1281,14 +1285,16 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                             )
                             .await
                             {
-                                Ok(Some(slug)) => tracing::info!(
-                                    skill = %slug,
+                                Ok(Some(outcome)) => tracing::info!(
+                                    skill = %outcome.slug,
+                                    revision_kref = %outcome.revision_kref,
+                                    content_file = %outcome.content_file,
                                     rate = cand.rate,
                                     total = cand.total,
-                                    "auto-improve: skill rewritten",
+                                    "auto-improve: published new skill revision",
                                 ),
                                 Ok(None) => {
-                                    // cooldown / file missing / no toml fence — silent skip
+                                    // cooldown / file missing / no markdown fence — silent skip
                                 }
                                 Err(e) => tracing::warn!(
                                     skill = %cand.skill_name,
