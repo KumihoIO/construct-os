@@ -37,7 +37,7 @@
 //! variant LLM responses.  The end-to-end async path is covered by the
 //! daemon integration that consumes this module.
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use std::path::Path;
 use std::sync::Arc;
 
