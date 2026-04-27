@@ -1792,8 +1792,14 @@ command = "echo hello"
         let pos_gamma = prompt.find("<name>gamma</name>").expect("gamma rendered");
         let pos_alpha = prompt.find("<name>alpha</name>").expect("alpha rendered");
         let pos_beta = prompt.find("<name>beta</name>").expect("beta rendered");
-        assert!(pos_gamma < pos_alpha, "gamma (0.95) should outrank alpha (none/0.5)");
-        assert!(pos_alpha < pos_beta, "alpha (none/0.5) should outrank beta (0.10)");
+        assert!(
+            pos_gamma < pos_alpha,
+            "gamma (0.95) should outrank alpha (none/0.5)"
+        );
+        assert!(
+            pos_alpha < pos_beta,
+            "alpha (none/0.5) should outrank beta (0.10)"
+        );
     }
 
     #[test]
