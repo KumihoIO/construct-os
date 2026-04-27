@@ -201,6 +201,145 @@ pub async fn register_skill_with_kumiho(
     })
 }
 
+/// Outcome returned by [`publish_skill_revision`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishedSkillRevision {
+    /// kref of the freshly created revision.  Useful for callers that
+    /// want to record the per-revision outcome in step 6f.
+    pub revision_kref: String,
+    /// Relative path (under the skill directory) of the new content
+    /// file that the published kref now resolves to.  Returned from
+    /// the embedded sync so callers don't need to re-read SKILL.toml.
+    pub new_content_file: String,
+}
+
+/// Publish a freshly-improved content file as a new Kumiho revision and
+/// retag `published` onto it.
+///
+/// Step 6e of the kumiho-versioned skill plan.  The improver wrote the
+/// new markdown to disk; this function makes it the new authoritative
+/// revision so the next agent that resolves
+/// `kref://…?t=published` reads the improved body.
+///
+/// Steps:
+///   1. Read SKILL.toml; bail if `[skill].kref` isn't set (the skill
+///      hasn't been registered yet — caller must run
+///      [`register_skill_with_kumiho`] first).
+///   2. Create a new revision under the same item as the existing
+///      published revision.  Carries forward the manifest's metadata
+///      (name, description, version, …) plus an `improvement_reason`
+///      and `improved_at` timestamp so the revision is queryable on
+///      its own.
+///   3. Create the canonical `skill` artifact pointing at the new
+///      content file (`file://<absolute path>`).
+///   4. Retag `published` onto the new revision.  Kumiho's
+///      [`tag_revision`] is move-semantics for tags, so the previous
+///      revision automatically loses the tag.
+///   5. Run [`sync_published_content_path`] to update SKILL.toml's
+///      `content_file` pointer to the new file.  This is what makes
+///      the loader pick up the new body without restart.
+///
+/// Idempotent on the SKILL.toml side: the manifest's `content_file`
+/// gets rewritten by step 5 only when it changed.  The Kumiho side
+/// always creates a new revision; there is no "no-op" path because
+/// step 6f will rely on every improvement having a distinct revision
+/// kref it can record outcomes against.
+pub async fn publish_skill_revision(
+    skill_dir: &Path,
+    new_content_file: &Path,
+    improvement_reason: &str,
+    client: &KumihoClient,
+    memory_project: &str,
+) -> Result<PublishedSkillRevision> {
+    let manifest_path = skill_dir.join("SKILL.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow!("no SKILL.toml at {}", manifest_path.display()));
+    }
+    let manifest = read_manifest(&manifest_path)?;
+    let kref = manifest.skill.kref.as_deref().ok_or_else(|| {
+        anyhow!("skill not registered yet (no [skill].kref); run register_skill_with_kumiho first")
+    })?;
+
+    // Sanity check: the configured memory_project should match the one
+    // baked into the manifest's kref.  Catches the case where someone
+    // edits config.kumiho.memory_project after a skill is registered
+    // and we'd otherwise create a revision in the wrong project.
+    let expected_prefix = format!("kref://{memory_project}/");
+    if !kref.starts_with(&expected_prefix) {
+        return Err(anyhow!(
+            "skill kref {kref:?} does not match configured memory_project {memory_project:?}; \
+             re-register the skill or update config.kumiho.memory_project"
+        ));
+    }
+
+    // Strip the `?t=published` suffix to get the bare item kref.  The
+    // new revision is created under the same item.
+    let (item_kref, _) = parse_kref_tag(kref);
+    let item_kref = item_kref.to_string();
+
+    // Resolve the content file to an absolute, canonical path so the
+    // artifact location is portable across daemon working directories.
+    let abs = std::fs::canonicalize(new_content_file).with_context(|| {
+        format!(
+            "canonicalising new content file: {}",
+            new_content_file.display()
+        )
+    })?;
+    let content_uri = format_file_uri(&abs);
+
+    let mut revision_metadata = revision_metadata_from_manifest(&manifest);
+    revision_metadata.insert("improvement_reason".into(), improvement_reason.to_string());
+    revision_metadata.insert("improved_at".into(), chrono::Utc::now().to_rfc3339());
+
+    let revision = client
+        .create_revision(&item_kref, revision_metadata)
+        .await
+        .with_context(|| format!("create_revision({item_kref})"))?;
+
+    client
+        .create_artifact(
+            &revision.kref,
+            SKILL_ARTIFACT_NAME,
+            &content_uri,
+            HashMap::new(),
+        )
+        .await
+        .with_context(|| format!("create_artifact({} -> {content_uri})", revision.kref))?;
+
+    client
+        .tag_revision(&revision.kref, PUBLISHED_TAG)
+        .await
+        .with_context(|| format!("tag_revision({}, {PUBLISHED_TAG})", revision.kref))?;
+
+    // Update SKILL.toml.content_file to point at the new file.  We use
+    // the same load-time projection that runs at daemon startup, so
+    // there's a single canonical path that knows how to translate a
+    // published revision into a content_file pointer.
+    let new_content_file_rel = match sync_published_content_path(skill_dir, client).await? {
+        SkillContentSync::Updated {
+            new_content_file, ..
+        } => new_content_file,
+        SkillContentSync::AlreadyCurrent => manifest
+            .skill
+            .content_file
+            .clone()
+            .unwrap_or_else(|| abs.to_string_lossy().into_owned()),
+        SkillContentSync::NotRegistered => {
+            // Shouldn't happen — we just confirmed [skill].kref is set
+            // a few lines up.  Surface as an error so callers don't
+            // silently end up with stale content_file pointers.
+            return Err(anyhow!(
+                "publish_skill_revision: SKILL.toml lost its kref between read and sync"
+            ));
+        }
+    };
+
+    Ok(PublishedSkillRevision {
+        revision_kref: revision.kref,
+        new_content_file: new_content_file_rel,
+    })
+}
+
 /// Outcome returned by [`sync_published_content_path`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SkillContentSync {
@@ -625,5 +764,119 @@ content_file = "contents/r1.md"
         let uri = format_file_uri(&weird);
         let parsed = parse_file_uri(&uri).expect("round trip");
         assert_eq!(parsed, weird);
+    }
+
+    // ── publish_skill_revision pre-flight checks (step 6e) ────────────
+
+    #[tokio::test]
+    async fn publish_skill_revision_errors_when_no_skill_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = publish_skill_revision(
+            dir.path(),
+            &dir.path().join("contents/r2.md"),
+            "test",
+            &client,
+            "CognitiveMemory",
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("no SKILL.toml"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn publish_skill_revision_errors_when_no_kref_in_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("SKILL.toml"),
+            r#"[skill]
+name = "unregistered"
+description = "no kref yet"
+version = "0.1.0"
+content_file = "contents/r1.md"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("contents")).unwrap();
+        std::fs::write(dir.path().join("contents/r1.md"), "body").unwrap();
+        let new_file = dir.path().join("contents/r2.md");
+        std::fs::write(&new_file, "improved").unwrap();
+
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = publish_skill_revision(dir.path(), &new_file, "test", &client, "CognitiveMemory")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("skill not registered yet"),
+            "got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_skill_revision_errors_on_project_mismatch() {
+        // Skill was registered against `OldProject` but config now
+        // points at `NewProject` — surface this as a hard error rather
+        // than silently writing a revision under the wrong project.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("SKILL.toml"),
+            r#"[skill]
+name = "moved"
+description = "x"
+version = "0.1.0"
+content_file = "contents/r1.md"
+kref = "kref://OldProject/Skills/moved.skilldef?t=published"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("contents")).unwrap();
+        std::fs::write(dir.path().join("contents/r1.md"), "body").unwrap();
+        let new_file = dir.path().join("contents/r2.md");
+        std::fs::write(&new_file, "improved").unwrap();
+
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = publish_skill_revision(dir.path(), &new_file, "test", &client, "NewProject")
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("does not match configured memory_project"),
+            "got: {msg}"
+        );
+        // Should mention both projects so the operator can debug.
+        assert!(msg.contains("OldProject"), "got: {msg}");
+        assert!(msg.contains("NewProject"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn publish_skill_revision_errors_when_new_file_missing() {
+        // The pre-flight checks pass but the content file path doesn't
+        // exist on disk — `canonicalize` should fail cleanly without
+        // touching Kumiho.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("SKILL.toml"),
+            r#"[skill]
+name = "ghost"
+description = "x"
+version = "0.1.0"
+content_file = "contents/r1.md"
+kref = "kref://CognitiveMemory/Skills/ghost.skilldef?t=published"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("contents")).unwrap();
+        std::fs::write(dir.path().join("contents/r1.md"), "body").unwrap();
+        // Note: r2.md is intentionally not written.
+        let phantom = dir.path().join("contents/r2-does-not-exist.md");
+
+        let client = KumihoClient::new("http://127.0.0.1:1".into(), "test".into());
+        let err = publish_skill_revision(dir.path(), &phantom, "test", &client, "CognitiveMemory")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("canonicalising new content file"),
+            "got: {err}"
+        );
     }
 }
