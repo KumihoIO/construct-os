@@ -14,6 +14,7 @@ mod audit;
 #[cfg(feature = "skill-creation")]
 pub mod creator;
 pub mod effectiveness;
+pub mod effectiveness_cache;
 #[cfg(feature = "skill-creation")]
 pub mod improver;
 pub mod testing;
@@ -23,6 +24,7 @@ pub mod testing;
 // (NoOpProvider / InMemoryProvider) are reachable via
 // `crate::skills::effectiveness::…` when callers need them.
 pub use effectiveness::{EffectivenessScore, SkillEffectivenessProvider};
+pub use effectiveness_cache::EffectivenessCache;
 
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
 const OPEN_SKILLS_SYNC_MARKER: &str = ".construct-open-skills-sync";

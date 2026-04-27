@@ -82,6 +82,12 @@ pub struct Agent {
     /// Whether Operator orchestration is enabled — used to append the operator
     /// prompt so the agent knows how to delegate to sub-agents.
     operator_enabled: bool,
+    /// Optional process-wide cache of skill effectiveness scores.  When
+    /// present, the prompt builder reranks skills by recency-weighted
+    /// success rate so high-performing skills appear first in the
+    /// `<available_skills>` block.  Built once at daemon startup and
+    /// shared across all agent constructions.
+    skill_effectiveness: Option<Arc<crate::skills::EffectivenessCache>>,
 }
 
 pub struct AgentBuilder {
@@ -113,6 +119,7 @@ pub struct AgentBuilder {
     activated_tools: Option<Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>>,
     kumiho_enabled: bool,
     operator_enabled: bool,
+    skill_effectiveness: Option<Arc<crate::skills::EffectivenessCache>>,
 }
 
 impl AgentBuilder {
@@ -146,6 +153,7 @@ impl AgentBuilder {
             activated_tools: None,
             kumiho_enabled: false,
             operator_enabled: false,
+            skill_effectiveness: None,
         }
     }
 
@@ -301,6 +309,17 @@ impl AgentBuilder {
         self
     }
 
+    /// Attach a process-wide [`EffectivenessCache`] so the prompt builder
+    /// can rerank skills by recency-weighted success rate.  Pass the same
+    /// `Arc` to every agent the daemon spawns — the cache is intended to
+    /// be shared.
+    ///
+    /// [`EffectivenessCache`]: crate::skills::EffectivenessCache
+    pub fn skill_effectiveness(mut self, cache: Arc<crate::skills::EffectivenessCache>) -> Self {
+        self.skill_effectiveness = Some(cache);
+        self
+    }
+
     pub fn build(self) -> Result<Agent> {
         let mut tools = self
             .tools
@@ -360,6 +379,7 @@ impl AgentBuilder {
             activated_tools: self.activated_tools,
             kumiho_enabled: self.kumiho_enabled,
             operator_enabled: self.operator_enabled,
+            skill_effectiveness: self.skill_effectiveness,
         })
     }
 }
@@ -671,7 +691,10 @@ impl Agent {
             tools: &self.tools,
             skills: &self.skills,
             skills_prompt_mode: self.skills_prompt_mode,
-            skill_effectiveness: None,
+            skill_effectiveness: self
+                .skill_effectiveness
+                .as_ref()
+                .map(|c| c.as_ref() as &dyn crate::skills::SkillEffectivenessProvider),
             identity_config: Some(&self.identity_config),
             dispatcher_instructions: &instructions,
             tool_descriptions: self.tool_descriptions.as_ref(),
