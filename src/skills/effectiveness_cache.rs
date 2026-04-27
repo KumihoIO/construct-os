@@ -37,6 +37,33 @@ use crate::skills::effectiveness::{EffectivenessScore, SkillEffectivenessProvide
 /// list-items call per skill per interval).
 pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
+/// Default success-rate threshold below which a skill becomes a candidate
+/// for improvement.  0.4 means "fails more than 60% of the time on the
+/// recent window" — well below the 0.5 NEUTRAL line we use for cold-start
+/// skills, so tagging a skill as a candidate is a strong signal that
+/// something has actually regressed.
+pub const DEFAULT_IMPROVEMENT_THRESHOLD: f64 = 0.4;
+
+/// Minimum number of recorded outcomes before a skill is eligible to be
+/// flagged as an improvement candidate.  Below this we treat the rate as
+/// statistically noisy and skip the warning.  10 is a small enough sample
+/// to act on in practice without firing on a single bad run.
+pub const DEFAULT_IMPROVEMENT_MIN_SAMPLES: u32 = 10;
+
+/// A skill whose recent rolling success rate has dropped below the
+/// improvement threshold.  Future work (LLM-driven `SkillImprover`
+/// integration) consumes this signal to actually rewrite the skill;
+/// today the daemon emits a `tracing::warn!` per candidate so operators
+/// can see which skills are regressing.
+#[derive(Debug, Clone)]
+pub struct SkillImprovementCandidate {
+    pub skill_name: String,
+    /// Most recent `successes / (successes + failures)` rate.
+    pub rate: f64,
+    /// Total resolved outcomes feeding the rate.
+    pub total: u32,
+}
+
 // ── Process-wide cache handle ───────────────────────────────────────────────
 //
 // The daemon installs one [`EffectivenessCache`] at startup; everything that
@@ -166,7 +193,55 @@ impl EffectivenessCache {
         }
 
         self.replace_scores(new_scores);
+
+        // Emit a tracing warning per candidate.  This is the daemon-side
+        // signal that something has regressed and is the hook a future
+        // LLM-driven SkillImprover integration will consume.  We log per-
+        // skill (not aggregated) so operators can correlate with workflow
+        // run logs.
+        for cand in self.improvement_candidates() {
+            tracing::warn!(
+                skill = %cand.skill_name,
+                rate = cand.rate,
+                total = cand.total,
+                "skill effectiveness: rolling success rate below threshold; \
+                 candidate for SkillImprover",
+            );
+        }
+
         Ok(())
+    }
+
+    /// Skills whose latest cached score is below
+    /// [`DEFAULT_IMPROVEMENT_THRESHOLD`] with at least
+    /// [`DEFAULT_IMPROVEMENT_MIN_SAMPLES`] resolved outcomes.  Sorted
+    /// worst-first so callers iterating with a budget hit the most-broken
+    /// skills first.
+    pub fn improvement_candidates(&self) -> Vec<SkillImprovementCandidate> {
+        let scores = self.scores.read();
+        let mut candidates: Vec<SkillImprovementCandidate> = scores
+            .iter()
+            .filter_map(|(name, score)| {
+                let rate = score.rate?;
+                if score.total < DEFAULT_IMPROVEMENT_MIN_SAMPLES {
+                    return None;
+                }
+                if rate >= DEFAULT_IMPROVEMENT_THRESHOLD {
+                    return None;
+                }
+                Some(SkillImprovementCandidate {
+                    skill_name: name.clone(),
+                    rate,
+                    total: score.total,
+                })
+            })
+            .collect();
+        candidates.sort_by(|a, b| {
+            a.rate
+                .partial_cmp(&b.rate)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        candidates
     }
 
     /// Spawn a background tokio task that periodically calls
@@ -346,6 +421,103 @@ mod tests {
         let provider: &dyn SkillEffectivenessProvider = &*cache;
         assert!(provider.score("foo").is_some());
         assert!(provider.score("missing").is_none());
+    }
+
+    // ── Improvement candidate detection ─────────────────────────────────
+
+    #[test]
+    fn improvement_candidates_flags_below_threshold_with_enough_samples() {
+        let cache = EffectivenessCache::new();
+        let mut scores = HashMap::new();
+        // total=20, rate=0.3 → BELOW threshold and ABOVE min samples → candidate.
+        scores.insert(
+            "regressed".to_string(),
+            EffectivenessScore {
+                rate: Some(0.3),
+                total: 20,
+            },
+        );
+        // total=20, rate=0.6 → ABOVE threshold → not a candidate.
+        scores.insert(
+            "healthy".to_string(),
+            EffectivenessScore {
+                rate: Some(0.6),
+                total: 20,
+            },
+        );
+        cache.replace_scores(scores);
+
+        let candidates = cache.improvement_candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].skill_name, "regressed");
+        assert!((candidates[0].rate - 0.3).abs() < 1e-9);
+        assert_eq!(candidates[0].total, 20);
+    }
+
+    #[test]
+    fn improvement_candidates_skips_low_sample_skills() {
+        let cache = EffectivenessCache::new();
+        let mut scores = HashMap::new();
+        // total=5 < min_samples → skip even though rate is bad.
+        scores.insert(
+            "noisy".to_string(),
+            EffectivenessScore {
+                rate: Some(0.0),
+                total: 5,
+            },
+        );
+        cache.replace_scores(scores);
+        assert!(cache.improvement_candidates().is_empty());
+    }
+
+    #[test]
+    fn improvement_candidates_skips_no_data_skills() {
+        let cache = EffectivenessCache::new();
+        let mut scores = HashMap::new();
+        // No data yet — `rate: None`.  Should not be flagged.
+        scores.insert(
+            "fresh".to_string(),
+            EffectivenessScore {
+                rate: None,
+                total: 0,
+            },
+        );
+        cache.replace_scores(scores);
+        assert!(cache.improvement_candidates().is_empty());
+    }
+
+    #[test]
+    fn improvement_candidates_sorted_worst_first() {
+        let cache = EffectivenessCache::new();
+        let mut scores = HashMap::new();
+        scores.insert(
+            "mid".to_string(),
+            EffectivenessScore {
+                rate: Some(0.3),
+                total: 50,
+            },
+        );
+        scores.insert(
+            "worst".to_string(),
+            EffectivenessScore {
+                rate: Some(0.05),
+                total: 30,
+            },
+        );
+        scores.insert(
+            "barely".to_string(),
+            EffectivenessScore {
+                rate: Some(0.39),
+                total: 100,
+            },
+        );
+        cache.replace_scores(scores);
+
+        let candidates = cache.improvement_candidates();
+        assert_eq!(candidates.len(), 3);
+        assert_eq!(candidates[0].skill_name, "worst");
+        assert_eq!(candidates[1].skill_name, "mid");
+        assert_eq!(candidates[2].skill_name, "barely");
     }
 
     #[test]
