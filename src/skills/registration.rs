@@ -201,6 +201,138 @@ pub async fn register_skill_with_kumiho(
     })
 }
 
+/// Outcome returned by [`sync_published_content_path`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillContentSync {
+    /// Skill has no `[skill].kref` set — registration hasn't run yet,
+    /// nothing to sync.
+    NotRegistered,
+    /// `content_file` already matches the published revision's
+    /// artifact — no rewrite needed.
+    AlreadyCurrent,
+    /// `content_file` was out of date and has been rewritten in place
+    /// to point at the published revision's artifact path.
+    Updated {
+        manifest: PathBuf,
+        new_content_file: String,
+    },
+}
+
+/// Resolve a registered skill's `?t=published` kref via Kumiho and
+/// rewrite SKILL.toml's `[skill].content_file` to match the artifact
+/// the published revision points at.
+///
+/// This is the load-time projection of the kref — without it the
+/// loader would still read whatever `content_file` was set when the
+/// skill was first registered, even after [`SkillImprover`] (step 6e)
+/// creates a new revision and retags `published`.  Running this at
+/// daemon startup keeps the disk-side cache consistent with the graph.
+///
+/// Idempotent on already-current skills; safe to call from the
+/// daemon-startup scan in `src/gateway/mod.rs::run_gateway`.
+///
+/// [`SkillImprover`]: crate::skills::improver::SkillImprover
+pub async fn sync_published_content_path(
+    skill_dir: &Path,
+    client: &KumihoClient,
+) -> Result<SkillContentSync> {
+    let manifest_path = skill_dir.join("SKILL.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow!("no SKILL.toml at {}", manifest_path.display()));
+    }
+    let manifest = read_manifest(&manifest_path)?;
+
+    let Some(kref) = manifest.skill.kref.as_ref() else {
+        return Ok(SkillContentSync::NotRegistered);
+    };
+
+    // Parse the kref into the item_kref portion + the tag.  Manifests
+    // always use `?t=published` (build_published_kref) but we tolerate
+    // either query-string ordering / extra params in case a future
+    // step writes `?t=stable` or similar.
+    let (item_kref, tag) = parse_kref_tag(kref);
+    let item_kref = item_kref.to_string();
+    let tag = tag.unwrap_or(PUBLISHED_TAG).to_string();
+
+    // Resolve via Kumiho.  Network failures are caller's problem to
+    // log — we propagate them so the daemon-startup scan can record
+    // which skills failed to sync.
+    let revision = client
+        .get_revision_by_tag(&item_kref, &tag)
+        .await
+        .with_context(|| format!("get_revision_by_tag({item_kref}, {tag})"))?;
+
+    let artifacts = client
+        .get_artifacts(&revision.kref)
+        .await
+        .with_context(|| format!("get_artifacts({})", revision.kref))?;
+
+    // Prefer the canonical `skill` artifact; fall back to the first
+    // artifact if a future revision uses a different name.
+    let artifact = artifacts
+        .iter()
+        .find(|a| a.name == SKILL_ARTIFACT_NAME)
+        .or_else(|| artifacts.first())
+        .ok_or_else(|| anyhow!("revision {} has no artifacts", revision.kref))?;
+
+    // Convert the artifact's `file://` location into a relative path
+    // inside the skill directory.  Falls back to the absolute string
+    // when the artifact is outside the skill dir (shouldn't happen for
+    // skills we registered, but stays correct for unusual layouts).
+    let abs = parse_file_uri(&artifact.location).ok_or_else(|| {
+        anyhow!(
+            "artifact location {:?} is not a file:// URI; cannot sync content_file",
+            artifact.location
+        )
+    })?;
+    let rel = match abs.strip_prefix(skill_dir) {
+        Ok(stripped) => stripped.to_string_lossy().into_owned(),
+        Err(_) => abs.to_string_lossy().into_owned(),
+    };
+
+    if manifest.skill.content_file.as_deref() == Some(rel.as_str()) {
+        return Ok(SkillContentSync::AlreadyCurrent);
+    }
+
+    // Rewrite the manifest with the new content_file.  Other fields
+    // (kref, name, description, version, tools, ...) round-trip
+    // unchanged thanks to skip_serializing_if + the toml round-trip.
+    let mut updated = manifest;
+    updated.skill.content_file = Some(rel.clone());
+    let serialized =
+        toml::to_string_pretty(&updated).context("serializing SKILL.toml after sync")?;
+    std::fs::write(&manifest_path, serialized.as_bytes())
+        .with_context(|| format!("writing {}", manifest_path.display()))?;
+
+    Ok(SkillContentSync::Updated {
+        manifest: manifest_path,
+        new_content_file: rel,
+    })
+}
+
+/// Split a kref of the form `kref://…?t=published` into its (item_kref,
+/// tag) pair.  Returns the bare item_kref + None when no `?t=` query
+/// is present.  Tolerates additional query params (`?r=N`, `?as_of=`)
+/// by scanning for the `t=` segment.
+fn parse_kref_tag(kref: &str) -> (&str, Option<&str>) {
+    let Some((base, query)) = kref.split_once('?') else {
+        return (kref, None);
+    };
+    for part in query.split('&') {
+        if let Some(value) = part.strip_prefix("t=") {
+            return (base, Some(value));
+        }
+    }
+    (base, None)
+}
+
+/// Parse a `file://` URI into the local path it references.  Reverses
+/// the percent-escaping applied by [`format_file_uri`].
+fn parse_file_uri(uri: &str) -> Option<PathBuf> {
+    let path_str = uri.strip_prefix("file://")?;
+    Some(PathBuf::from(path_str.replace("%25", "%")))
+}
+
 /// Read and parse the manifest TOML.  Kept as a small helper so
 /// callers + tests can exercise the parsing path consistently.
 fn read_manifest(path: &Path) -> Result<SkillManifest> {
@@ -424,5 +556,74 @@ content_file = "contents/r1.md"
         };
         let err = resolve_content_file(dir.path(), &manifest).unwrap_err();
         assert!(err.to_string().contains("no content_file"));
+    }
+
+    // ── kref/tag parsing + file URI round-trip (step 6d) ──────────────
+
+    #[test]
+    fn parse_kref_tag_extracts_published() {
+        let (base, tag) = parse_kref_tag("kref://CognitiveMemory/Skills/foo.skilldef?t=published");
+        assert_eq!(base, "kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(tag, Some("published"));
+    }
+
+    #[test]
+    fn parse_kref_tag_extracts_arbitrary_tag() {
+        let (base, tag) = parse_kref_tag("kref://CognitiveMemory/Skills/foo.skilldef?t=stable");
+        assert_eq!(base, "kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(tag, Some("stable"));
+    }
+
+    #[test]
+    fn parse_kref_tag_returns_none_when_query_absent() {
+        let (base, tag) = parse_kref_tag("kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(base, "kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(tag, None);
+    }
+
+    #[test]
+    fn parse_kref_tag_skips_unrelated_query_params() {
+        // Future-compatible: an `?r=3` revision selector with no `t=`
+        // means no published tag — return None so the caller can pick
+        // a sensible default rather than picking up `r=3` as the tag.
+        let (base, tag) = parse_kref_tag("kref://CognitiveMemory/Skills/foo.skilldef?r=3");
+        assert_eq!(base, "kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(tag, None);
+    }
+
+    #[test]
+    fn parse_kref_tag_finds_t_among_multiple_params() {
+        let (base, tag) = parse_kref_tag("kref://CognitiveMemory/Skills/foo.skilldef?r=3&t=stable");
+        assert_eq!(base, "kref://CognitiveMemory/Skills/foo.skilldef");
+        assert_eq!(tag, Some("stable"));
+    }
+
+    #[test]
+    fn parse_file_uri_strips_scheme_and_unescapes() {
+        let p = parse_file_uri("file:///tmp/x").unwrap();
+        assert_eq!(p, PathBuf::from("/tmp/x"));
+
+        let p = parse_file_uri("file:///tmp/has%25percent").unwrap();
+        assert_eq!(p, PathBuf::from("/tmp/has%percent"));
+    }
+
+    #[test]
+    fn parse_file_uri_returns_none_for_non_file_scheme() {
+        assert!(parse_file_uri("http://example.com").is_none());
+        assert!(parse_file_uri("/no/scheme").is_none());
+    }
+
+    #[test]
+    fn file_uri_round_trips_through_parse() {
+        let original = PathBuf::from("/Users/neo/.construct/workspace/skills/foo/contents/r1.md");
+        let uri = format_file_uri(&original);
+        let parsed = parse_file_uri(&uri).expect("round trip");
+        assert_eq!(parsed, original);
+
+        // With a percent in the path:
+        let weird = PathBuf::from("/tmp/has%percent");
+        let uri = format_file_uri(&weird);
+        let parsed = parse_file_uri(&uri).expect("round trip");
+        assert_eq!(parsed, weird);
     }
 }
