@@ -1923,6 +1923,55 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="record_agent_outcome",
+            description=(
+                "Record an agent outcome (discovery / decision / lesson / insight / warning / fact) "
+                "into Construct/Sessions/<session_id>/Outcomes/. Outcomes are append-only memories "
+                "that downstream agents in the same workflow / handoff chain inherit via "
+                "recall_session_outcomes. Pass `related_krefs` (e.g. an artifact kref the agent "
+                "produced) to create INFORMS edges so the graph traces which inputs led to the outcome."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session / workflow run id — namespaces the Outcomes space."},
+                    "title": {"type": "string", "description": "Short outcome title with absolute date (e.g. 'Discovered Postgres index missing on Apr 26')."},
+                    "kind": {
+                        "type": "string",
+                        "description": "Outcome kind. Defaults to 'discovery'.",
+                        "enum": ["discovery", "decision", "lesson", "insight", "warning", "fact", "outcome"],
+                        "default": "discovery",
+                    },
+                    "content": {"type": "string", "description": "Detailed outcome body. Markdown ok."},
+                    "agent_id": {"type": "string", "description": "Recording agent's runtime id (sidecar uuid)."},
+                    "agent_kref": {"type": "string", "description": "Recording agent's Kumiho kref, if it has one."},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "related_files": {"type": "array", "items": {"type": "string"}, "description": "File paths the outcome refers to."},
+                    "related_krefs": {"type": "array", "items": {"type": "string"}, "description": "Kumiho krefs (artifacts, prior outcomes, plans) this outcome was derived from. Becomes INFORMS edges."},
+                },
+                "required": ["session_id", "title"],
+            },
+        ),
+        Tool(
+            name="recall_session_outcomes",
+            description=(
+                "Recall outcomes recorded by sibling agents in the same session (or a list of "
+                "related sessions). Use this when a new agent / handoff target / next workflow "
+                "step starts so it can inherit what siblings already learned. Pass `query` for "
+                "semantic ranking, omit for a chronological list."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Primary session whose outcomes to read."},
+                    "sibling_sessions": {"type": "array", "items": {"type": "string"}, "description": "Additional related session ids (e.g. earlier runs of the same workflow)."},
+                    "query": {"type": "string", "description": "Optional natural-language query for semantic ranking."},
+                    "kinds": {"type": "array", "items": {"type": "string"}, "description": "Filter to these outcome kinds."},
+                    "limit": {"type": "integer", "default": 10},
+                },
+            },
+        ),
+        Tool(
             name="memory_engage",
             description=(
                 "Recall + context-build in one call (operator-side equivalent of kumiho_memory_engage). "
@@ -2418,6 +2467,12 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "memory_graph":
         from .tool_handlers.memory_graph import tool_memory_graph
         return await tool_memory_graph(args, KUMIHO_SDK)
+    if name == "record_agent_outcome":
+        from .tool_handlers.outcomes import tool_record_agent_outcome_op
+        return await tool_record_agent_outcome_op(args)
+    if name == "recall_session_outcomes":
+        from .tool_handlers.outcomes import tool_recall_session_outcomes_op
+        return await tool_recall_session_outcomes_op(args)
     if name == "memory_engage":
         from .tool_handlers.memory import tool_memory_engage_op
         return await tool_memory_engage_op(args)
