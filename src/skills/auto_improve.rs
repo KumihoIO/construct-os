@@ -326,10 +326,7 @@ mod tests {
         let current = "[skill]\nname = \"x\"\n";
         let prompt = build_improvement_prompt(current, &cand("x", 0.25, 40));
         // Includes the rate (rounded to integer percent in the prompt).
-        assert!(
-            prompt.contains("**25%**"),
-            "rate not in prompt: {prompt}"
-        );
+        assert!(prompt.contains("**25%**"), "rate not in prompt: {prompt}");
         // Includes the sample count.
         assert!(prompt.contains("**40** outcomes"));
         // Includes the threshold so the LLM knows the bar.
