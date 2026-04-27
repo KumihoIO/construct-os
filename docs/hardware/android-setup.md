@@ -13,6 +13,9 @@ Construct provides prebuilt binaries for Android devices.
 
 The easiest way to run Construct on Android is via [Termux](https://termux.dev/).
 
+<!-- TODO screenshot: Termux app listing on F-Droid ready to install -->
+![Termux app listing on F-Droid ready to install](../assets/hardware/android-setup-01-termux-fdroid.png)
+
 ### 1. Install Termux
 
 Download from [F-Droid](https://f-droid.org/packages/com.termux/) (recommended) or GitHub releases.
@@ -35,6 +38,9 @@ tar xzf construct-aarch64-linux-android.tar.gz
 curl -LO https://github.com/KumihoIO/construct-os/releases/latest/download/construct-armv7-linux-androideabi.tar.gz
 tar xzf construct-armv7-linux-androideabi.tar.gz
 ```
+
+<!-- TODO screenshot: Termux terminal on Android showing successful `construct --version` output -->
+![Termux terminal on Android showing successful construct --version output](../assets/hardware/android-setup-02-termux-construct-version.png)
 
 ### 3. Install and Run
 
@@ -61,6 +67,9 @@ adb shell /data/local/tmp/construct --version
 ```
 
 > ⚠️ Running outside Termux requires a rooted device or specific permissions for full functionality.
+
+<!-- TODO screenshot: Android storage permission prompt shown when running termux-setup-storage -->
+![Android storage permission prompt shown when running termux-setup-storage](../assets/hardware/android-setup-03-termux-storage-permission.png)
 
 ## Limitations on Android
 

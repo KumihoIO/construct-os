@@ -4,13 +4,13 @@ Treat documentation as a first-class product surface, not a post-merge artifact.
 
 ## Canonical Entry Points
 
-- root READMEs: `README.md`, `README.zh-CN.md`, `README.ja.md`, `README.ru.md`, `README.fr.md`, `README.vi.md`
-- docs hubs: `docs/README.md`, `docs/README.zh-CN.md`, `docs/README.ja.md`, `docs/README.ru.md`, `docs/README.fr.md`, `docs/README.vi.md`
+- root READMEs: `README.md`, `README.ko.md`
+- docs hubs: `docs/README.md`, `docs/i18n/ko/README.md`, `docs/i18n/vi/README.md`, `docs/i18n/zh-CN/README.md`
 - unified TOC: `docs/SUMMARY.md`
 
 ## Supported Locales
 
-`en`, `zh-CN`, `ja`, `ru`, `fr`, `vi`
+`en`, `ko`, `vi`, `zh-CN`
 
 ## Collection Indexes
 

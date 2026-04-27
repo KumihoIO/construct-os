@@ -44,6 +44,9 @@ Why two builds:
 
 ## Run Locally
 
+<!-- TODO screenshot: Construct dashboard landing page served by the gateway on localhost:42617 -->
+![Construct dashboard landing page served by the gateway on localhost:42617](../assets/dashboard/dashboard-dev-01-gateway-landing.png)
+
 ### Gateway + dashboard
 
 ```bash
@@ -70,6 +73,9 @@ That starts the gateway plus long-running runtime services.
 ```
 
 Useful when you want an isolated sandbox rather than running directly on the host. See [`dev/README.md`](../../dev/README.md) for the full workflow.
+
+<!-- TODO screenshot: Vite dev server running the dashboard frontend in hot-reload mode at localhost:5173 -->
+![Vite dev server running the dashboard frontend in hot-reload mode](../assets/dashboard/dashboard-dev-02-vite-ui.png)
 
 ## Frontend Dev Workflow
 
@@ -120,6 +126,9 @@ So the practical loop is:
 1. Run the gateway
 2. Build or hot-reload the dashboard
 3. Launch the Tauri shell against that gateway
+
+<!-- TODO screenshot: dashboard shell layout showing sidebar, header, and main content regions -->
+![Dashboard shell layout showing sidebar, header, and main content regions](../assets/dashboard/dashboard-dev-03-shell-layout.png)
 
 ## Dashboard Shell Ownership
 

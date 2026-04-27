@@ -1,101 +1,131 @@
-# Construct 문서 허브
+# Construct 문서 (한국어)
 
-이 페이지는 문서 시스템의 기본 진입점입니다.
+이 페이지는 Construct 문서 시스템의 한국어 진입점입니다.
 
-> Construct의 Rust 코어 런타임은 [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw)의 포크입니다. 전체 속성(attribution)은 [`NOTICE`](../../../NOTICE)를 참고하세요.
+> Construct의 Rust 코어 런타임은 [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw)의 포크입니다. 전체 attribution은 루트 [`NOTICE`](../../../NOTICE)와 [`docs/upstream/zeroclaw-attribution.md`](../../upstream/zeroclaw-attribution.md)를 참고하세요.
 
-마지막 업데이트: **April 21, 2026**.
+마지막 업데이트: **April 27, 2026**.
 
-현지화된 허브: [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Русский](README.ru.md) · [Français](README.fr.md) · [Tiếng Việt](i18n/vi/README.md).
+다른 언어: [English](../../README.md) · [Tiếng Việt](../vi/README.md) · [简体中文](../zh-CN/README.md).
 
-## 여기서 시작하세요
+> 한국어 번역은 진행 중이며, 본 허브는 영문 원본 문서로 연결되는 색인 역할을 합니다. 번역되지 않은 페이지는 *(영문)* 표시와 함께 영문 문서로 이동합니다.
 
-| 하고 싶은 것…                                                       | 이것을 읽으세요                                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Construct를 빠르게 설치하고 실행                                     | [README.md (빠른 시작)](../README.md#quick-start)                              |
-| 한 번의 명령으로 부트스트랩                                         | [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md)                  |
-| macOS에서 업데이트 또는 제거                                        | [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md)            |
-| 작업별 명령어 찾기                                                  | [commands-reference.md](reference/cli/commands-reference.md)                   |
-| 구성 기본값과 키를 빠르게 확인                                      | [config-reference.md](reference/api/config-reference.md)                       |
-| 사용자 정의 프로바이더/엔드포인트 구성                              | [custom-providers.md](contributing/custom-providers.md)                        |
-| Z.AI / GLM 프로바이더 구성                                          | [zai-glm-setup.md](setup-guides/zai-glm-setup.md)                             |
-| LangGraph 통합 패턴 사용                                            | [langgraph-integration.md](contributing/langgraph-integration.md)              |
-| 런타임 운영 (2일차 런북)                                            | [operations-runbook.md](ops/operations-runbook.md)                             |
-| 설치/런타임/채널 문제 해결                                          | [troubleshooting.md](ops/troubleshooting.md)                                   |
-| Matrix 암호화 방 설정 및 진단 실행                                  | [matrix-e2ee-guide.md](security/matrix-e2ee-guide.md)                          |
-| 카테고리별 문서 찾아보기                                            | [SUMMARY.md](SUMMARY.md)                                                      |
-| 프로젝트 PR/이슈 문서 스냅샷 보기                                   | [project-triage-snapshot-2026-02-18.md](maintainers/project-triage-snapshot-2026-02-18.md) |
+---
 
-## 빠른 의사결정 트리 (10초)
+## 대상별 시작점
 
-- 초기 설정 또는 설치가 필요한가요? → [setup-guides/README.md](setup-guides/README.md)
-- 정확한 CLI/구성 키가 필요한가요? → [reference/README.md](reference/README.md)
-- 프로덕션/서비스 운영이 필요한가요? → [ops/README.md](ops/README.md)
-- 실패 또는 회귀가 발생하고 있나요? → [troubleshooting.md](ops/troubleshooting.md)
-- 보안 강화 또는 로드맵 작업 중인가요? → [security/README.md](security/README.md)
-- 보드/주변 장치 작업 중인가요? → [hardware/README.md](hardware/README.md)
-- 기여/검토/CI 워크플로우? → [contributing/README.md](contributing/README.md)
-- 전체 맵이 필요한가요? → [SUMMARY.md](SUMMARY.md)
+- **Construct가 처음이라면?** → [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) *(영문)* → [setup-guides/README.md](../../setup-guides/README.md) *(영문)*
+- **하드웨어/임베디드?** → [hardware/README.md](../../hardware/README.md) *(영문)*
+- **프로덕션 운영?** → [ops/README.md](../../ops/README.md) *(영문)*
+- **API/MCP 통합?** → [reference/README.md](../../reference/README.md) *(영문)* + [contributing/README.md](../../contributing/README.md) *(영문)*
+- **PR 리뷰/머지?** → [pr-workflow.md](../../contributing/pr-workflow.md) *(영문)* + [reviewer-playbook.md](../../contributing/reviewer-playbook.md) *(영문)*
+- **전체 목차** → [SUMMARY.md](SUMMARY.md)
 
-## 컬렉션 (권장)
+## 작업별 빠른 색인
 
-- 시작하기: [setup-guides/README.md](setup-guides/README.md)
-- 참조 카탈로그: [reference/README.md](reference/README.md)
-- 운영 및 배포: [ops/README.md](ops/README.md)
-- 보안 문서: [security/README.md](security/README.md)
-- 하드웨어/주변 장치: [hardware/README.md](hardware/README.md)
-- 기여/CI: [contributing/README.md](contributing/README.md)
-- 프로젝트 스냅샷: [maintainers/README.md](maintainers/README.md)
+| 하고 싶은 것… | 이것을 읽으세요 |
+|---|---|
+| Construct를 빠르게 설치 | [README.md (설치)](../../../README.md#install) *(영문)* |
+| 한 번의 명령으로 부트스트랩 | [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) *(영문)* |
+| Kumiho 메모리 사이드카 설치 | [kumiho-operator-setup.md](../../setup-guides/kumiho-operator-setup.md) *(영문)* |
+| macOS 업데이트/제거 | [macos-update-uninstall.md](../../setup-guides/macos-update-uninstall.md) *(영문)* |
+| Windows 설치 | [windows-setup.md](../../setup-guides/windows-setup.md) *(영문)* |
+| 작업별 명령어 찾기 | [commands-reference.md](../../reference/cli/commands-reference.md) *(영문)* |
+| 구성 키와 기본값 확인 | [config-reference.md](../../reference/api/config-reference.md) *(영문)* |
+| 사용자 정의 프로바이더 구성 | [custom-providers.md](../../contributing/custom-providers.md) *(영문)* |
+| Z.AI / GLM 프로바이더 구성 | [zai-glm-setup.md](../../setup-guides/zai-glm-setup.md) *(영문)* |
+| Kumiho 그래프 네이티브 인지 메모리 통합 | [kumiho-memory-integration.md](../../contributing/kumiho-memory-integration.md) *(영문)* |
+| 임베디드 React 대시보드 로컬 실행 | [dashboard-dev.md](../../setup-guides/dashboard-dev.md) *(영문)* |
+| 런타임 운영 (2일차 런북) | [operations-runbook.md](../../ops/operations-runbook.md) *(영문)* |
+| 설치/런타임/채널 문제 해결 | [troubleshooting.md](../../ops/troubleshooting.md) *(영문)* |
+| Matrix 암호화 방 설정 및 진단 | [matrix-e2ee-guide.md](../../security/matrix-e2ee-guide.md) *(영문)* |
 
-## 대상별
+## Construct를 Construct답게 만드는 것
 
-### 사용자 / 운영자
+- **메모리 네이티브 Rust 에이전트 런타임** — 모든 세션, 계획, 스킬, 신뢰 점수가 Kumiho 그래프에 영속됨
+- **단일 바이너리** — 게이트웨이, 데몬, React 대시보드, MCP 사이드카, CLI가 하나의 정적 바이너리로 패키징
+- **선언적 오케스트레이션** — Operator가 YAML 워크플로로 다중 에이전트를 구동
+- **하드웨어 1급 시민** — STM32, Arduino, ESP32, Pico, Aardvark I²C/SPI를 에이전트 도구 표면으로 노출
+- **18개 라우트의 웹 대시보드** — `http://127.0.0.1:42617`에서 Orchestration / Operations / Inspection 탐색
+- **Trust 점수 + ClawHub 마켓플레이스** — 에이전트가 실행을 통해 신뢰도를 쌓고 컨텐츠 어드레서블 레지스트리에서 스킬 공유
 
-- [commands-reference.md](reference/cli/commands-reference.md) — 워크플로우별 명령어 검색
-- [providers-reference.md](reference/api/providers-reference.md) — 프로바이더 ID, 별칭, 자격 증명 환경 변수
-- [channels-reference.md](reference/api/channels-reference.md) — 채널 기능 및 설정 경로
-- [matrix-e2ee-guide.md](security/matrix-e2ee-guide.md) — Matrix 암호화 방(E2EE) 설정 및 무응답 진단
-- [config-reference.md](reference/api/config-reference.md) — 주요 구성 키 및 보안 기본값
-- [custom-providers.md](contributing/custom-providers.md) — 사용자 정의 프로바이더/기본 URL 통합 템플릿
-- [zai-glm-setup.md](setup-guides/zai-glm-setup.md) — Z.AI/GLM 설정 및 엔드포인트 매트릭스
-- [langgraph-integration.md](contributing/langgraph-integration.md) — 모델/도구 호출 엣지 케이스를 위한 폴백 통합
-- [operations-runbook.md](ops/operations-runbook.md) — 2일차 런타임 운영 및 롤백 흐름
-- [troubleshooting.md](ops/troubleshooting.md) — 일반적인 실패 시그니처 및 복구 단계
+---
 
-### 기여자 / 유지보수자
+## 설치 및 온보딩
 
-- [../CONTRIBUTING.md](../CONTRIBUTING.md)
-- [pr-workflow.md](contributing/pr-workflow.md)
-- [reviewer-playbook.md](contributing/reviewer-playbook.md)
-- [ci-map.md](contributing/ci-map.md)
-- [actions-source-policy.md](contributing/actions-source-policy.md)
+- [setup-guides/README.md](../../setup-guides/README.md) — 설치 가이드 색인 *(영문)*
+- [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) — 단일 명령 설치 *(영문)*
+- [kumiho-operator-setup.md](../../setup-guides/kumiho-operator-setup.md) — Kumiho 메모리 사이드카 *(영문)*
+- [macos-update-uninstall.md](../../setup-guides/macos-update-uninstall.md) — macOS 라이프사이클 *(영문)*
+- [windows-setup.md](../../setup-guides/windows-setup.md) — Windows 설치 *(영문)*
+- [dashboard-dev.md](../../setup-guides/dashboard-dev.md) — `web/` 대시보드 로컬 실행 *(영문)*
+- [browser-setup.md](../../browser-setup.md) — 브라우저 채널 / VNC 모드 *(영문)*
 
-### 보안 / 신뢰성
+## 일상 운영
 
-> 참고: 이 영역에는 제안/로드맵 문서가 포함되어 있습니다. 현재 동작에 대해서는 [config-reference.md](reference/api/config-reference.md), [operations-runbook.md](ops/operations-runbook.md), [troubleshooting.md](ops/troubleshooting.md)를 먼저 참조하세요.
+- [commands-reference.md](../../reference/cli/commands-reference.md) — CLI 명령어 색인 *(영문)*
+- [config-reference.md](../../reference/api/config-reference.md) — 구성 키, 기본값, 보안 기본값 *(영문)*
+- [providers-reference.md](../../reference/api/providers-reference.md) — 프로바이더 ID, 별칭, 환경 변수 *(영문)*
+- [channels-reference.md](../../reference/api/channels-reference.md) — 채널 능력 및 설정 *(영문)*
+- [reference/sop/observability.md](../../reference/sop/observability.md) — SOP 실행 상태 및 메트릭 *(영문)*
 
-- [security/README.md](security/README.md)
-- [agnostic-security.md](security/agnostic-security.md)
-- [frictionless-security.md](security/frictionless-security.md)
-- [sandboxing.md](security/sandboxing.md)
-- [audit-logging.md](security/audit-logging.md)
-- [resource-limits.md](ops/resource-limits.md)
-- [security-roadmap.md](security/security-roadmap.md)
+## 통합
 
-## 시스템 탐색 및 거버넌스
+- [kumiho-memory-integration.md](../../contributing/kumiho-memory-integration.md) — Kumiho 그래프 네이티브 인지 메모리 통합 패턴 *(영문)*
+- [custom-providers.md](../../contributing/custom-providers.md) — 사용자 정의 프로바이더 *(영문)*
+- [extension-examples.md](../../contributing/extension-examples.md) — 확장 예제 *(영문)*
+- [adding-boards-and-tools.md](../../contributing/adding-boards-and-tools.md) — 보드/도구 추가 *(영문)*
 
-- 통합 목차: [SUMMARY.md](SUMMARY.md)
-- 문서 구조 맵 (언어/부분/기능): [structure/README.md](maintainers/structure-README.md)
-- 문서 인벤토리/분류: [docs-inventory.md](maintainers/docs-inventory.md)
-- i18n 문서 색인: [i18n/README.md](i18n/README.md)
-- i18n 커버리지 맵: [i18n-coverage.md](maintainers/i18n-coverage.md)
-- 프로젝트 트리아지 스냅샷: [project-triage-snapshot-2026-02-18.md](maintainers/project-triage-snapshot-2026-02-18.md)
+## 운영 및 배포
+
+- [ops/README.md](../../ops/README.md) — 운영 색인 *(영문)*
+- [ops/operations-runbook.md](../../ops/operations-runbook.md) — 2일차 런북 *(영문)*
+- [ops/troubleshooting.md](../../ops/troubleshooting.md) — 장애 시그니처 및 복구 *(영문)*
+- [ops/network-deployment.md](../../ops/network-deployment.md) — 라즈베리 파이 / LAN 배포 *(영문)*
+- [ops/proxy-agent-playbook.md](../../ops/proxy-agent-playbook.md) — 프록시 모드 *(영문)*
+- [ops/resource-limits.md](../../ops/resource-limits.md) — 리소스 컨트롤 *(영문)*
+
+## 보안
+
+- [security/README.md](../../security/README.md) — 보안 색인 *(영문)*
+- [security/agnostic-security.md](../../security/agnostic-security.md) — 프로바이더 무관 보안 모델 *(영문)*
+- [security/sandboxing.md](../../security/sandboxing.md) — Seatbelt / Landlock / Firejail / Bubblewrap *(영문)*
+- [security/audit-logging.md](../../security/audit-logging.md) — Merkle 체인 감사 로그 *(영문)*
+- [security/matrix-e2ee-guide.md](../../security/matrix-e2ee-guide.md) — Matrix E2EE *(영문)*
+
+## 하드웨어 및 주변 장치
+
+- [hardware/README.md](../../hardware/README.md) — 하드웨어 색인 *(영문)*
+- [hardware/hardware-peripherals-design.md](../../hardware/hardware-peripherals-design.md) — 주변 장치 아키텍처 *(영문)*
+- [hardware/nucleo-setup.md](../../hardware/nucleo-setup.md) — STM32 Nucleo *(영문)*
+- [hardware/arduino-uno-q-setup.md](../../hardware/arduino-uno-q-setup.md) — Arduino Uno Q *(영문)*
+- [hardware/android-setup.md](../../hardware/android-setup.md) — Android / Termux *(영문)*
+
+## 기여
+
+- [../../../CONTRIBUTING.md](../../../CONTRIBUTING.md) — 최상위 기여자 진입 *(영문)*
+- [contributing/README.md](../../contributing/README.md) — 기여자 색인 *(영문)*
+- [contributing/pr-workflow.md](../../contributing/pr-workflow.md) — PR 거버넌스 및 리뷰 레인 *(영문)*
+- [contributing/reviewer-playbook.md](../../contributing/reviewer-playbook.md) — 리뷰어 가이드 *(영문)*
+- [contributing/ci-map.md](../../contributing/ci-map.md) — CI 워크플로 맵 *(영문)*
+- [contributing/cla.md](../../contributing/cla.md) — Contributor License Agreement *(영문)*
+
+## 아키텍처 및 참조
+
+- [architecture/adr-004-tool-shared-state-ownership.md](../../architecture/adr-004-tool-shared-state-ownership.md) *(영문)*
+- [architecture/adr-005-operator-liveness-and-rust-migration.md](../../architecture/adr-005-operator-liveness-and-rust-migration.md) *(영문)*
+- [reference/sop/connectivity.md](../../reference/sop/connectivity.md) *(영문)*
+- [reference/sop/observability.md](../../reference/sop/observability.md) *(영문)*
+
+## 라이선스 및 상위 출처
+
+- [`../../../NOTICE`](../../../NOTICE) — 루트 NOTICE (Apache 2.0 §4(c) 상위 ZeroClaw attribution 보존)
+- [`../../../LICENSE-MIT`](../../../LICENSE-MIT), [`../../../LICENSE-APACHE`](../../../LICENSE-APACHE) — 듀얼 라이선스 텍스트
+- [docs/upstream/zeroclaw-attribution.md](../../upstream/zeroclaw-attribution.md) — Construct가 ZeroClaw로부터 상속한 부분과 fork 준수 체크리스트 *(영문)*
+- [docs/maintainers/trademark.md](../../maintainers/trademark.md) — Construct 네이밍 규약 및 ZeroClaw 상표 인정 *(영문)*
 
 ## 다른 언어
 
-- English: [README.md](README.md)
-- 简体中文: [README.zh-CN.md](README.zh-CN.md)
-- 日本語: [README.ja.md](README.ja.md)
-- Русский: [README.ru.md](README.ru.md)
-- Français: [README.fr.md](README.fr.md)
-- Tiếng Việt: [i18n/vi/README.md](i18n/vi/README.md)
+- [English](../../README.md)
+- [Tiếng Việt](../vi/README.md)
+- [简体中文](../zh-CN/README.md)

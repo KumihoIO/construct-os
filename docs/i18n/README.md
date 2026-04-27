@@ -1,15 +1,18 @@
-# Construct i18n Docs Index
+# Other Languages / 다른 언어 / Các ngôn ngữ khác / 其他语言
 
-Localized documentation trees live here and under `docs/`.
+Construct's documentation is authored in English; supported translations live in the locale folders below.
 
-## Locales
+## Supported locales
 
-- 한국어 (Korean): [ko/README.md](ko/README.md)
-- Tiếng Việt (Vietnamese): [vi/README.md](vi/README.md)
-- 简体中文 (Chinese): [zh-CN/README.md](zh-CN/README.md)
+- [English (source)](../README.md)
+- [한국어 (Korean)](ko/README.md)
+- [Tiếng Việt (Vietnamese)](vi/README.md)
+- [简体中文 (Simplified Chinese)](zh-CN/README.md)
 
-## Structure
+Translations are maintained on a best-effort basis. When a page has no translation, links fall through to the English source under `docs/`.
 
-- Docs structure map (language/part/function): [../maintainers/structure-README.md](../maintainers/structure-README.md)
+## For maintainers
 
-See overall coverage and conventions in [../maintainers/i18n-coverage.md](../maintainers/i18n-coverage.md).
+- Coverage matrix: [`../maintainers/i18n-coverage.md`](../maintainers/i18n-coverage.md)
+- Docs structure map (language / part / function): [`../maintainers/structure-README.md`](../maintainers/structure-README.md)
+- Contracts and rules for adding a new locale: [`../contributing/docs-contract.md`](../contributing/docs-contract.md)

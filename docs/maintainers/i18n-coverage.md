@@ -2,7 +2,7 @@
 
 This document defines the localization structure for Construct docs and tracks current coverage.
 
-Last refreshed: **February 21, 2026**.
+Last refreshed: **April 27, 2026**.
 
 ## Canonical Layout
 
@@ -20,12 +20,10 @@ Use these i18n paths:
 
 | Locale | Root README | Canonical Docs Hub | Commands Ref | Config Ref | Troubleshooting | Status |
 |---|---|---|---|---|---|---|
-| `en` | `README.md` | `docs/README.md` | `docs/commands-reference.md` | `docs/config-reference.md` | `docs/troubleshooting.md` | Source of truth |
-| `zh-CN` | `README.zh-CN.md` | `docs/README.zh-CN.md` | - | - | - | Hub-level localized |
-| `ja` | `README.ja.md` | `docs/README.ja.md` | - | - | - | Hub-level localized |
-| `ru` | `README.ru.md` | `docs/README.ru.md` | - | - | - | Hub-level localized |
-| `fr` | `README.fr.md` | `docs/README.fr.md` | - | - | - | Hub-level localized |
-| `vi` | `README.vi.md` | `docs/i18n/vi/README.md` | `docs/i18n/vi/commands-reference.md` | `docs/i18n/vi/config-reference.md` | `docs/i18n/vi/troubleshooting.md` | Full tree localized |
+| `en` | `README.md` | `docs/README.md` | `docs/reference/cli/commands-reference.md` | `docs/reference/api/config-reference.md` | `docs/ops/troubleshooting.md` | Source of truth |
+| `ko` | `README.ko.md` | `docs/i18n/ko/README.md` | — | — | — | Hub-level localized |
+| `vi` | — | `docs/i18n/vi/README.md` | `docs/i18n/vi/commands-reference.md` | `docs/i18n/vi/config-reference.md` | `docs/i18n/vi/ops/troubleshooting.md` | Full tree localized |
+| `zh-CN` | — | `docs/i18n/zh-CN/README.md` | — | — | — | Hub-level localized (nested mirror) |
 
 ## Root README Completeness
 
@@ -34,11 +32,9 @@ Not all root READMEs are full translations of `README.md`:
 | Locale | Style | Approximate Coverage |
 |---|---|---|
 | `en` | Full source | 100% |
-| `zh-CN` | Hub-style entry point | ~26% |
-| `ja` | Hub-style entry point | ~26% |
-| `ru` | Hub-style entry point | ~26% |
-| `fr` | Near-complete translation | ~90% |
-| `vi` | Near-complete translation | ~90% |
+| `ko` | Hub-style entry point | ~30% |
+| `vi` | Near-complete translation (flat tree) | ~85% |
+| `zh-CN` | Hub-style entry point with nested mirror | ~40% |
 
 Hub-style entry points provide quick-start orientation and language navigation but do not replicate the full English README content. This is an accurate status record, not a gap to be immediately resolved.
 

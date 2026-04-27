@@ -9,6 +9,9 @@ The `construct` binary also embeds the React/TypeScript web dashboard served by
 operational surface is available in both CLI and dashboard; this document
 covers the CLI surface only.
 
+<!-- TODO screenshot: dashboard top-level commands menu/navigation -->
+![Dashboard top-level commands menu/navigation](../../assets/reference/commands-reference-01-dashboard-menu.png)
+
 ## Top-Level Commands
 
 | Command | Purpose |
@@ -85,6 +88,9 @@ Start the ACP (Agent Control Protocol) server for IDE and tool integration.
 - Streams agent reasoning, tool calls, and content in real-time as notifications
 - Default max sessions: 10
 - Default session timeout: 3600 seconds (1 hour)
+
+<!-- TODO screenshot: browser showing the embedded Construct dashboard served by the gateway at localhost:42617 -->
+![Browser showing the embedded Construct dashboard served by the gateway at localhost:42617](../../assets/reference/commands-reference-02-dashboard-browser.png)
 
 ### `gateway` / `daemon`
 
@@ -163,6 +169,9 @@ Notes:
 - `models list` prints the currently cached model catalog for the resolved provider.
 - `models set` writes `default_model` to `~/.construct/config.toml`.
 - `models status` prints the active model configuration and cache freshness.
+
+<!-- TODO screenshot: terminal showing formatted `construct doctor` diagnostics output -->
+![Terminal showing formatted construct doctor diagnostics output](../../assets/reference/commands-reference-03-doctor-output.png)
 
 ### `doctor`
 

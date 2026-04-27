@@ -16,7 +16,7 @@
 | Kiểm tra giá trị mặc định và khóa cấu hình | [config-reference.md](config-reference.md) |
 | Kết nối provider / endpoint tùy chỉnh | [custom-providers.md](custom-providers.md) |
 | Cấu hình Z.AI / GLM provider | [zai-glm-setup.md](zai-glm-setup.md) |
-| Sử dụng tích hợp LangGraph | [langgraph-integration.md](langgraph-integration.md) |
+| Tích hợp bộ nhớ nhận thức Kumiho graph-native | [../../contributing/kumiho-memory-integration.md](../../contributing/kumiho-memory-integration.md) *(tiếng Anh)* |
 | Vận hành hàng ngày (runbook) | [operations-runbook.md](operations-runbook.md) |
 | Khắc phục sự cố cài đặt/chạy/kênh | [troubleshooting.md](troubleshooting.md) |
 | Cấu hình Matrix phòng mã hóa (E2EE) | [matrix-e2ee-guide.md](matrix-e2ee-guide.md) |
@@ -55,7 +55,7 @@
 - [config-reference.md](config-reference.md) — khóa cấu hình quan trọng và giá trị mặc định an toàn
 - [custom-providers.md](custom-providers.md) — mẫu tích hợp provider / base URL tùy chỉnh
 - [zai-glm-setup.md](zai-glm-setup.md) — thiết lập Z.AI/GLM và ma trận endpoint
-- [langgraph-integration.md](langgraph-integration.md) — tích hợp dự phòng cho model/tool-calling
+- [../../contributing/kumiho-memory-integration.md](../../contributing/kumiho-memory-integration.md) — tích hợp bộ nhớ nhận thức Kumiho graph-native *(tiếng Anh)*
 - [operations-runbook.md](operations-runbook.md) — vận hành runtime hàng ngày và quy trình rollback
 - [troubleshooting.md](troubleshooting.md) — dấu hiệu lỗi thường gặp và cách khắc phục
 
@@ -86,7 +86,6 @@
 
 ## Ngôn ngữ khác
 
-- English: [../README.md](../README.md)
-- 简体中文: [../README.zh-CN.md](../README.zh-CN.md)
-- 日本語: [../README.ja.md](../README.ja.md)
-- Русский: [../README.ru.md](../README.ru.md)
+- English: [../../README.md](../../README.md)
+- 한국어: [../ko/README.md](../ko/README.md)
+- 简体中文: [../zh-CN/README.md](../zh-CN/README.md)

@@ -24,7 +24,13 @@ Other repositories, organizations, domains, or products using the "Construct" na
 
 ## Upstream Heritage
 
-Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw); see the root [`NOTICE`](../../NOTICE) for the full attribution.
+Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw); see the root [`NOTICE`](../../NOTICE) for the full attribution and the upstream attribution notice preserved per Apache License 2.0 §4(c). A consolidated overview of what was inherited and what Construct added lives at [`docs/upstream/zeroclaw-attribution.md`](../upstream/zeroclaw-attribution.md).
+
+### ZeroClaw trademark acknowledgement
+
+"ZeroClaw" and the ZeroClaw logo are trademarks of ZeroClaw Labs. Construct is not affiliated with, endorsed by, or sponsored by ZeroClaw Labs. Whenever this project references "ZeroClaw" — in documentation, source comments, NOTICE, or commit history — the reference identifies the upstream project from which Construct's Rust runtime is derived. We use the name only for accurate attribution and descriptive reference, never to suggest endorsement or affiliation.
+
+If you fork Construct, you must continue to honour the same upstream obligations: preserve the ZeroClaw copyright lines in `LICENSE-MIT`, the verbatim ZeroClaw attribution block in `NOTICE`, and this trademark acknowledgement.
 
 ---
 

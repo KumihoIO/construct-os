@@ -14,7 +14,7 @@
 - 自定义提供商端点：[../contributing/custom-providers.zh-CN.md](../contributing/custom-providers.zh-CN.md)
 - Z.AI / GLM 提供商引导：[../setup-guides/zai-glm-setup.zh-CN.md](../setup-guides/zai-glm-setup.zh-CN.md)
 - Nextcloud Talk 机器人集成：[../setup-guides/nextcloud-talk-setup.zh-CN.md](../setup-guides/nextcloud-talk-setup.zh-CN.md)
-- 基于 LangGraph 的集成模式：[../contributing/langgraph-integration.zh-CN.md](../contributing/langgraph-integration.zh-CN.md)
+- Kumiho 图原生认知记忆集成模式：[../../../contributing/kumiho-memory-integration.md](../../../contributing/kumiho-memory-integration.md) *(英文)*
 
 ## 使用说明
 

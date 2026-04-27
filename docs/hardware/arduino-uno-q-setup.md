@@ -29,6 +29,9 @@ Build with `--features hardware` to include Uno Q support.
 
 ## Phase 1: Initial Uno Q Setup (One-Time)
 
+<!-- TODO screenshot: Arduino App Lab setup wizard on initial launch -->
+![Arduino App Lab setup wizard on initial launch](../assets/hardware/arduino-uno-q-01-app-lab-wizard.png)
+
 ### 1.1 Configure Uno Q via App Lab
 
 1. Download [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) (tar.gz on Linux).
@@ -39,6 +42,9 @@ Build with `--features hardware` to include Uno Q support.
    - Configure WiFi (SSID, password)
    - Apply any firmware updates
 5. Note the IP address shown (e.g. `arduino@192.168.1.42`) or find it later via `ip addr show` in App Lab's terminal.
+
+<!-- TODO screenshot: Arduino App Lab terminal showing the assigned IP address of the Uno Q -->
+![Arduino App Lab terminal showing the assigned IP address of the Uno Q](../assets/hardware/arduino-uno-q-02-app-lab-ip.png)
 
 ### 1.2 Verify SSH Access
 
@@ -113,6 +119,9 @@ mkdir -p ~/.construct/workspace
 nano ~/.construct/config.toml
 ```
 
+<!-- TODO screenshot: editor showing the [peripherals] section of ~/.construct/config.toml for Arduino Uno Q -->
+![Editor showing the [peripherals] section of ~/.construct/config.toml for Arduino Uno Q](../assets/hardware/arduino-uno-q-03-config-toml-peripherals.png)
+
 ### 3.2 Minimal config.toml
 
 ```toml
@@ -155,6 +164,9 @@ construct daemon --host 127.0.0.1 --port 42617
 ## Phase 5: GPIO via Bridge (Construct Handles It)
 
 Construct includes the Bridge app and setup command.
+
+<!-- TODO screenshot: Arduino Uno Q terminal output confirming the bridge app is running -->
+![Arduino Uno Q terminal output confirming the bridge app is running](../assets/hardware/arduino-uno-q-04-bridge-running.png)
 
 ### 5.1 Deploy Bridge App
 

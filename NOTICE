@@ -47,6 +47,38 @@ Construct also supports importing data from OpenClaw
 platform, via the `construct migrate` command and the AIEOS / OpenClaw
 identity format.
 
+Upstream Attribution Notices
+============================
+
+The following NOTICE text is preserved verbatim from the upstream
+ZeroClaw project, in compliance with Section 4(c) of the Apache License,
+Version 2.0:
+
+  ----------------------------------------------------------------------
+  ZeroClaw
+  Copyright 2025 ZeroClaw Labs
+
+  This product includes software developed at ZeroClaw Labs
+  (https://github.com/zeroclaw-labs).
+  ----------------------------------------------------------------------
+
+"ZeroClaw" and the ZeroClaw logo are trademarks of ZeroClaw Labs.
+Construct is not affiliated with, endorsed by, or sponsored by
+ZeroClaw Labs. References to ZeroClaw in this codebase identify the
+upstream project from which Construct's Rust runtime is derived.
+
+Modifications from Upstream
+===========================
+
+In compliance with Section 4(b) of the Apache License, Version 2.0,
+this notice records that Construct is a modified derivative of the
+ZeroClaw upstream Work. Modified files carry a record of changes
+through the Construct project's git history at
+https://github.com/KumihoIO/construct-os.
+
+A high-level summary of Construct-specific additions and changes is
+maintained at docs/upstream/zeroclaw-attribution.md.
+
 Contributors
 ============
 

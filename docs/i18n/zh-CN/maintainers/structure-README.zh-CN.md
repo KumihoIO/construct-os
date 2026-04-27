@@ -13,11 +13,9 @@
 | 语言 | 入口点 | 规范目录树 | 说明 |
 |---|---|---|---|
 | 英文 | `docs/README.md` | `docs/` | 运行时行为的权威文档首先以英文编写。 |
-| 中文（`zh-CN`） | `docs/README.zh-CN.md` | `docs/` 本地化中心 + 精选本地化文档 | 使用本地化中心和共享分类结构。 |
-| 日文（`ja`） | `docs/README.ja.md` | `docs/` 本地化中心 + 精选本地化文档 | 使用本地化中心和共享分类结构。 |
-| 俄文（`ru`） | `docs/README.ru.md` | `docs/` 本地化中心 + 精选本地化文档 | 使用本地化中心和共享分类结构。 |
-| 法文（`fr`） | `docs/README.fr.md` | `docs/` 本地化中心 + 精选本地化文档 | 使用本地化中心和共享分类结构。 |
-| 越南文（`vi`） | `docs/i18n/vi/README.md` | `docs/i18n/vi/` | 完整越南文目录树的规范路径位于 `docs/i18n/vi/` 下；`docs/vi/` 和 `docs/*.vi.md` 是兼容性路径。 |
+| 韩文（`ko`） | `docs/i18n/ko/README.md` | `docs/i18n/ko/` | 中心级本地化；未翻译的页面回退到英文。 |
+| 越南文（`vi`） | `docs/i18n/vi/README.md` | `docs/i18n/vi/` | 平铺结构 + 部分子目录；未翻译的页面回退到英文。 |
+| 中文（`zh-CN`） | `docs/i18n/zh-CN/README.md` | `docs/i18n/zh-CN/` | 镜像英文嵌套结构；多数文档已翻译。 |
 
 ## 2) 按部分（分类）分类
 
@@ -49,7 +47,7 @@
 
 - `docs/custom-providers.md`
 - `docs/zai-glm-setup.md`
-- `docs/langgraph-integration.md`
+- `docs/contributing/kumiho-memory-integration.md`
 - `docs/network-deployment.md`
 - `docs/matrix-e2ee-guide.md`
 - `docs/mattermost-setup.md`

@@ -113,6 +113,12 @@ chmod +x ~/.construct/kumiho/run_kumiho_mcp.py
 construct doctor
 ```
 
+<!-- TODO screenshot: dashboard tools panel showing an empty MCP tools list before Kumiho is configured -->
+![Dashboard tools panel showing an empty MCP tools list before Kumiho is configured](../assets/setup/kumiho-operator-01-mcp-tools-empty.png)
+
+<!-- TODO screenshot: dashboard tools panel showing Kumiho memory tools after successful configuration -->
+![Dashboard tools panel showing Kumiho memory tools after successful configuration](../assets/setup/kumiho-operator-02-mcp-tools-loaded.png)
+
 ### Troubleshooting
 
 | Symptom | Fix |

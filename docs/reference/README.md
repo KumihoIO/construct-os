@@ -14,7 +14,7 @@ Structured reference index for commands, providers, channels, config, and integr
 - Custom provider endpoints: [../contributing/custom-providers.md](../contributing/custom-providers.md)
 - Z.AI / GLM provider onboarding: [../setup-guides/zai-glm-setup.md](../setup-guides/zai-glm-setup.md)
 - Nextcloud Talk bot integration: [../setup-guides/nextcloud-talk-setup.md](../setup-guides/nextcloud-talk-setup.md)
-- LangGraph-based integration patterns: [../contributing/langgraph-integration.md](../contributing/langgraph-integration.md)
+- Kumiho graph-native cognitive memory integration patterns: [../contributing/kumiho-memory-integration.md](../contributing/kumiho-memory-integration.md)
 
 ## Usage
 

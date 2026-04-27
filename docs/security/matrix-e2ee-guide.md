@@ -18,6 +18,9 @@ If Matrix appears connected but there is no reply, validate these first:
 
 ---
 
+<!-- TODO screenshot: Matrix client showing a room with its end-to-end encryption indicator -->
+![Matrix client showing a room with its end-to-end encryption indicator](../assets/security/matrix-e2ee-01-encrypted-room.png)
+
 ## 1. Requirements
 
 Before testing message flow, make sure all of the following are true:
@@ -61,6 +64,9 @@ allowed_users = ["*"]
 
 ---
 
+<!-- TODO screenshot: Matrix room showing the Construct bot responding to a message inside an encrypted room -->
+![Matrix room showing the Construct bot responding to a message inside an encrypted room](../assets/security/matrix-e2ee-02-bot-response-encrypted.png)
+
 ## 3. Quick Validation Flow
 
 1. Run channel setup and daemon:
@@ -77,6 +83,9 @@ construct daemon
 4. In an encrypted room, verify the bot can read and reply to encrypted messages from allowed users.
 
 ---
+
+<!-- TODO screenshot: Matrix room info panel showing device ID and encryption status for the Construct bot -->
+![Matrix room info panel showing device ID and encryption status for the Construct bot](../assets/security/matrix-e2ee-03-room-device-info.png)
 
 ## 4. Troubleshooting “No Response”
 
