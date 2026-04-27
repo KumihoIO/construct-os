@@ -44,7 +44,12 @@ jobs:
   bench-compile:
     name: Verify Benchmarks Compile
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25 minutes — the bench compile takes 11-13 min on a warm
+    # Swatinem/rust-cache hit and 14-16 min on a cold one (PRs that
+    # add new source files invalidate the cache key).  15 minutes
+    # was right at that boundary and intermittently timed out
+    # (PRs #21, #26, #30 all hit the cold-cache tail).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
