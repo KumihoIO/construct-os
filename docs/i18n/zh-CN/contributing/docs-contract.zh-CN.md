@@ -4,13 +4,13 @@
 
 ## 规范入口点
 
-- 根目录 README：`README.md`、`README.zh-CN.md`、`README.ja.md`、`README.ru.md`、`README.fr.md`、`README.vi.md`
-- 文档中心：`docs/README.md`、`docs/README.zh-CN.md`、`docs/README.ja.md`、`docs/README.ru.md`、`docs/README.fr.md`、`docs/README.vi.md`
+- 根目录 README：`README.md`、`README.ko.md`
+- 文档中心：`docs/README.md`、`docs/i18n/ko/README.md`、`docs/i18n/vi/README.md`、`docs/i18n/zh-CN/README.md`
 - 统一目录：`docs/SUMMARY.md`
 
 ## 支持的语言
 
-`en`、`zh-CN`、`ja`、`ru`、`fr`、`vi`
+`en`、`ko`、`vi`、`zh-CN`
 
 ## 分类索引
 

@@ -49,7 +49,7 @@ Use this grouping to decide where new docs belong.
 
 - `docs/custom-providers.md`
 - `docs/zai-glm-setup.md`
-- `docs/langgraph-integration.md`
+- `docs/contributing/kumiho-memory-integration.md`
 - `docs/network-deployment.md`
 - `docs/matrix-e2ee-guide.md`
 - `docs/mattermost-setup.md`

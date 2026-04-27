@@ -78,6 +78,9 @@ If you run Option B outside a repository checkout, the install script automatica
 
 ## Optional onboarding modes
 
+<!-- TODO screenshot: Docker container running Construct showing the onboarding UI in a browser -->
+![Docker container running Construct showing the onboarding UI in a browser](../assets/setup/one-click-bootstrap-02-docker-onboarding.png)
+
 ### Containerized onboarding (Docker)
 
 ```bash
@@ -220,6 +223,9 @@ See all options:
 ```bash
 ./install.sh --help
 ```
+
+<!-- TODO screenshot: Construct dashboard initial state after successful one-click bootstrap -->
+![Construct dashboard initial state after successful one-click bootstrap](../assets/setup/one-click-bootstrap-01-dashboard-initial.png)
 
 ## After Bootstrap
 

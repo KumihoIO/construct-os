@@ -20,12 +20,10 @@
 
 | 语言区域 | 根 README | 规范文档中心 | 命令参考 | 配置参考 | 故障排除 | 状态 |
 |---|---|---|---|---|---|---|
-| `en` | `README.md` | `docs/README.md` | `docs/commands-reference.md` | `docs/config-reference.md` | `docs/troubleshooting.md` | 权威来源 |
-| `zh-CN` | `README.zh-CN.md` | `docs/README.zh-CN.md` | - | - | - | 中心级本地化 |
-| `ja` | `README.ja.md` | `docs/README.ja.md` | - | - | - | 中心级本地化 |
-| `ru` | `README.ru.md` | `docs/README.ru.md` | - | - | - | 中心级本地化 |
-| `fr` | `README.fr.md` | `docs/README.fr.md` | - | - | - | 中心级本地化 |
-| `vi` | `README.vi.md` | `docs/i18n/vi/README.md` | `docs/i18n/vi/commands-reference.md` | `docs/i18n/vi/config-reference.md` | `docs/i18n/vi/troubleshooting.md` | 完整树本地化 |
+| `en` | `README.md` | `docs/README.md` | `docs/reference/cli/commands-reference.md` | `docs/reference/api/config-reference.md` | `docs/ops/troubleshooting.md` | 权威来源 |
+| `ko` | `README.ko.md` | `docs/i18n/ko/README.md` | — | — | — | 中心级本地化 |
+| `vi` | — | `docs/i18n/vi/README.md` | `docs/i18n/vi/commands-reference.md` | `docs/i18n/vi/config-reference.md` | `docs/i18n/vi/ops/troubleshooting.md` | 完整树本地化（平铺） |
+| `zh-CN` | — | `docs/i18n/zh-CN/README.md` | — | — | — | 中心级本地化（嵌套镜像） |
 
 ## 根 README 完整性
 
@@ -34,11 +32,9 @@
 | 语言区域 | 风格 | 近似覆盖率 |
 |---|---|---|
 | `en` | 完整来源 | 100% |
-| `zh-CN` | 中心式入口点 | ~26% |
-| `ja` | 中心式入口点 | ~26% |
-| `ru` | 中心式入口点 | ~26% |
-| `fr` | 接近完整翻译 | ~90% |
-| `vi` | 接近完整翻译 | ~90% |
+| `ko` | 中心式入口点 | ~30% |
+| `vi` | 接近完整翻译（平铺结构） | ~85% |
+| `zh-CN` | 中心式入口点 + 嵌套镜像 | ~40% |
 
 中心式入口点提供快速入门指南和语言导航，但不复制完整的英文 README 内容。这是准确的状态记录，而非需要立即解决的缺口。
 

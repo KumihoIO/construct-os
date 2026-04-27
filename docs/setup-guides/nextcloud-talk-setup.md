@@ -8,6 +8,9 @@ This guide covers native Nextcloud Talk integration for Construct.
 - Verifies webhook signatures (HMAC-SHA256) when a secret is configured.
 - Sends bot replies back to Talk rooms via Nextcloud OCS API.
 
+<!-- TODO screenshot: Nextcloud Talk admin settings panel showing webhook integration configuration -->
+![Nextcloud Talk admin settings panel showing webhook integration configuration](../assets/setup/nextcloud-talk-01-webhook-config.png)
+
 ## 2. Configuration
 
 Add this section in `~/.construct/config.toml`:
@@ -61,6 +64,9 @@ Verification formula:
 - `hex(hmac_sha256(secret, random + raw_request_body))`
 
 If verification fails, the gateway returns `401 Unauthorized`.
+
+<!-- TODO screenshot: Nextcloud Talk room showing the Construct bot responding to a user message -->
+![Nextcloud Talk room showing the Construct bot responding to a user message](../assets/setup/nextcloud-talk-02-bot-message.png)
 
 ## 5. Message routing behavior
 

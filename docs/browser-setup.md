@@ -98,10 +98,16 @@ echo "  VNC Client: localhost:$VNC_PORT"
 echo "  Web Browser: http://localhost:$NOVNC_PORT/vnc.html"
 ```
 
+<!-- TODO screenshot: noVNC web interface running at http://localhost:6080/vnc.html -->
+![noVNC web interface running at http://localhost:6080/vnc.html](assets/browser/browser-setup-01-novnc-interface.png)
+
 ### VNC Access
 
 - **VNC Client**: Connect to `localhost:5900`
 - **Web Browser**: Open `http://localhost:6080/vnc.html`
+
+<!-- TODO screenshot: Chrome browser running inside the VNC display with a visible webpage -->
+![Chrome browser running inside the VNC display with a visible webpage](assets/browser/browser-setup-02-chrome-via-vnc.png)
 
 ### Start Browser on VNC Display
 
@@ -154,6 +160,9 @@ agent-browser open https://example.com
 agent-browser screenshot /tmp/test.png
 agent-browser close
 ```
+
+<!-- TODO screenshot: Construct agent extracting content from a rendered web UI via the browser driver -->
+![Construct agent extracting content from a rendered web UI via the browser driver](assets/browser/browser-setup-03-agent-browser-snapshot.png)
 
 ### Construct Integration Tests
 
@@ -211,5 +220,4 @@ agent-browser get text body
 ## Related
 
 - [agent-browser Documentation](https://github.com/vercel-labs/agent-browser)
-- [Construct Configuration Reference](./config-reference.md)
-- [Skills Documentation](../skills/)
+- [Construct Configuration Reference](./reference/api/config-reference.md)

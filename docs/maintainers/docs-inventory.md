@@ -16,15 +16,11 @@ Last reviewed: **April 21, 2026**.
 | Doc | Type | Audience |
 |---|---|---|
 | `README.md` | Current Guide | all readers |
-| `README.zh-CN.md` | Current Guide (localized) | Chinese readers |
-| `README.ja.md` | Current Guide (localized) | Japanese readers |
-| `README.ru.md` | Current Guide (localized) | Russian readers |
-| `README.vi.md` | Current Guide (localized) | Vietnamese readers |
+| `README.ko.md` | Current Guide (localized) | Korean readers |
 | `docs/README.md` | Current Guide (hub) | all readers |
-| `docs/i18n/zh-CN/README.md` | Current Guide (localized hub) | Chinese readers |
-| `docs/i18n/ja/README.md` | Current Guide (localized hub) | Japanese readers |
-| `docs/i18n/ru/README.md` | Current Guide (localized hub) | Russian readers |
+| `docs/i18n/ko/README.md` | Current Guide (localized hub) | Korean readers |
 | `docs/i18n/vi/README.md` | Current Guide (localized hub) | Vietnamese readers |
+| `docs/i18n/zh-CN/README.md` | Current Guide (localized hub) | Simplified Chinese readers |
 | `docs/SUMMARY.md` | Current Guide (unified TOC) | all readers |
 | `docs/maintainers/structure-README.md` | Current Guide (structure map) | all readers |
 
@@ -52,7 +48,7 @@ Last reviewed: **April 21, 2026**.
 | `docs/config-reference.md` | Current Reference | operators |
 | `docs/custom-providers.md` | Current Integration Guide | integration developers |
 | `docs/zai-glm-setup.md` | Current Provider Setup Guide | users/operators |
-| `docs/langgraph-integration.md` | Current Integration Guide | integration developers |
+| `docs/contributing/kumiho-memory-integration.md` | Current Integration Guide | integration developers |
 | `docs/operations-runbook.md` | Current Guide | operators |
 | `docs/troubleshooting.md` | Current Guide | users/operators |
 | `docs/network-deployment.md` | Current Guide | operators |

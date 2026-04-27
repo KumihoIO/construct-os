@@ -14,6 +14,9 @@ Construct logs actions but lacks tamper-evident audit trails for:
 
 ---
 
+<!-- TODO screenshot: editor showing a sample audit log JSON entry with syntax highlighting -->
+![Editor showing a sample audit log JSON entry with syntax highlighting](../assets/security/audit-logging-01-json-format.png)
+
 ## Proposed Audit Log Format
 
 ```json
@@ -131,6 +134,9 @@ log_policy_violations = true
 ```
 
 ---
+
+<!-- TODO screenshot: dashboard Audit Log viewer displaying a timeline of signed events -->
+![Dashboard Audit Log viewer displaying a timeline of signed events](../assets/security/audit-logging-02-dashboard-viewer.png)
 
 ## Audit Query CLI
 

@@ -32,6 +32,9 @@ Schema export command:
 | `default_model` | `anthropic/claude-sonnet-4-6` | model routed through selected provider |
 | `default_temperature` | `0.7` | model temperature |
 
+<!-- TODO screenshot: editor showing the [observability] section of config.toml -->
+![Editor showing the [observability] section of config.toml](../../assets/reference/config-reference-02-observability-section.png)
+
 ## `[observability]`
 
 | Key | Default | Purpose |
@@ -64,6 +67,9 @@ runtime_trace_mode = "rolling"
 runtime_trace_path = "state/runtime-trace.jsonl"
 runtime_trace_max_entries = 200
 ```
+
+<!-- TODO screenshot: terminal setting CONSTRUCT_PROVIDER env var and running construct with the overridden provider -->
+![Terminal setting CONSTRUCT_PROVIDER env var and running construct with the overridden provider](../../assets/reference/config-reference-01-env-override-terminal.png)
 
 ## Environment Provider Overrides
 

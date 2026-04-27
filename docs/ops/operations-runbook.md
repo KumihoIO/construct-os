@@ -110,6 +110,12 @@ construct service start
 construct service status
 ```
 
+<!-- TODO screenshot: Construct dashboard Audit view displaying the signed audit chain -->
+![Construct dashboard Audit view displaying the signed audit chain](../assets/ops/operations-runbook-01-dashboard-audit.png)
+
+<!-- TODO screenshot: dashboard showing Construct health status indicators for runtime subsystems -->
+![Dashboard showing Construct health status indicators for runtime subsystems](../assets/ops/operations-runbook-03-dashboard-health.png)
+
 ## Health and State Signals
 
 | Signal | Command / File | Expected |
@@ -123,6 +129,9 @@ construct service status
 | Kumiho proxy | `GET /api/kumiho/health` (via gateway) | upstream Kumiho reachable |
 | Operator checkpoints | `~/.construct/workflow_checkpoints/` | recent workflow runs present |
 | Operator RunLogs | `~/.construct/operator_mcp/runlogs/` | per-agent JSONL trails present |
+
+<!-- TODO screenshot: terminal showing the tail of ~/.construct/logs/daemon.log -->
+![Terminal showing the tail of ~/.construct/logs/daemon.log](../assets/ops/operations-runbook-02-daemon-logs.png)
 
 ## Logs and Diagnostics
 

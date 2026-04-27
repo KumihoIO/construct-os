@@ -2,6 +2,15 @@
 
 Construct supports native integration with Mattermost via its REST API v4. This integration is ideal for self-hosted, private, or air-gapped environments where sovereign communication is a requirement.
 
+<!-- TODO screenshot: Mattermost Main Menu expanded to Integrations > Bot Accounts -->
+![Mattermost Main Menu expanded to Integrations > Bot Accounts](../assets/setup/mattermost-setup-01-bot-accounts-menu.png)
+
+<!-- TODO screenshot: Mattermost Add Bot Account form with username and display name fields -->
+![Mattermost Add Bot Account form with username and display name fields](../assets/setup/mattermost-setup-02-add-bot-form.png)
+
+<!-- TODO screenshot: Mattermost channel header View Info panel showing channel ID -->
+![Mattermost channel header View Info panel showing channel ID](../assets/setup/mattermost-setup-03-channel-info-panel.png)
+
 ## Prerequisites
 
 1.  **Mattermost Server**: A running Mattermost instance (self-hosted or cloud).

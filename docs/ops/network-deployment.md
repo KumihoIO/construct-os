@@ -66,6 +66,9 @@ port = 42617
 allow_public_bind = false
 ```
 
+<!-- TODO screenshot: terminal output from `construct daemon --host 0.0.0.0` startup -->
+![Terminal output from construct daemon --host 0.0.0.0 startup](../assets/ops/network-deployment-02-daemon-startup.png)
+
 ### 2.4 Run Daemon (Local Only)
 
 ```bash
@@ -77,6 +80,9 @@ construct daemon --host 127.0.0.1 --port 42617
 - No firewall or port forwarding needed
 
 ---
+
+<!-- TODO screenshot: dashboard accessible from another device on the LAN via the daemon's 0.0.0.0 bind -->
+![Dashboard accessible from another device on the LAN via the daemons 0.0.0.0 bind](../assets/ops/network-deployment-01-dashboard-lan.png)
 
 ## 3. Binding to 0.0.0.0 (Local Network)
 

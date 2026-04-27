@@ -46,6 +46,9 @@ copy target\x86_64-pc-windows-msvc\release\construct.exe %USERPROFILE%\.construc
 | Visual Studio Build Tools | Yes (source builds) | C++ workload required for MSVC linker |
 | Node.js | No | Only needed to build the web dashboard from source |
 
+<!-- TODO screenshot: Visual Studio Build Tools installer dialog with C++ build tools workload selected -->
+![Visual Studio Build Tools installer dialog with C++ build tools workload selected](../assets/setup/windows-setup-01-vs-build-tools-installer.png)
+
 ### Installing Visual Studio Build Tools
 
 If you don't have Visual Studio installed, install the Build Tools:
@@ -77,6 +80,12 @@ To build with specific features:
 ```cmd
 cargo build --release --locked --features channel-matrix,channel-lark --target x86_64-pc-windows-msvc
 ```
+
+<!-- TODO screenshot: PowerShell terminal showing successful `construct onboard` completion on Windows -->
+![PowerShell terminal showing successful construct onboard completion on Windows](../assets/setup/windows-setup-02-construct-onboard-terminal.png)
+
+<!-- TODO screenshot: Edge browser displaying the Construct dashboard at http://127.0.0.1:42617 after onboarding -->
+![Edge browser displaying the Construct dashboard at 127.0.0.1:42617 after onboarding](../assets/setup/windows-setup-03-dashboard-browser.png)
 
 ## Post-Installation
 

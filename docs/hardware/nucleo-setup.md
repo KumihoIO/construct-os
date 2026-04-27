@@ -59,6 +59,9 @@ Protocol: newline-delimited JSON. Request: `{"id":"1","cmd":"gpio_write","args":
 
 ## Phase 1: Flash Firmware
 
+<!-- TODO screenshot: Nucleo-F401RE connected to a host machine via USB -->
+![Nucleo-F401RE connected to a host machine via USB](../assets/hardware/nucleo-setup-01-board-connected.png)
+
 ### 1.1 Connect Nucleo
 
 1. Connect Nucleo to your Mac/Linux via USB.
@@ -83,6 +86,9 @@ probe-rs run --chip STM32F401RETx target/thumbv7em-none-eabihf/release/nucleo
 ```
 
 ---
+
+<!-- TODO screenshot: terminal showing detected serial port for the Nucleo on macOS/Linux -->
+![Terminal showing detected serial port for the Nucleo on macOS/Linux](../assets/hardware/nucleo-setup-02-serial-port-discovery.png)
 
 ## Phase 2: Find Serial Port
 
@@ -109,6 +115,12 @@ baud = 115200
 ```
 
 ---
+
+<!-- TODO screenshot: Telegram chat showing the Construct bot turning the Nucleo on-board LED on and off -->
+![Telegram chat showing the Construct bot turning the Nucleo on-board LED on and off](../assets/hardware/nucleo-setup-03-telegram-led-control.png)
+
+<!-- TODO screenshot: Nucleo-F401RE board with the on-board LED illuminated after a GPIO command -->
+![Nucleo-F401RE board with the on-board LED illuminated after a GPIO command](../assets/hardware/nucleo-setup-04-led-lit.png)
 
 ## Phase 4: Run and Test
 

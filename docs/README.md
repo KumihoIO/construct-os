@@ -1,99 +1,163 @@
-# Construct Documentation Hub
+# Construct Documentation
 
-This page is the primary entry point for the documentation system.
+This page is the primary entry point for the Construct documentation system.
 
-> Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw); see [`NOTICE`](../NOTICE) for full attribution.
+> Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw); see [`NOTICE`](../NOTICE) for full attribution and [`upstream/zeroclaw-attribution.md`](upstream/zeroclaw-attribution.md) for the relationship in plain language.
 
-Last refreshed: **April 21, 2026**.
+Last refreshed: **April 27, 2026**.
 
-Localized hubs: [한국어](i18n/ko/README.md) · [Tiếng Việt](i18n/vi/README.md) · [简体中文](i18n/zh-CN/README.md).
+Localized hubs: [한국어](i18n/ko/README.md) · [Tiếng Việt](i18n/vi/README.md) · [简体中文](i18n/zh-CN/README.md). [What is "Construct"?](../README.md#what-is-construct) at the repository root.
 
-## Start Here
+---
+
+## Start here by audience
+
+- **New to Construct?** → [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md), then [setup-guides/README.md](setup-guides/README.md)
+- **Hardware / embedded target?** → [hardware/README.md](hardware/README.md)
+- **Running Construct in production?** → [ops/README.md](ops/README.md)
+- **Integrating via API / MCP?** → [reference/README.md](reference/README.md) and [contributing/README.md](contributing/README.md)
+- **Reviewing or shipping code?** → [contributing/pr-workflow.md](contributing/pr-workflow.md) + [contributing/reviewer-playbook.md](contributing/reviewer-playbook.md)
+- **Looking for something specific?** → [SUMMARY.md](SUMMARY.md) (the unified TOC)
+
+## Quick task lookup
 
 | I want to… | Read this |
 |---|---|
-| Install and run Construct quickly | [README.md (Quick Start)](../README.md#quick-start) |
+| Install and run Construct quickly | [README.md (Quick Start)](../README.md#install) |
 | Bootstrap in one command | [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) |
+| Set up the Kumiho memory sidecar | [kumiho-operator-setup.md](setup-guides/kumiho-operator-setup.md) |
 | Update or uninstall on macOS | [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md) |
+| Set up Construct on Windows | [windows-setup.md](setup-guides/windows-setup.md) |
 | Find commands by task | [commands-reference.md](reference/cli/commands-reference.md) |
-| Check config defaults and keys quickly | [config-reference.md](reference/api/config-reference.md) |
-| Configure custom providers/endpoints | [custom-providers.md](contributing/custom-providers.md) |
+| Check config defaults and keys | [config-reference.md](reference/api/config-reference.md) |
+| Configure custom providers / endpoints | [custom-providers.md](contributing/custom-providers.md) |
 | Configure Z.AI / GLM provider | [zai-glm-setup.md](setup-guides/zai-glm-setup.md) |
-| Use LangGraph integration patterns | [langgraph-integration.md](contributing/langgraph-integration.md) |
+| Wire Kumiho graph-native memory into an agent | [kumiho-memory-integration.md](contributing/kumiho-memory-integration.md) |
+| Run the embedded React dashboard locally | [dashboard-dev.md](setup-guides/dashboard-dev.md) |
 | Operate runtime (day-2 runbook) | [operations-runbook.md](ops/operations-runbook.md) |
 | Troubleshoot install/runtime/channel issues | [troubleshooting.md](ops/troubleshooting.md) |
 | Run Matrix encrypted-room setup and diagnostics | [matrix-e2ee-guide.md](security/matrix-e2ee-guide.md) |
-| Browse docs by category | [SUMMARY.md](SUMMARY.md) |
 
-## Quick Decision Tree (10 seconds)
+## What makes Construct, Construct
 
-- Need first-time setup or install? → [setup-guides/README.md](setup-guides/README.md)
-- Need exact CLI/config keys? → [reference/README.md](reference/README.md)
-- Need production/service operations? → [ops/README.md](ops/README.md)
-- Seeing failures or regressions? → [troubleshooting.md](ops/troubleshooting.md)
-- Working on security hardening or roadmap? → [security/README.md](security/README.md)
-- Working with boards/peripherals? → [hardware/README.md](hardware/README.md)
-- Contributing/reviewing/CI workflow? → [contributing/README.md](contributing/README.md)
-- Want the full map? → [SUMMARY.md](SUMMARY.md)
+- A **memory-native Rust agent runtime** — every session, plan, skill, and trust score lives in Kumiho's graph; nothing is forgotten.
+- **Single binary** — the gateway, daemon, embedded React dashboard, MCP sidecars, and CLI are one statically-linked executable.
+- **Declarative orchestration** — Operator drives multi-agent workflows defined in YAML.
+- **First-class hardware** — STM32, Arduino, ESP32, Pico, and Aardvark I²C/SPI peripherals all surface as agent tools.
+- **18-route Web UI** — `http://127.0.0.1:42617` covers Orchestration, Operations, and Inspection without leaving the browser.
+- **Trust scoring + ClawHub marketplace** — agents earn trust over runs and share skills via a content-addressed registry.
 
-## What Makes Construct Construct
+---
 
-- Kumiho-native AI agent OS built on a Rust-first runtime.
-- Embedded React dashboard under `web/` for operator-friendly visibility.
-- Operator workflow orchestration via `operator-mcp/`.
-- Kumiho graph memory integration for durable agent context.
-- First-class hardware peripheral stack (STM32, Arduino, ESP32, Pico, Aardvark I2C/SPI).
-- ClawHub marketplace, trust scoring, A2A protocol.
+## Setup & onboarding
 
-## Collections (Recommended)
+- [setup-guides/README.md](setup-guides/README.md) — setup index
+- [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) — single-command install
+- [kumiho-operator-setup.md](setup-guides/kumiho-operator-setup.md) — Kumiho memory sidecar install
+- [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md) — macOS lifecycle operations
+- [windows-setup.md](setup-guides/windows-setup.md) — Windows setup notes
+- [dashboard-dev.md](setup-guides/dashboard-dev.md) — run the `web/` dashboard locally
+- [nextcloud-talk-setup.md](setup-guides/nextcloud-talk-setup.md) — Nextcloud Talk channel
+- [mattermost-setup.md](setup-guides/mattermost-setup.md) — Mattermost channel
+- [zai-glm-setup.md](setup-guides/zai-glm-setup.md) — Z.AI / GLM provider setup
+- [browser-setup.md](browser-setup.md) — browser channel and headless / VNC modes
+- [aardvark-integration.md](aardvark-integration.md) — Aardvark I²C/SPI host adapter
 
-- Getting started: [setup-guides/README.md](setup-guides/README.md)
-- Reference catalogs: [reference/README.md](reference/README.md)
-- Operations & deployment: [ops/README.md](ops/README.md)
-- Security docs: [security/README.md](security/README.md)
-- Hardware/peripherals: [hardware/README.md](hardware/README.md)
-- Contributing/CI: [contributing/README.md](contributing/README.md)
-- Project snapshots: [maintainers/README.md](maintainers/README.md)
+## Using Construct (day-to-day)
 
-## By Audience
-
-### Users / Operators
-
-- [commands-reference.md](reference/cli/commands-reference.md) — command lookup by workflow
-- [providers-reference.md](reference/api/providers-reference.md) — provider IDs, aliases, credential env vars
+- [commands-reference.md](reference/cli/commands-reference.md) — CLI command lookup by workflow
+- [config-reference.md](reference/api/config-reference.md) — config keys, defaults, and secure defaults
+- [providers-reference.md](reference/api/providers-reference.md) — provider IDs, aliases, and credential env vars
 - [channels-reference.md](reference/api/channels-reference.md) — channel capabilities and setup paths
-- [matrix-e2ee-guide.md](security/matrix-e2ee-guide.md) — Matrix encrypted-room (E2EE) setup and no-response diagnostics
-- [config-reference.md](reference/api/config-reference.md) — high-signal config keys and secure defaults
-- [custom-providers.md](contributing/custom-providers.md) — custom provider/base URL integration templates
-- [zai-glm-setup.md](setup-guides/zai-glm-setup.md) — Z.AI/GLM setup and endpoint matrix
-- [langgraph-integration.md](contributing/langgraph-integration.md) — fallback integration for model/tool-calling edge cases
-- [operations-runbook.md](ops/operations-runbook.md) — day-2 runtime operations and rollback flow
-- [troubleshooting.md](ops/troubleshooting.md) — common failure signatures and recovery steps
+- [reference/sop/observability.md](reference/sop/observability.md) — SOP run-state inspection and metrics
+- [openai-temperature-compatibility.md](openai-temperature-compatibility.md) — temperature handling across providers
 
-### Contributors / Maintainers
+## Integrations
 
-- [../CONTRIBUTING.md](../CONTRIBUTING.md)
-- [pr-workflow.md](contributing/pr-workflow.md)
-- [reviewer-playbook.md](contributing/reviewer-playbook.md)
-- [ci-map.md](contributing/ci-map.md)
-- [actions-source-policy.md](contributing/actions-source-policy.md)
+- [contributing/kumiho-memory-integration.md](contributing/kumiho-memory-integration.md) — the two-reflex pattern, capture types, provenance edges
+- [contributing/custom-providers.md](contributing/custom-providers.md) — custom provider / base URL templates
+- [contributing/extension-examples.md](contributing/extension-examples.md) — worked examples of provider/channel/tool extensions
+- [contributing/adding-boards-and-tools.md](contributing/adding-boards-and-tools.md) — adding hardware boards and host-side tools
+- [setup-guides/zai-glm-setup.md](setup-guides/zai-glm-setup.md) — Z.AI / GLM
+- [setup-guides/nextcloud-talk-setup.md](setup-guides/nextcloud-talk-setup.md) — Nextcloud Talk
+- [setup-guides/mattermost-setup.md](setup-guides/mattermost-setup.md) — Mattermost
 
-### Security / Reliability
+## Operations
 
-> Note: this area includes proposal/roadmap docs. For current behavior, start with [config-reference.md](reference/api/config-reference.md), [operations-runbook.md](ops/operations-runbook.md), and [troubleshooting.md](ops/troubleshooting.md).
+- [ops/README.md](ops/README.md) — operations index
+- [ops/operations-runbook.md](ops/operations-runbook.md) — day-2 runtime operations and rollback
+- [ops/troubleshooting.md](ops/troubleshooting.md) — failure signatures and recovery
+- [ops/network-deployment.md](ops/network-deployment.md) — Raspberry Pi / LAN deployment
+- [ops/proxy-agent-playbook.md](ops/proxy-agent-playbook.md) — proxy modes and tool-call routing
+- [ops/resource-limits.md](ops/resource-limits.md) — runtime resource controls
 
-- [security/README.md](security/README.md)
-- [agnostic-security.md](security/agnostic-security.md)
-- [frictionless-security.md](security/frictionless-security.md)
-- [sandboxing.md](security/sandboxing.md)
-- [audit-logging.md](security/audit-logging.md)
-- [resource-limits.md](ops/resource-limits.md)
-- [security-roadmap.md](security/security-roadmap.md)
+## Security
 
-## System Navigation & Governance
+> Some pages in this section are roadmap or proposal docs. For current behaviour, anchor on [config-reference.md](reference/api/config-reference.md), [operations-runbook.md](ops/operations-runbook.md), and [troubleshooting.md](ops/troubleshooting.md).
 
-- Unified TOC: [SUMMARY.md](SUMMARY.md)
-- Docs structure map (language/part/function): [structure/README.md](maintainers/structure-README.md)
-- Documentation inventory/classification: [docs-inventory.md](maintainers/docs-inventory.md)
-- i18n docs index: [i18n/README.md](i18n/README.md)
-- i18n coverage map: [i18n-coverage.md](maintainers/i18n-coverage.md)
+- [security/README.md](security/README.md) — security index
+- [security/agnostic-security.md](security/agnostic-security.md) — provider-agnostic security model
+- [security/frictionless-security.md](security/frictionless-security.md) — defaults that don't slow operators down
+- [security/sandboxing.md](security/sandboxing.md) — Seatbelt / Landlock / Firejail / Bubblewrap layers
+- [security/audit-logging.md](security/audit-logging.md) — Merkle-chained audit log
+- [security/matrix-e2ee-guide.md](security/matrix-e2ee-guide.md) — Matrix E2EE channel setup
+- [security/security-roadmap.md](security/security-roadmap.md) — proposed security work
+
+## Hardware & peripherals
+
+- [hardware/README.md](hardware/README.md) — hardware index
+- [hardware/hardware-peripherals-design.md](hardware/hardware-peripherals-design.md) — peripheral architecture
+- [hardware/nucleo-setup.md](hardware/nucleo-setup.md) — STM32 Nucleo-F401RE
+- [hardware/arduino-uno-q-setup.md](hardware/arduino-uno-q-setup.md) — Arduino Uno Q
+- [hardware/android-setup.md](hardware/android-setup.md) — Android / Termux target
+- [hardware/datasheets/nucleo-f401re.md](hardware/datasheets/nucleo-f401re.md), [arduino-uno.md](hardware/datasheets/arduino-uno.md), [esp32.md](hardware/datasheets/esp32.md)
+
+## Contributing
+
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) — top-level contributor entry
+- [contributing/README.md](contributing/README.md) — contributor index
+- [contributing/pr-workflow.md](contributing/pr-workflow.md) — PR governance and review lanes
+- [contributing/reviewer-playbook.md](contributing/reviewer-playbook.md) — reviewer guide
+- [contributing/pr-discipline.md](contributing/pr-discipline.md) — discipline norms
+- [contributing/ci-map.md](contributing/ci-map.md) — CI workflow map
+- [contributing/actions-source-policy.md](contributing/actions-source-policy.md) — GitHub Actions source policy
+- [contributing/release-process.md](contributing/release-process.md) — release flow
+- [contributing/testing.md](contributing/testing.md), [testing-telegram.md](contributing/testing-telegram.md), [cargo-slicer-speedup.md](contributing/cargo-slicer-speedup.md)
+- [contributing/docs-contract.md](contributing/docs-contract.md) — docs-pairing contract
+- [contributing/doc-template.md](contributing/doc-template.md) — doc starter template
+- [contributing/label-registry.md](contributing/label-registry.md), [change-playbooks.md](contributing/change-playbooks.md)
+- [contributing/cla.md](contributing/cla.md) — Contributor License Agreement
+
+## Architecture & reference
+
+- [architecture/adr-004-tool-shared-state-ownership.md](architecture/adr-004-tool-shared-state-ownership.md) — shared-state ownership for tools
+- [architecture/adr-005-operator-liveness-and-rust-migration.md](architecture/adr-005-operator-liveness-and-rust-migration.md) — Operator → Rust migration (proposed)
+- [reference/README.md](reference/README.md) — reference index
+- [reference/sop/connectivity.md](reference/sop/connectivity.md) — connectivity SOPs
+- [reference/sop/observability.md](reference/sop/observability.md) — observability SOPs
+
+## Maintainer notes
+
+- [maintainers/README.md](maintainers/README.md) — maintainer index
+- [maintainers/repo-map.md](maintainers/repo-map.md) — repo top-level map
+- [maintainers/structure-README.md](maintainers/structure-README.md) — docs structure map (language / part / function)
+- [maintainers/docs-inventory.md](maintainers/docs-inventory.md) — docs inventory and classification
+- [maintainers/i18n-coverage.md](maintainers/i18n-coverage.md) — translation coverage matrix
+- [maintainers/refactor-candidates.md](maintainers/refactor-candidates.md) — files ripe for refactor
+- [maintainers/trademark.md](maintainers/trademark.md) — naming and attribution norms
+- [maintainers/project-triage-snapshot-2026-02-18.md](maintainers/project-triage-snapshot-2026-02-18.md) — archived triage snapshot
+
+## License & upstream attribution
+
+- [`../NOTICE`](../NOTICE) — root NOTICE with upstream ZeroClaw attribution preserved per Apache 2.0 §4(c)
+- [`../LICENSE-MIT`](../LICENSE-MIT), [`../LICENSE-APACHE`](../LICENSE-APACHE) — dual-license texts
+- [upstream/zeroclaw-attribution.md](upstream/zeroclaw-attribution.md) — what we inherited from ZeroClaw and the fork-compliance checklist
+- [maintainers/trademark.md](maintainers/trademark.md) — Construct naming norms and the ZeroClaw trademark acknowledgement
+
+## Other languages
+
+- [한국어 (Korean)](i18n/ko/README.md)
+- [Tiếng Việt (Vietnamese)](i18n/vi/README.md)
+- [简体中文 (Simplified Chinese)](i18n/zh-CN/README.md)
+
+Translations are best-effort. Pages without a translation fall back to the English source.

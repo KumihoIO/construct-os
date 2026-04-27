@@ -15,6 +15,9 @@ Common key patterns:
 
 ## 2. Inspection Paths
 
+<!-- TODO screenshot: terminal showing `construct sop list` output -->
+![Terminal showing construct sop list output](../../assets/reference/observability-01-sop-list.png)
+
 ### 2.1 Definition-level CLI
 
 ```bash
@@ -22,6 +25,9 @@ construct sop list
 construct sop validate [name]
 construct sop show <name>
 ```
+
+<!-- TODO screenshot: dashboard showing in-flight SOP runs and per-step gate status -->
+![Dashboard showing in-flight SOP runs and per-step gate status](../../assets/reference/observability-02-dashboard-sop-runs.png)
 
 ### 2.2 Runtime run-state tools
 
@@ -31,6 +37,9 @@ SOP run state is queried from in-agent tools:
 - `sop_status` with `include_gate_status: true` — trust phase and gate evaluator state (when available)
 - `sop_approve` — approve waiting run step
 - `sop_advance` — submit step result and move run forward
+
+<!-- TODO screenshot: Prometheus metrics endpoint response for Construct SOP execution counters -->
+![Prometheus metrics endpoint response for Construct SOP execution counters](../../assets/reference/observability-03-prometheus-metrics.png)
 
 ## 3. Metrics
 

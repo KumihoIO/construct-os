@@ -13,7 +13,7 @@ Tra cứu lệnh, provider, channel, config và tích hợp.
 
 - Endpoint provider tùy chỉnh: [../custom-providers.md](../custom-providers.md)
 - Tích hợp provider Z.AI / GLM: [../zai-glm-setup.md](../zai-glm-setup.md)
-- Các mẫu tích hợp dựa trên LangGraph: [../langgraph-integration.md](../langgraph-integration.md)
+- Mẫu tích hợp bộ nhớ nhận thức Kumiho graph-native: [../../../contributing/kumiho-memory-integration.md](../../../contributing/kumiho-memory-integration.md) *(tiếng Anh)*
 
 ## Cách dùng
 

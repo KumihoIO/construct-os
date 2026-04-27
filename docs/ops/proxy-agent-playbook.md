@@ -59,6 +59,9 @@ Go to:
 
 ---
 
+<!-- TODO screenshot: dashboard proxy configuration panel showing selected proxy mode -->
+![Dashboard proxy configuration panel showing selected proxy mode](../assets/ops/proxy-agent-01-dashboard-config.png)
+
 ## 2. Scope Decision Matrix
 
 | Scope | Affects | Exports env vars | Typical use |
