@@ -1926,10 +1926,12 @@ async def list_tools() -> list[Tool]:
             name="record_agent_outcome",
             description=(
                 "Record an agent outcome (discovery / decision / lesson / insight / warning / fact) "
-                "into Construct/Sessions/<session_id>/Outcomes/. Outcomes are append-only memories "
-                "that downstream agents in the same workflow / handoff chain inherit via "
-                "recall_session_outcomes. Pass `related_krefs` (e.g. an artifact kref the agent "
-                "produced) to create INFORMS edges so the graph traces which inputs led to the outcome."
+                "into the harness project's Sessions/<session_id>/Outcomes/ space. The harness "
+                "project comes from your config — this tool resolves it for you. Outcomes are "
+                "append-only memories that downstream agents in the same workflow / handoff chain "
+                "inherit via recall_session_outcomes. Pass `related_krefs` (e.g. an artifact kref "
+                "the agent produced) to create INFORMS edges so the graph traces which inputs led "
+                "to the outcome."
             ),
             inputSchema={
                 "type": "object",
