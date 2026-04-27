@@ -1114,12 +1114,85 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             // a Future, but dropping it does not cancel a tokio task).
             // Future improvement: store the handle on AppState and
             // abort on shutdown so tests don't leak the task.
-            drop(effectiveness_cache.spawn_refresh_task(
+            drop(effectiveness_cache.clone().spawn_refresh_task(
                 kumiho_client,
                 memory_project,
                 skill_names,
                 crate::skills::effectiveness_cache::DEFAULT_REFRESH_INTERVAL,
             ));
+
+            // ── Auto-improve loop (closes the self-improvement loop) ─────
+            //
+            // On the same cadence as the cache refresh, walk the latest
+            // candidates and ask the LLM to rewrite each regressed skill.
+            // Cooldowns + atomic-write live inside SkillImprover, so this
+            // task is just the dispatcher.  Skipped entirely when the
+            // skill-creation feature is disabled, when the user has
+            // turned auto-improvement off in config, or when the daemon
+            // has no chat provider configured.
+            #[cfg(feature = "skill-creation")]
+            if config.skills.skill_improvement.enabled {
+                let cache_for_improver = effectiveness_cache.clone();
+                let auto_workspace = workspace_dir.clone();
+                let auto_provider = state.provider.clone();
+                let auto_model = state.model.clone();
+                let auto_improver_config = config.skills.skill_improvement.clone();
+
+                tracing::info!(
+                    cooldown_secs = auto_improver_config.cooldown_secs,
+                    "skill auto-improve: starting LLM-driven rewrite loop",
+                );
+
+                drop(tokio::spawn(async move {
+                    let ctx = crate::skills::auto_improve::AutoImproveContext {
+                        workspace_dir: auto_workspace.clone(),
+                        provider: auto_provider,
+                        model: auto_model,
+                        temperature: crate::skills::auto_improve::DEFAULT_REWRITE_TEMPERATURE,
+                    };
+                    let mut improver = crate::skills::improver::SkillImprover::new(
+                        auto_workspace,
+                        auto_improver_config,
+                    );
+
+                    let mut ticker = tokio::time::interval(
+                        crate::skills::effectiveness_cache::DEFAULT_REFRESH_INTERVAL,
+                    );
+                    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    // First tick fires immediately; cache is still empty
+                    // at startup so improvement_candidates() returns [].
+                    // Subsequent ticks see whatever the refresh task has
+                    // populated.
+
+                    loop {
+                        ticker.tick().await;
+                        for cand in cache_for_improver.improvement_candidates() {
+                            match crate::skills::auto_improve::attempt_skill_improvement(
+                                &ctx,
+                                &cand,
+                                &mut improver,
+                            )
+                            .await
+                            {
+                                Ok(Some(slug)) => tracing::info!(
+                                    skill = %slug,
+                                    rate = cand.rate,
+                                    total = cand.total,
+                                    "auto-improve: skill rewritten",
+                                ),
+                                Ok(None) => {
+                                    // cooldown / file missing / no toml fence — silent skip
+                                }
+                                Err(e) => tracing::warn!(
+                                    skill = %cand.skill_name,
+                                    error = %e,
+                                    "auto-improve: attempt failed",
+                                ),
+                            }
+                        }
+                    }
+                }));
+            }
         }
     }
 
