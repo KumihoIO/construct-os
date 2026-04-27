@@ -1087,6 +1087,68 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         let workspace_dir = config.workspace_dir.clone();
         let config_for_skills = config.clone();
 
+        // Daemon-startup skill registration scan.
+        //
+        // Walk every directory under `<workspace>/skills/` and register
+        // any skill whose SKILL.toml is missing `[skill].kref`.  This is
+        // the safety-net that catches skills installed without a Kumiho
+        // round-trip (CLI install with Kumiho unreachable, manual file
+        // drop, skills materialised by a sibling tool).  Each call is
+        // idempotent — already-registered skills are a no-op cheap.
+        // The scan runs in the background so a slow Kumiho doesn't
+        // delay gateway readiness.
+        {
+            let scan_workspace = workspace_dir.clone();
+            let scan_project = memory_project.clone();
+            let scan_client = crate::gateway::kumiho_client::build_client_from_config(&config);
+            drop(tokio::spawn(async move {
+                let skills_root = crate::skills::skills_dir(&scan_workspace);
+                let mut entries = match tokio::fs::read_dir(&skills_root).await {
+                    Ok(e) => e,
+                    Err(_) => return,
+                };
+                while let Ok(Some(entry)) = entries.next_entry().await {
+                    let dir = entry.path();
+                    if !dir.is_dir() {
+                        continue;
+                    }
+                    if !dir.join("SKILL.toml").exists() {
+                        continue;
+                    }
+                    match crate::skills::registration::register_skill_with_kumiho(
+                        &dir,
+                        &scan_client,
+                        &scan_project,
+                    )
+                    .await
+                    {
+                        Ok(crate::skills::registration::SkillRegistration::Registered {
+                            kref,
+                            ..
+                        }) => {
+                            tracing::info!(
+                                skill_dir = %dir.display(),
+                                kref,
+                                "daemon-startup: registered skill with Kumiho",
+                            );
+                        }
+                        Ok(crate::skills::registration::SkillRegistration::AlreadyRegistered {
+                            ..
+                        }) => {
+                            // No-op — common case after first run.
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                skill_dir = %dir.display(),
+                                error = ?e,
+                                "daemon-startup: skill registration failed; will retry next start",
+                            );
+                        }
+                    }
+                }
+            }));
+        }
+
         // Load the skill names once at startup — the refresh task only
         // queries Kumiho for skills already loaded into the runtime, so a
         // brand-new skill added later won't be reranked until restart.
