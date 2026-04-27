@@ -23,10 +23,14 @@ Construct is **open source**. The persistent graph memory it depends on — Kumi
 | Layer | What it is | License |
 |---|---|---|
 | **Construct** (this repo) | Rust gateway + daemon + agent loop + channels + tools + peripherals + embedded React dashboard + Tauri desktop app + CLI + Operator Python MCP | MIT **or** Apache 2.0 — your choice |
-| **Kumiho SDKs** ([KumihoIO](https://github.com/KumihoIO)) | Python, Rust, and TypeScript clients to the Kumiho graph server | Open source |
-| **Kumiho server** (`api.kumiho.cloud`) | The version-controlled, schemaless, typed-edge graph that gives Construct its memory; DreamState consolidation; control-plane infra | Managed service · Free 5k nodes → paid tiers from $40/mo · Self-host on Enterprise |
+| **Kumiho SDKs** ([kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs)) | Python clients: `kumiho` (the graph backend) and `kumiho-memory` (the AI cognitive memory layer Construct integrates with) | Open source |
+| **Kumiho server** (control plane) | The version-controlled, schemaless, typed-edge graph engine — DreamState consolidation runs here, Neo4j is its store. Reached by clients over HTTP through the **kumiho-FastAPI BFF** at `api.kumiho.cloud`. | Managed service · Free 5k nodes → paid tiers from $40/mo · Self-host on Enterprise |
 
 LLM inference is **bring-your-own-provider**. We don't proxy or mark up tokens. You point Construct at Anthropic, OpenAI, OpenRouter, Ollama, GLM, or any of [14+ providers](docs/reference/api/providers-reference.md), and your keys stay yours.
+
+**Operator** (the orchestration layer) needs a provider for its own LLM calls — supervisor decompose, map-reduce reduce, refinement critic, group-chat moderate. It defaults to an API key and also supports OAuth, configured under `[operator]`.
+
+**Agents that Operator spawns behave differently.** Each `agent` step invokes the **Claude Code** or **Codex CLI** as a subprocess — prompt piped over stdin to avoid `ARG_MAX` and shell-encoding issues — and the CLI's existing OAuth handles auth. Your Claude Pro / Codex CLI subscription becomes the spawned-agent runtime: no per-call API spend on the spawned agents themselves. Direct API keys still apply to one-shot `construct agent` calls and channel-routed conversations.
 
 Construct talks to Kumiho over HTTP via `[kumiho].api_url` in your config. Without a reachable Kumiho endpoint, Construct degrades to stateless single-agent operation — useful for demos and CI, but the cross-session memory, provenance edges, audit chain, and trust scoring all live in the graph. Pricing and self-host: [kumiho.io/pricing](https://kumiho.io/pricing).
 
@@ -41,6 +45,9 @@ Construct is a Rust-native AI agent runtime with persistent cognitive memory, mu
 At the core: a **Rust gateway** (Axum) serves a **React/TypeScript Web Dashboard**, a Python **Operator** drives multi-agent orchestration, and **Kumiho** (graph-native, Neo4j-backed) holds all persistent state. Define declarative YAML workflows, watch agents execute them in real time via a DAG-based live view, trace every tool call and output, and see trust scores evolve across runs — all from a browser.
 
 No hidden state. No forgotten runs. The only thing the system asks of you is that you notice.
+
+<!-- TODO screenshot: Construct dashboard at http://127.0.0.1:42617 showing live runtime posture — active sessions, channels, audit chain, cost metrics, and recent workflow runs -->
+![Construct dashboard at localhost:42617 showing live runtime posture — active sessions, channels, audit chain, cost metrics, and recent workflow runs](docs/assets/dashboard/readme-01-dashboard-hero.png)
 
 ---
 
@@ -76,6 +83,9 @@ The dashboard is organized into three sidebar sections (Orchestration, Operation
 | **Teams** | `/teams` | Team builder with graph view of agent relationships and delegation topology |
 
 ### Live Workflow Execution View
+
+<!-- TODO screenshot: live workflow execution view — interactive DAG with steps shifting through pending → running → completed, WebSocket event streaming, and per-step detail panel (Live Events / Tool Calls / Output) -->
+![Live workflow execution view: interactive DAG with steps shifting through pending, running, and completed states, WebSocket event streaming, and per-step detail panel](docs/assets/dashboard/readme-02-workflow-dag.png)
 
 When a workflow runs, you watch the signal propagate:
 
@@ -124,6 +134,9 @@ When a workflow runs, you watch the signal propagate:
 ## The Operator (Workflow Orchestration)
 
 The **Operator** is Construct's hand on the controls — a Python MCP server that drives declarative YAML workflows through 17 step types and several advanced orchestration patterns. Agents run inside the Construct; the Operator sees the whole board.
+
+<!-- TODO screenshot: Workflows view with YAML editor on the left and DAG workspace on the right, showing a declarative multi-agent workflow definition with step dependencies -->
+![Workflows view with YAML editor and DAG workspace for declarative multi-agent workflow definition](docs/assets/dashboard/readme-03-workflow-yaml.png)
 
 ### Step Types
 
@@ -228,6 +241,9 @@ Reusable agent definitions stored in `~/.construct/agent_pool.json` and synced t
 
 Every agent execution is scored. Reputation is not assumed — it's earned, recorded, and queryable in Kumiho under `Construct/AgentTrust/`.
 
+<!-- TODO screenshot: AgentTrust view in the dashboard showing per-agent trust score, total runs, recent outcome chips (success/partial/failed), and template attribution -->
+![AgentTrust view: per-agent trust score, total runs, recent outcomes, and template attribution](docs/assets/dashboard/readme-04-trust-scoring.png)
+
 | Metric | Description |
 |--------|-------------|
 | `trust_score` | Running average (0.0–1.0), computed as `total_score / total_runs` |
@@ -256,6 +272,9 @@ Construct implements the [Google Agent-to-Agent (A2A) protocol](https://google.g
 ## Kumiho Memory Integration
 
 Kumiho is the sole persistent backend. Everything the system knows lives here, as graph-native items with full versioning, provenance tracking, and edge relationships. If it happened, there is a trace.
+
+<!-- TODO screenshot: Memory graph explorer at /memory — force-directed visualization of nodes, revisions, and provenance edges across Construct namespaces (AgentPool, Plans, Sessions, AgentTrust, etc.) -->
+![Kumiho memory graph explorer: force-directed visualization of nodes, revisions, and provenance edges across Construct namespaces](docs/assets/dashboard/readme-05-memory-graph.png)
 
 The namespaces below are Operator/Construct **conventions** — normal Kumiho spaces under `space_prefix = "Construct"` (set in `config.toml`) and, for skills, under `KUMIHO_MEMORY_PROJECT` (default `CognitiveMemory`). They are not schema-enforced typed namespaces.
 
@@ -410,7 +429,7 @@ Add `--features channel-matrix,channel-lark,browser-native,hardware,rag-pdf,obse
 - **Rust stable (1.87+)** — `install.sh` / `setup.bat` will install it via rustup if missing.
 - **Python 3.11+** — required for the Kumiho and Operator Python MCP sidecars.
 - **Node.js 20+** — optional, only needed to rebuild the embedded React dashboard from source (`cd web && npm install && npx vite build`). The dashboard is re-embedded into the Rust binary at compile time via `rust-embed`.
-- **Kumiho endpoint** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml`. Default points at the managed control plane (`https://api.kumiho.cloud`); free tier is 5,000 nodes, sign up at [kumiho.io](https://kumiho.io). Self-host is available on Enterprise. Without a reachable Kumiho endpoint Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
+- **Kumiho endpoint** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml`. Default points at the **kumiho-FastAPI BFF** (`https://api.kumiho.cloud`) that fronts the managed control plane; free tier is 5,000 nodes, sign up at [kumiho.io](https://kumiho.io). Self-host is available on Enterprise. Without a reachable Kumiho endpoint Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
 - **Disk / RAM** — source build needs ~6 GB free disk and ~2 GB free RAM; prebuilt binary is ~200 MB.
 
 > **Sidecar re-install.** To re-run sidecar install independently of the main bootstrap:
@@ -493,10 +512,10 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 | Layer | Technology |
 |-------|------------|
 | Runtime & Gateway | Rust (edition 2024), Axum + Tower, Hyper; embedded frontend via `rust-embed` |
-| Agent Loop | Rust (async/tokio, 14+ provider adapters: Anthropic, OpenAI, OpenAI-Codex, Bedrock, Azure OpenAI, Gemini, Gemini CLI, GLM, Copilot, Ollama, OpenRouter, Kilo CLI, Telnyx, Claude Code, plus reliable/router/compatible wrappers) |
+| Agent Loop | Rust (async/tokio, 14+ provider adapters: Anthropic, OpenAI, OpenAI-Codex, Bedrock, Azure OpenAI, Gemini, Gemini CLI, GLM, Copilot, Ollama, OpenRouter, Kilo CLI, Telnyx, Claude Code, plus reliable/router/compatible wrappers). Operator's own orchestration calls (decompose / reduce / critic / moderate) use a provider via API key or OAuth under `[operator]`; agents Operator spawns invoke the Claude Code / Codex CLI as subprocesses, inheriting the CLI's OAuth. |
 | Orchestration | Python 3.11+ Operator MCP server (17 step types, map-reduce / supervisor / group-chat / handoff / refinement patterns) |
 | Web Dashboard | React 19, TypeScript, Tailwind CSS 4, Vite 6, ReactFlow + react-force-graph-2d |
-| Memory Backend | Kumiho — graph-native, schemaless, version-controlled, typed-edge graph (managed service or Enterprise self-host); SDKs in Python / Rust / TypeScript at [github.com/KumihoIO](https://github.com/KumihoIO) |
+| Memory Backend | Kumiho — graph-native, schemaless, version-controlled, typed-edge graph (control plane fronted by kumiho-FastAPI BFF; managed service or Enterprise self-host); Python SDKs at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs) — `kumiho` (graph) + `kumiho-memory` (AI cognitive memory) |
 | Local Storage | SQLite via `rusqlite` for cron store, pairing, heartbeat, channel sessions, WhatsApp cache (not for primary memory) |
 | Desktop App | Tauri 2 companion under `apps/tauri` (system-tray / menu-bar) launched via `construct desktop` |
 | Real-time | WebSocket (`/ws/chat`, `/ws/canvas/{id}`, `/ws/nodes`, `/ws/terminal`, `/ws/mcp/events`), SSE (`/api/events`, `/api/daemon/logs`) |
@@ -524,7 +543,7 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 
 ## Related projects
 
-- **Kumiho** — graph memory backend. SDKs at [github.com/KumihoIO](https://github.com/KumihoIO); pricing and self-host at [kumiho.io/pricing](https://kumiho.io/pricing).
+- **Kumiho** — graph memory backend. SDKs at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs); pricing and self-host at [kumiho.io/pricing](https://kumiho.io/pricing).
 - **ZeroClaw** — upstream Rust agent runtime that Construct's core forks from. [github.com/zeroclaw-labs/zeroclaw](https://github.com/zeroclaw-labs/zeroclaw).
 - **OpenClaw** — separate TypeScript agent platform; Construct can import its data via `construct migrate`. [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw).
 
@@ -537,6 +556,6 @@ See [`docs/reference/api/config-reference.md`](docs/reference/api/config-referen
 
 Both licenses preserve the upstream `Copyright (c) 2025 ZeroClaw Labs` per fork-attribution requirements; see [`NOTICE`](NOTICE) and [`docs/upstream/zeroclaw-attribution.md`](docs/upstream/zeroclaw-attribution.md).
 
-The **Kumiho graph server** (the managed memory backend Construct talks to) is *not* covered by these licenses. It is a hosted service; the Kumiho **SDKs** are open source on their own repos at [github.com/KumihoIO](https://github.com/KumihoIO). Self-hosting the Kumiho server is available on Enterprise (closed-source license) — see [kumiho.io/pricing](https://kumiho.io/pricing).
+The **Kumiho server** (the control plane where Construct's memory ultimately lives) is *not* covered by these licenses. It is reached over HTTP through the **kumiho-FastAPI BFF** at `api.kumiho.cloud`, and is offered as a managed service; the Kumiho **SDKs** are open source at [github.com/KumihoIO/kumiho-SDKs](https://github.com/KumihoIO/kumiho-SDKs). Self-hosting the Kumiho server is available on Enterprise (closed-source license) — see [kumiho.io/pricing](https://kumiho.io/pricing).
 
 Contributions to this repository are accepted under the dual license model; the Apache 2.0 patent grant protects all contributors. See [`docs/contributing/cla.md`](docs/contributing/cla.md).
