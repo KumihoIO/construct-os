@@ -31,6 +31,10 @@ pub mod nodes;
 pub mod session_queue;
 pub mod sse;
 pub mod static_files;
+// portable-pty needs `openpty` from libutil which Android's NDK does not
+// reliably link.  The websocket terminal isn't a meaningful surface on a
+// phone runtime anyway, so we drop the module + its route on Android.
+#[cfg(not(target_os = "android"))]
 pub mod terminal;
 pub mod tls;
 pub mod ws;
@@ -1314,9 +1318,16 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // ── WebSocket canvas updates ──
         .route("/ws/canvas/{id}", get(canvas::handle_ws_canvas))
         // ── WebSocket node discovery ──
-        .route("/ws/nodes", get(nodes::handle_ws_nodes))
-        // ── WebSocket PTY terminal ──
-        .route("/ws/terminal", get(terminal::handle_ws_terminal))
+        .route("/ws/nodes", get(nodes::handle_ws_nodes));
+
+    // ── WebSocket PTY terminal ──
+    // portable-pty needs `openpty` from libutil which Android's NDK does not
+    // reliably link, and a phone-runtime websocket terminal isn't a real
+    // surface anyway.  Skip the route on Android.
+    #[cfg(not(target_os = "android"))]
+    let inner = inner.route("/ws/terminal", get(terminal::handle_ws_terminal));
+
+    let inner = inner
         // ── WebSocket proxy onto the in-process MCP server's session events ──
         .route("/ws/mcp/events", get(ws_mcp_events::handle_ws_mcp_events))
         // ── Static assets (web dashboard) ──
