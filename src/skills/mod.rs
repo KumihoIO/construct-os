@@ -75,9 +75,12 @@ pub struct SkillTool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SkillManifest {
     skill: SkillMeta,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tools: Vec<SkillTool>,
-    #[serde(default)]
+    /// Legacy embedded prompt content.  Kept on the manifest for
+    /// backwards compatibility — newer manifests use
+    /// `[skill].content_file` instead and leave this empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     prompts: Vec<String>,
 }
 
@@ -87,10 +90,22 @@ struct SkillMeta {
     description: String,
     #[serde(default = "default_version")]
     version: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     author: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
+    /// Optional pointer to an external content file (markdown), relative
+    /// to the SKILL.toml directory.  When present, the file's body is used
+    /// as the skill's prompt content and the manifest's embedded
+    /// `prompts = [...]` array is ignored.
+    ///
+    /// Step 6a in the self-improving plan: lifting prompt content out of
+    /// the manifest is the prerequisite for making each improvement
+    /// create a NEW file at a NEW path (so revisions don't clobber each
+    /// other on disk).  Step 6b will add a `kref` alternative that
+    /// resolves through Kumiho's `?t=published` revision selector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    content_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -542,10 +557,21 @@ fn mark_open_skills_synced(repo_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Load a skill from a SKILL.toml manifest
+/// Load a skill from a SKILL.toml manifest.
+///
+/// Resolution order for the prompt content:
+/// 1. **`[skill].content_file`** — external markdown file relative to
+///    the SKILL.toml directory.  When set, its body is used as the
+///    single prompt entry (the manifest's `prompts = [...]` array is
+///    ignored).  If the file is missing or unreadable we log a warning
+///    and fall back to the embedded prompts so the skill is still usable.
+/// 2. **embedded `prompts = [...]`** — legacy path used by skills that
+///    haven't been migrated yet.
 fn load_skill_toml(path: &Path) -> Result<Skill> {
     let content = std::fs::read_to_string(path)?;
     let manifest: SkillManifest = toml::from_str(&content)?;
+
+    let prompts = resolve_skill_prompts(path, &manifest);
 
     Ok(Skill {
         name: manifest.skill.name,
@@ -554,8 +580,138 @@ fn load_skill_toml(path: &Path) -> Result<Skill> {
         author: manifest.skill.author,
         tags: manifest.skill.tags,
         tools: manifest.tools,
-        prompts: manifest.prompts,
+        prompts,
         location: Some(path.to_path_buf()),
+    })
+}
+
+/// Resolve the prompts for a skill manifest.  Kept separate from
+/// [`load_skill_toml`] so callers (and unit tests) can exercise the
+/// precedence rules without rewriting the loader.
+fn resolve_skill_prompts(manifest_path: &Path, manifest: &SkillManifest) -> Vec<String> {
+    let Some(rel) = manifest.skill.content_file.as_deref() else {
+        return manifest.prompts.clone();
+    };
+
+    let manifest_dir = manifest_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let content_path = manifest_dir.join(rel);
+
+    match std::fs::read_to_string(&content_path) {
+        Ok(body) => {
+            if !manifest.prompts.is_empty() {
+                tracing::warn!(
+                    skill_manifest = %manifest_path.display(),
+                    content_file = %content_path.display(),
+                    "SKILL.toml has both `content_file` and `prompts = [...]`; \
+                     using content_file and ignoring embedded prompts",
+                );
+            }
+            vec![body]
+        }
+        Err(err) => {
+            tracing::warn!(
+                skill_manifest = %manifest_path.display(),
+                content_file = %content_path.display(),
+                error = %err,
+                "SKILL.toml content_file unreadable; falling back to embedded prompts",
+            );
+            manifest.prompts.clone()
+        }
+    }
+}
+
+/// Outcome of [`migrate_skill_toml_to_content_file`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillContentMigration {
+    /// SKILL.toml already has a `content_file` pointer — no work to do.
+    AlreadyMigrated,
+    /// Manifest had no embedded prompts to migrate.
+    NothingToMigrate,
+    /// Successfully extracted prompts to a new content file and updated
+    /// the manifest in place.
+    Migrated {
+        manifest: PathBuf,
+        content_file: PathBuf,
+    },
+}
+
+/// Migrate a legacy SKILL.toml (embedded `prompts = [...]`) into the
+/// new content-file shape:
+///
+/// * Joins the prompts array into a single markdown body (entries
+///   separated by a blank line).
+/// * Writes the body to `<skill_dir>/contents/r1-<YYYY-MM-DD>.md`.
+/// * Rewrites the manifest in place with `[skill].content_file =
+///   "contents/r1-<YYYY-MM-DD>.md"` and the `prompts` table removed.
+///
+/// Idempotent: when the manifest already has `content_file` set the
+/// function returns [`SkillContentMigration::AlreadyMigrated`] without
+/// touching disk.  When the manifest has no prompts to migrate it
+/// returns [`SkillContentMigration::NothingToMigrate`].
+///
+/// Used by an admin / CLI tool — not called from the hot path.  Step 6b
+/// will add Kumiho revisioning on top of the migrated layout; doing the
+/// disk-side split as its own step keeps the rollout cheap to verify.
+pub fn migrate_skill_toml_to_content_file(manifest_path: &Path) -> Result<SkillContentMigration> {
+    let raw = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("reading SKILL.toml manifest: {}", manifest_path.display()))?;
+    let manifest: SkillManifest = toml::from_str(&raw)
+        .with_context(|| format!("parsing SKILL.toml manifest: {}", manifest_path.display()))?;
+
+    if manifest.skill.content_file.is_some() {
+        return Ok(SkillContentMigration::AlreadyMigrated);
+    }
+    if manifest.prompts.is_empty() {
+        return Ok(SkillContentMigration::NothingToMigrate);
+    }
+
+    let manifest_dir = manifest_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let contents_dir = manifest_dir.join("contents");
+    std::fs::create_dir_all(&contents_dir)
+        .with_context(|| format!("creating contents/ directory: {}", contents_dir.display()))?;
+
+    let date_stamp = chrono::Utc::now().format("%Y-%m-%d");
+    let rel_filename = format!("contents/r1-{date_stamp}.md");
+    let content_path = manifest_dir.join(&rel_filename);
+
+    // Body: one prompt per paragraph, blank line between, trailing newline.
+    let mut body = String::new();
+    for (i, p) in manifest.prompts.iter().enumerate() {
+        if i > 0 {
+            body.push_str("\n\n");
+        }
+        body.push_str(p.trim_end());
+    }
+    if !body.ends_with('\n') {
+        body.push('\n');
+    }
+
+    std::fs::write(&content_path, body.as_bytes())
+        .with_context(|| format!("writing content file: {}", content_path.display()))?;
+
+    // Rebuild the manifest with content_file set + prompts removed.
+    let mut new_manifest = manifest.clone();
+    new_manifest.skill.content_file = Some(rel_filename.clone());
+    new_manifest.prompts = Vec::new();
+
+    let serialized = toml::to_string_pretty(&new_manifest)
+        .context("serializing migrated SKILL.toml manifest")?;
+    std::fs::write(manifest_path, serialized.as_bytes()).with_context(|| {
+        format!(
+            "writing migrated SKILL.toml manifest: {}",
+            manifest_path.display()
+        )
+    })?;
+
+    Ok(SkillContentMigration::Migrated {
+        manifest: manifest_path.to_path_buf(),
+        content_file: content_path,
     })
 }
 
@@ -1729,6 +1885,208 @@ command = "echo hello"
     fn skills_to_prompt_empty() {
         let prompt = skills_to_prompt(&[], Path::new("/tmp"));
         assert!(prompt.is_empty());
+    }
+
+    // ── content_file precedence + migration (step 6a) ────────────────
+
+    fn write_skill_toml(dir: &Path, body: &str) -> PathBuf {
+        let path = dir.join("SKILL.toml");
+        fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn load_skill_toml_uses_content_file_when_set() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("contents")).unwrap();
+        fs::write(
+            dir.path().join("contents/r1-2026-04-27.md"),
+            "## external content\n\nthe external markdown body",
+        )
+        .unwrap();
+
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"[skill]
+name = "ext-skill"
+description = "external content"
+version = "0.1.0"
+content_file = "contents/r1-2026-04-27.md"
+"#,
+        );
+
+        let skill = load_skill_toml(&manifest).expect("loads");
+        assert_eq!(skill.name, "ext-skill");
+        assert_eq!(skill.prompts.len(), 1);
+        assert!(skill.prompts[0].contains("the external markdown body"));
+    }
+
+    #[test]
+    fn load_skill_toml_falls_back_to_embedded_when_content_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        // `prompts` is a top-level field on SkillManifest — it must come
+        // BEFORE the [skill] table or TOML treats it as a child of
+        // [skill] (see the migrate test below for the same gotcha with
+        // [[tools]]).
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"prompts = ["embedded fallback content"]
+
+[skill]
+name = "fallback-skill"
+description = "ext missing"
+version = "0.1.0"
+content_file = "contents/does-not-exist.md"
+"#,
+        );
+
+        let skill = load_skill_toml(&manifest).expect("loads");
+        assert_eq!(skill.prompts, vec!["embedded fallback content".to_string()]);
+    }
+
+    #[test]
+    fn load_skill_toml_uses_embedded_when_no_content_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"prompts = ["legacy step one", "legacy step two"]
+
+[skill]
+name = "legacy-skill"
+description = "no content_file"
+version = "0.1.0"
+"#,
+        );
+
+        let skill = load_skill_toml(&manifest).expect("loads");
+        assert_eq!(skill.prompts.len(), 2);
+        assert_eq!(skill.prompts[0], "legacy step one");
+        assert_eq!(skill.prompts[1], "legacy step two");
+    }
+
+    #[test]
+    fn load_skill_toml_content_file_takes_precedence_over_prompts() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("contents")).unwrap();
+        fs::write(
+            dir.path().join("contents/r1.md"),
+            "WIN: external content used",
+        )
+        .unwrap();
+
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"prompts = ["LOSE: should be ignored"]
+
+[skill]
+name = "both-skill"
+description = "both fields set"
+version = "0.1.0"
+content_file = "contents/r1.md"
+"#,
+        );
+
+        let skill = load_skill_toml(&manifest).expect("loads");
+        assert_eq!(skill.prompts.len(), 1);
+        assert!(skill.prompts[0].contains("WIN"));
+        assert!(!skill.prompts[0].contains("LOSE"));
+    }
+
+    #[test]
+    fn migrate_skill_toml_writes_content_file_and_rewrites_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        // `prompts` MUST come before [skill] / [[tools]] tables so it
+        // parses as a top-level field (the very gotcha this PR avoids
+        // by externalising prompt content).
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"prompts = ["Step alpha", "Step beta"]
+
+[skill]
+name = "to-migrate"
+description = "legacy skill"
+version = "0.2.0"
+
+[[tools]]
+name = "ping"
+description = "echo"
+kind = "shell"
+command = "echo hi"
+"#,
+        );
+
+        let result = migrate_skill_toml_to_content_file(&manifest).expect("migrates");
+        match &result {
+            SkillContentMigration::Migrated {
+                manifest: m,
+                content_file,
+            } => {
+                assert_eq!(m, &manifest);
+                assert!(content_file.exists());
+                assert!(content_file.starts_with(dir.path().join("contents")));
+                let body = fs::read_to_string(content_file).unwrap();
+                assert!(body.contains("Step alpha"));
+                assert!(body.contains("Step beta"));
+                // Paragraph break between entries.
+                assert!(body.contains("Step alpha\n\nStep beta"));
+            }
+            other => panic!("expected Migrated, got {other:?}"),
+        }
+
+        // Reload via the public loader — should now resolve via content_file.
+        let skill = load_skill_toml(&manifest).expect("loads after migration");
+        assert_eq!(skill.prompts.len(), 1);
+        assert!(skill.prompts[0].contains("Step alpha"));
+        assert!(skill.prompts[0].contains("Step beta"));
+        // Tools survived.
+        assert_eq!(skill.tools.len(), 1);
+        assert_eq!(skill.tools[0].name, "ping");
+
+        // Manifest no longer carries embedded prompts.
+        let raw = fs::read_to_string(&manifest).unwrap();
+        assert!(raw.contains("content_file"));
+        assert!(!raw.contains("prompts"));
+    }
+
+    #[test]
+    fn migrate_skill_toml_idempotent_on_already_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("contents")).unwrap();
+        fs::write(dir.path().join("contents/r1.md"), "already there").unwrap();
+
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"[skill]
+name = "already"
+description = "migrated"
+version = "0.1.0"
+content_file = "contents/r1.md"
+"#,
+        );
+
+        let result = migrate_skill_toml_to_content_file(&manifest).expect("idempotent");
+        assert_eq!(result, SkillContentMigration::AlreadyMigrated);
+        // Manifest unchanged.
+        let raw = fs::read_to_string(&manifest).unwrap();
+        assert!(raw.contains("content_file = \"contents/r1.md\""));
+    }
+
+    #[test]
+    fn migrate_skill_toml_no_op_when_nothing_to_migrate() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = write_skill_toml(
+            dir.path(),
+            r#"[skill]
+name = "empty"
+description = "no prompts"
+version = "0.1.0"
+"#,
+        );
+
+        let result = migrate_skill_toml_to_content_file(&manifest).expect("noop ok");
+        assert_eq!(result, SkillContentMigration::NothingToMigrate);
+        // No contents directory created.
+        assert!(!dir.path().join("contents").exists());
     }
 
     #[test]
