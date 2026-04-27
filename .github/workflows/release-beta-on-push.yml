@@ -144,6 +144,9 @@ jobs:
             artifact: construct
             ext: tar.gz
             ndk: true
+            # wa-rs crates don't compile for Android; exclude whatsapp-web.
+            # Mirrors the override used in release-stable-manual.yml.
+            cargo_features: "channel-matrix,channel-lark"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: construct.exe
@@ -180,7 +183,10 @@ jobs:
           if [ -n "${{ matrix.linker_env || '' }}" ] && [ -n "${{ matrix.linker || '' }}" ]; then
             export "${{ matrix.linker_env }}=${{ matrix.linker }}"
           fi
-          cargo build --release --locked --features "${{ env.RELEASE_CARGO_FEATURES }}" --target ${{ matrix.target }}
+          # Use matrix-level feature override if set (e.g. Android excludes
+          # whatsapp-web), otherwise use global RELEASE_CARGO_FEATURES.
+          FEATURES="${{ matrix.cargo_features || env.RELEASE_CARGO_FEATURES }}"
+          cargo build --release --locked --features "$FEATURES" --target ${{ matrix.target }}
 
       - name: Check binary size
         shell: bash
@@ -204,8 +210,8 @@ jobs:
           BIN="target/${{ matrix.target }}/release/${{ matrix.artifact }}"
           echo "--- ${BIN} --version"
           "$BIN" --version
-          echo "--- ${BIN} doctor --format json (best effort)"
-          "$BIN" doctor --format json || echo "doctor not available on this build; skipping"
+          echo "--- ${BIN} doctor (best effort)"
+          "$BIN" doctor || echo "doctor not available on this build; skipping"
 
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
@@ -214,8 +220,14 @@ jobs:
           $bin = "target/${{ matrix.target }}/release/${{ matrix.artifact }}"
           Write-Host "--- $bin --version"
           & $bin --version
-          Write-Host "--- $bin doctor --format json (best effort)"
-          try { & $bin doctor --format json } catch { Write-Host "doctor not available; skipping" }
+          if ($LASTEXITCODE -ne 0) { throw "version check failed (exit $LASTEXITCODE)" }
+          Write-Host "--- $bin doctor (best effort)"
+          # PowerShell try/catch does not catch native non-zero exits with the
+          # default ErrorActionPreference, so check $LASTEXITCODE explicitly
+          # and swallow any failure — doctor is best-effort.
+          & $bin doctor
+          if ($LASTEXITCODE -ne 0) { Write-Host "doctor returned exit $LASTEXITCODE; skipping" }
+          $global:LASTEXITCODE = 0
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
