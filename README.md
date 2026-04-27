@@ -11,7 +11,26 @@
 <p align="center">
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust" alt="Rust Edition 2024" /></a>
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
+  <a href="https://kumiho.io/pricing"><img src="https://img.shields.io/badge/Kumiho-Free%205k%20nodes-7c3aed" alt="Kumiho free tier" /></a>
 </p>
+
+---
+
+## How Construct fits together
+
+Construct is **open source**. The persistent graph memory it depends on — Kumiho — is a managed service with open SDKs and an Enterprise self-host option. Three layers, plain language:
+
+| Layer | What it is | License |
+|---|---|---|
+| **Construct** (this repo) | Rust gateway + daemon + agent loop + channels + tools + peripherals + embedded React dashboard + Tauri desktop app + CLI + Operator Python MCP | MIT **or** Apache 2.0 — your choice |
+| **Kumiho SDKs** ([KumihoIO](https://github.com/KumihoIO)) | Python, Rust, and TypeScript clients to the Kumiho graph server | Open source |
+| **Kumiho server** (`api.kumiho.cloud`) | The version-controlled, schemaless, typed-edge graph that gives Construct its memory; DreamState consolidation; control-plane infra | Managed service · Free 5k nodes → paid tiers from $40/mo · Self-host on Enterprise |
+
+LLM inference is **bring-your-own-provider**. We don't proxy or mark up tokens. You point Construct at Anthropic, OpenAI, OpenRouter, Ollama, GLM, or any of [14+ providers](docs/reference/api/providers-reference.md), and your keys stay yours.
+
+Construct talks to Kumiho over HTTP via `[kumiho].api_url` in your config. Without a reachable Kumiho endpoint, Construct degrades to stateless single-agent operation — useful for demos and CI, but the cross-session memory, provenance edges, audit chain, and trust scoring all live in the graph. Pricing and self-host: [kumiho.io/pricing](https://kumiho.io/pricing).
+
+> **Upstream.** Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw). The agent loop, provider/channel/tool architecture, hardware peripheral layer, and CLI scaffolding trace back to that upstream; full attribution in [`NOTICE`](NOTICE) and the consolidated overview at [`docs/upstream/zeroclaw-attribution.md`](docs/upstream/zeroclaw-attribution.md). "ZeroClaw" and the ZeroClaw logo are trademarks of ZeroClaw Labs; Construct is not affiliated with, endorsed by, or sponsored by ZeroClaw Labs.
 
 ---
 
@@ -19,11 +38,23 @@
 
 Construct is a Rust-native AI agent runtime with persistent cognitive memory, multi-agent orchestration, and a shared skill/template marketplace. Every agent session, plan, skill, and trust score lives in a graph — if it happened, it's queryable. Built on Kumiho's graph-native memory system, Construct treats memory not as a feature but as the substrate every agent wakes up in.
 
-At the core: a **Rust gateway** (Axum) serves a **React/TypeScript Web Dashboard**, a Python **Operator** drives multi-agent orchestration, and **Kumiho** (Neo4j-backed graph memory) holds all persistent state. Define declarative YAML workflows, watch agents execute them in real time via a DAG-based live view, trace every tool call and output, and see trust scores evolve across runs — all from a browser.
+At the core: a **Rust gateway** (Axum) serves a **React/TypeScript Web Dashboard**, a Python **Operator** drives multi-agent orchestration, and **Kumiho** (graph-native, Neo4j-backed) holds all persistent state. Define declarative YAML workflows, watch agents execute them in real time via a DAG-based live view, trace every tool call and output, and see trust scores evolve across runs — all from a browser.
 
 No hidden state. No forgotten runs. The only thing the system asks of you is that you notice.
 
-> **Upstream.** Construct's core Rust runtime is a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw). The agent loop, provider/channel/tool architecture, hardware peripheral layer, and CLI scaffolding trace back to that upstream; full attribution in [`NOTICE`](NOTICE).
+---
+
+## Free tier, Studio trial, and referrals
+
+Kumiho is the persistent backend; Construct is its reference runtime. Trying the whole stack costs nothing to start.
+
+- **Free tier — 5,000 nodes** (5× the previous limit, bumped for Construct GA). Matching ingest and retrieval limits. Real evaluation territory for solo use, not a demo cap.
+- **30-day Studio trial** — unlocks the moment Construct stores its first memory, no credit card. 500,000 nodes, cross-session recall, audit visibility. Whatever you build during the trial, you **keep** when you revert to free; we don't claw back data.
+- **Referrals** — each successful referral earns you another 30 days of Studio, stackable up to 3 (90 days). Beyond the cap, additional referrals convert to account credit. Friend signs up via your link and ingests their first memory; you both win.
+- **Inactivity** — accounts unused for 90 days move to **cold storage**, never deleted. Log back in and the graph re-indexes within minutes. The product promise is *we don't forget*; that includes your account.
+- **Self-host** — available on Enterprise (closed-source license). Email <enterprise@kumiho.io> or see [kumiho.io/pricing](https://kumiho.io/pricing).
+
+Full tier matrix and per-feature limits at [kumiho.io/pricing](https://kumiho.io/pricing).
 
 ---
 
@@ -241,6 +272,8 @@ The namespaces below are Operator/Construct **conventions** — normal Kumiho sp
 | `Construct/Outcomes/` | Per-agent outcome records used by trust scoring |
 | `CognitiveMemory/Skills/` | Shared skill library accessible to all agents |
 
+For the integration patterns — engage/reflect, capture types, provenance edges, space organisation, skill discovery — see [`docs/contributing/kumiho-memory-integration.md`](docs/contributing/kumiho-memory-integration.md).
+
 ---
 
 ## Additional Features
@@ -273,13 +306,13 @@ The namespaces below are Operator/Construct **conventions** — normal Kumiho sp
 - **Onboard Wizard** (`src/onboard/`) — interactive and quick-mode first-run configuration
 - **OS Service Management** (`src/service/`) — launchd/systemd/OpenRC install for `construct daemon`
 - **Update Pipeline** (`src/commands/update.rs`) — 6-phase update with preflight, backup, validate, swap, smoke test, and auto-rollback
-- **Internationalization** (`src/i18n.rs`) — runtime locale with many `README.<lang>.md` translations
+- **Internationalization** (`src/i18n.rs`) — runtime locale; supported docs locales: `en`, `ko`, `vi`, `zh-CN`
 
 ---
 
 ## Hardware & Peripherals
 
-Construct runs as a single Rust binary on x86_64 and arm64 Linux (including Raspberry Pi 3/4/5), macOS, and Windows — the release profile is tuned for low-memory targets (`codegen-units = 1`, `opt-level = "z"`, `panic = "abort"`). Full features — persistent memory, multi-agent workflows, the embedded dashboard — require an out-of-process Kumiho memory service (FastAPI + Neo4j) and Python 3.11+ for the Operator MCP; without them, Construct degrades gracefully to a stateless single-agent runtime.
+Construct runs as a single Rust binary on x86_64 and arm64 Linux (including Raspberry Pi 3/4/5), macOS, and Windows — the release profile is tuned for low-memory targets (`codegen-units = 1`, `opt-level = "z"`, `panic = "abort"`). Full features — persistent memory, multi-agent workflows, the embedded dashboard — require an out-of-process Kumiho memory service and Python 3.11+ for the Operator MCP; without them, Construct degrades gracefully to a stateless single-agent runtime.
 
 Embedded boards are supported as **peripherals driven over serial/USB from a Construct host**, not as standalone Construct runtimes. Running the full daemon on bare microcontrollers is an explicit non-goal — the host does the thinking, the board does the I/O.
 
@@ -377,7 +410,7 @@ Add `--features channel-matrix,channel-lark,browser-native,hardware,rag-pdf,obse
 - **Rust stable (1.87+)** — `install.sh` / `setup.bat` will install it via rustup if missing.
 - **Python 3.11+** — required for the Kumiho and Operator Python MCP sidecars.
 - **Node.js 20+** — optional, only needed to rebuild the embedded React dashboard from source (`cd web && npm install && npx vite build`). The dashboard is re-embedded into the Rust binary at compile time via `rust-embed`.
-- **Kumiho control plane** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml` (e.g. `https://api.kumiho.cloud` for managed, or a self-hosted URL). Without it Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
+- **Kumiho endpoint** — an HTTP endpoint discoverable via `[kumiho].api_url` in `~/.construct/config.toml`. Default points at the managed control plane (`https://api.kumiho.cloud`); free tier is 5,000 nodes, sign up at [kumiho.io](https://kumiho.io). Self-host is available on Enterprise. Without a reachable Kumiho endpoint Construct runs statelessly. See [docs/setup-guides/kumiho-operator-setup.md](docs/setup-guides/kumiho-operator-setup.md).
 - **Disk / RAM** — source build needs ~6 GB free disk and ~2 GB free RAM; prebuilt binary is ~200 MB.
 
 > **Sidecar re-install.** To re-run sidecar install independently of the main bootstrap:
@@ -446,14 +479,14 @@ api_key = "sk-ant-..."
 enabled = true
 mcp_path = "~/.construct/kumiho/run_kumiho_mcp.py"
 space_prefix = "Construct"
-api_url = "http://localhost:8000"
+api_url = "https://api.kumiho.cloud"      # or your self-hosted URL on Enterprise
 
 [operator]
 enabled = true
 mcp_path = "~/.construct/operator_mcp/run_operator_mcp.py"
 ```
 
-See `docs/reference/api/config-reference.md` for the full reference covering providers, channels, tools, security, and gateway settings.
+See [`docs/reference/api/config-reference.md`](docs/reference/api/config-reference.md) for the full reference covering providers, channels, tools, security, and gateway settings.
 
 ## Tech Stack
 
@@ -461,11 +494,11 @@ See `docs/reference/api/config-reference.md` for the full reference covering pro
 |-------|------------|
 | Runtime & Gateway | Rust (edition 2024), Axum + Tower, Hyper; embedded frontend via `rust-embed` |
 | Agent Loop | Rust (async/tokio, 14+ provider adapters: Anthropic, OpenAI, OpenAI-Codex, Bedrock, Azure OpenAI, Gemini, Gemini CLI, GLM, Copilot, Ollama, OpenRouter, Kilo CLI, Telnyx, Claude Code, plus reliable/router/compatible wrappers) |
-| Orchestration | Python 3.10+ Operator MCP server (17 step types, map-reduce / supervisor / group-chat / handoff / refinement patterns) |
-| Web Dashboard | React 18, TypeScript, Tailwind CSS, Vite, ReactFlow + react-force-graph-2d |
-| Memory Backend | Kumiho (graph-native, Neo4j + FastAPI) as sole persistent store; Qdrant/lucid vector helpers optional |
+| Orchestration | Python 3.11+ Operator MCP server (17 step types, map-reduce / supervisor / group-chat / handoff / refinement patterns) |
+| Web Dashboard | React 19, TypeScript, Tailwind CSS 4, Vite 6, ReactFlow + react-force-graph-2d |
+| Memory Backend | Kumiho — graph-native, schemaless, version-controlled, typed-edge graph (managed service or Enterprise self-host); SDKs in Python / Rust / TypeScript at [github.com/KumihoIO](https://github.com/KumihoIO) |
 | Local Storage | SQLite via `rusqlite` for cron store, pairing, heartbeat, channel sessions, WhatsApp cache (not for primary memory) |
-| Desktop App | Tauri companion under `apps/tauri` (system-tray / menu-bar) launched via `construct desktop` |
+| Desktop App | Tauri 2 companion under `apps/tauri` (system-tray / menu-bar) launched via `construct desktop` |
 | Real-time | WebSocket (`/ws/chat`, `/ws/canvas/{id}`, `/ws/nodes`, `/ws/terminal`, `/ws/mcp/events`), SSE (`/api/events`, `/api/daemon/logs`) |
 | Protocol | A2A (Google Agent-to-Agent, JSON-RPC 2.0), ACP (JSON-RPC 2.0 over stdio), MCP (server + clients) |
 | Observability | OpenTelemetry, Prometheus `/metrics`, DORA metrics, runtime tracing |
@@ -474,9 +507,36 @@ See `docs/reference/api/config-reference.md` for the full reference covering pro
 | Tunnels | Cloudflare, ngrok, Pinggy, Tailscale, OpenVPN, custom |
 | Firmware / Hardware | STM32 Nucleo, Arduino (Uno / Uno Q), ESP32, Raspberry Pi Pico, RPi host; Aardvark I2C/SPI adapter (see Hardware section) |
 
+---
+
+## Documentation
+
+- **Documentation hub:** [`docs/README.md`](docs/README.md) — entry points by audience
+- **Unified TOC:** [`docs/SUMMARY.md`](docs/SUMMARY.md)
+- **Setup & onboarding:** [`docs/setup-guides/`](docs/setup-guides/) — one-click bootstrap, Kumiho/Operator sidecars, Windows, dashboard dev, channels
+- **Reference (CLI / API / config):** [`docs/reference/`](docs/reference/)
+- **Operations runbook:** [`docs/ops/`](docs/ops/)
+- **Security:** [`docs/security/`](docs/security/) — sandboxing, audit logging, Matrix E2EE, agnostic security model
+- **Hardware & peripherals:** [`docs/hardware/`](docs/hardware/)
+- **Integration patterns:** [`docs/contributing/kumiho-memory-integration.md`](docs/contributing/kumiho-memory-integration.md)
+- **Architecture (ADRs):** [`docs/architecture/`](docs/architecture/)
+- **Localized hubs:** [한국어](docs/i18n/ko/README.md) · [Tiếng Việt](docs/i18n/vi/README.md) · [简体中文](docs/i18n/zh-CN/README.md)
+
+## Related projects
+
+- **Kumiho** — graph memory backend. SDKs at [github.com/KumihoIO](https://github.com/KumihoIO); pricing and self-host at [kumiho.io/pricing](https://kumiho.io/pricing).
+- **ZeroClaw** — upstream Rust agent runtime that Construct's core forks from. [github.com/zeroclaw-labs/zeroclaw](https://github.com/zeroclaw-labs/zeroclaw).
+- **OpenClaw** — separate TypeScript agent platform; Construct can import its data via `construct migrate`. [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw).
+
 ## License
 
-Dual-licensed under your choice of:
+**Construct** (this repository) is dual-licensed at your option under:
 
 - [MIT](LICENSE-MIT)
-- [Apache 2.0](LICENSE-APACHE)
+- [Apache License 2.0](LICENSE-APACHE)
+
+Both licenses preserve the upstream `Copyright (c) 2025 ZeroClaw Labs` per fork-attribution requirements; see [`NOTICE`](NOTICE) and [`docs/upstream/zeroclaw-attribution.md`](docs/upstream/zeroclaw-attribution.md).
+
+The **Kumiho graph server** (the managed memory backend Construct talks to) is *not* covered by these licenses. It is a hosted service; the Kumiho **SDKs** are open source on their own repos at [github.com/KumihoIO](https://github.com/KumihoIO). Self-hosting the Kumiho server is available on Enterprise (closed-source license) — see [kumiho.io/pricing](https://kumiho.io/pricing).
+
+Contributions to this repository are accepted under the dual license model; the Apache 2.0 patent grant protects all contributors. See [`docs/contributing/cla.md`](docs/contributing/cla.md).
