@@ -1115,33 +1115,78 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                     if !dir.join("SKILL.toml").exists() {
                         continue;
                     }
-                    match crate::skills::registration::register_skill_with_kumiho(
+                    let registration_ok =
+                        match crate::skills::registration::register_skill_with_kumiho(
+                            &dir,
+                            &scan_client,
+                            &scan_project,
+                        )
+                        .await
+                        {
+                            Ok(crate::skills::registration::SkillRegistration::Registered {
+                                kref,
+                                ..
+                            }) => {
+                                tracing::info!(
+                                    skill_dir = %dir.display(),
+                                    kref,
+                                    "daemon-startup: registered skill with Kumiho",
+                                );
+                                true
+                            }
+                            Ok(
+                                crate::skills::registration::SkillRegistration::AlreadyRegistered {
+                                    ..
+                                },
+                            ) => {
+                                // No-op — common case after first run.
+                                true
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    skill_dir = %dir.display(),
+                                    error = ?e,
+                                    "daemon-startup: skill registration failed; will retry next start",
+                                );
+                                false
+                            }
+                        };
+
+                    // Step 6d: keep SKILL.toml's content_file consistent
+                    // with whatever revision currently holds the
+                    // `published` tag.  Catches improvements that
+                    // landed while the daemon was offline.  No-op when
+                    // already in sync.  Skipped when registration just
+                    // failed because the kref isn't valid yet.
+                    if !registration_ok {
+                        continue;
+                    }
+                    match crate::skills::registration::sync_published_content_path(
                         &dir,
                         &scan_client,
-                        &scan_project,
                     )
                     .await
                     {
-                        Ok(crate::skills::registration::SkillRegistration::Registered {
-                            kref,
+                        Ok(crate::skills::registration::SkillContentSync::Updated {
+                            new_content_file,
                             ..
                         }) => {
                             tracing::info!(
                                 skill_dir = %dir.display(),
-                                kref,
-                                "daemon-startup: registered skill with Kumiho",
+                                content_file = %new_content_file,
+                                "daemon-startup: synced skill content_file from published kref",
                             );
                         }
-                        Ok(crate::skills::registration::SkillRegistration::AlreadyRegistered {
-                            ..
-                        }) => {
-                            // No-op — common case after first run.
+                        Ok(_) => {
+                            // NotRegistered (we just registered it) or
+                            // AlreadyCurrent — both silent.
                         }
                         Err(e) => {
                             tracing::warn!(
                                 skill_dir = %dir.display(),
                                 error = ?e,
-                                "daemon-startup: skill registration failed; will retry next start",
+                                "daemon-startup: skill content_file sync failed; \
+                                 loader will use existing pointer until next sync",
                             );
                         }
                     }
