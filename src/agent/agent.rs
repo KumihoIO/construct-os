@@ -315,10 +315,7 @@ impl AgentBuilder {
     /// be shared.
     ///
     /// [`EffectivenessCache`]: crate::skills::EffectivenessCache
-    pub fn skill_effectiveness(
-        mut self,
-        cache: Arc<crate::skills::EffectivenessCache>,
-    ) -> Self {
+    pub fn skill_effectiveness(mut self, cache: Arc<crate::skills::EffectivenessCache>) -> Self {
         self.skill_effectiveness = Some(cache);
         self
     }

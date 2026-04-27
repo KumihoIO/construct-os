@@ -155,9 +155,7 @@ impl EffectivenessCache {
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(interval);
             // Don't fall behind if a refresh takes longer than `interval`.
-            ticker.set_missed_tick_behavior(
-                tokio::time::MissedTickBehavior::Delay,
-            );
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 ticker.tick().await;
                 if let Err(e) = self
