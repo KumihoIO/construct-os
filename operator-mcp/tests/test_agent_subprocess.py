@@ -6,12 +6,11 @@ from operator_mcp.agent_subprocess import _build_command, _is_stderr_noise, comp
 
 class TestBuildCommand:
     def test_codex_command(self):
-        cmd = _build_command("codex", "fix the bug")
+        cmd = _build_command("codex")
         assert cmd[0] == "codex"
-        assert "--quiet" in cmd
-        assert "-a" in cmd
-        assert "full-auto" in cmd
-        assert "fix the bug" in cmd
+        assert cmd[1] == "exec"
+        assert "--full-auto" in cmd
+        assert "--skip-git-repo-check" in cmd
 
     def test_claude_command(self):
         cmd = _build_command("claude", "write tests")

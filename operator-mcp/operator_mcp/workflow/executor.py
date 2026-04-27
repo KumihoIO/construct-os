@@ -1443,6 +1443,17 @@ async def execute_workflow(
         )
         return state
 
+    # Propagate the workflow-level default_timeout to any step config that
+    # has a `timeout` field but didn't set one explicitly. Without this the
+    # workflow-level setting is dead config and per-step timeouts silently
+    # fall back to their schema default (300s).
+    for s in wf.steps:
+        cfg = s.get_config()
+        if cfg is None:
+            continue
+        if "timeout" in type(cfg).model_fields and "timeout" not in cfg.model_fields_set:
+            cfg.timeout = wf.default_timeout
+
     # Pre-flight cost check
     cost_err = _check_cost_guard(max_cost_usd)
     if cost_err:
@@ -1466,11 +1477,17 @@ async def execute_workflow(
         if not state.workflow_revision_kref and workflow_revision_kref:
             state.workflow_revision_kref = workflow_revision_kref
     else:
+        # Merge declared input defaults with caller-provided values.
+        # Caller values win; defaults fill in anything not explicitly passed.
+        merged_inputs: dict[str, Any] = {
+            d.name: d.default for d in wf.inputs if d.default is not None
+        }
+        merged_inputs.update(inputs or {})
         state = WorkflowState(
             workflow_name=wf.name,
             run_id=run_id or str(uuid.uuid4()),
             status=WorkflowStatus.RUNNING,
-            inputs=inputs or {},
+            inputs=merged_inputs,
             started_at=datetime.now(timezone.utc).isoformat(),
             trigger_context=trigger_context or {},
             workflow_item_kref=workflow_item_kref,

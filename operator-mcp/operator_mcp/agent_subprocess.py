@@ -50,7 +50,7 @@ def _build_command(
     model: str | None = None,
 ) -> list[str]:
     if agent_type == "codex":
-        return ["codex", "--quiet", "-a", "full-auto"]
+        return ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
     # Prompt is piped via stdin — no -p flag, no ARG_MAX issues,
     # no shell encoding problems with Korean/Unicode text.
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
