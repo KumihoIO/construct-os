@@ -13,9 +13,16 @@ use zip::ZipArchive;
 mod audit;
 #[cfg(feature = "skill-creation")]
 pub mod creator;
+pub mod effectiveness;
 #[cfg(feature = "skill-creation")]
 pub mod improver;
 pub mod testing;
+
+// Re-export the trait + score type so consumers can use them as
+// `crate::skills::SkillEffectivenessProvider`.  The concrete providers
+// (NoOpProvider / InMemoryProvider) are reachable via
+// `crate::skills::effectiveness::…` when callers need them.
+pub use effectiveness::{EffectivenessScore, SkillEffectivenessProvider};
 
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
 const OPEN_SKILLS_SYNC_MARKER: &str = ".construct-open-skills-sync";
@@ -757,9 +764,70 @@ pub fn skills_to_prompt(skills: &[Skill], workspace_dir: &Path) -> String {
     )
 }
 
+/// Build the "Available Skills" prompt section, optionally reranking skills by
+/// effectiveness score before injection.
+///
+/// `effectiveness` defaults to a no-op provider (preserves existing static
+/// load order).  Pass a real provider — typically a daemon-level cache fed by
+/// `get_skill_effectiveness` from the operator MCP — to bubble high-success
+/// skills to the top of the list, giving the LLM a clearer signal about what
+/// has worked recently.  Sort is stable for skills tied on score.
+pub fn skills_to_prompt_with_mode_and_effectiveness(
+    skills: &[Skill],
+    workspace_dir: &Path,
+    mode: crate::config::SkillsPromptInjectionMode,
+    effectiveness: &dyn SkillEffectivenessProvider,
+) -> String {
+    if skills.is_empty() {
+        return String::new();
+    }
+
+    // Build a sorted Vec<&Skill> rather than cloning the underlying skills.
+    let mut ordered: Vec<&Skill> = skills.iter().collect();
+    // Stable sort by descending effectiveness sort_key.  Skills with no score
+    // fall back to the neutral 0.5 default — see EffectivenessScore::NEUTRAL.
+    ordered.sort_by(|a, b| {
+        let a_key = effectiveness
+            .score(&a.name)
+            .map(|s| s.sort_key())
+            .unwrap_or((EffectivenessScore::NEUTRAL, 0));
+        let b_key = effectiveness
+            .score(&b.name)
+            .map(|s| s.sort_key())
+            .unwrap_or((EffectivenessScore::NEUTRAL, 0));
+        // Reverse so higher key sorts first.  Total-order via partial_cmp on
+        // (f64, u32); the f64 part is always finite (rate ∈ [0,1] or NEUTRAL).
+        b_key
+            .partial_cmp(&a_key)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    render_skills_prompt(&ordered, workspace_dir, mode)
+}
+
 /// Build the "Available Skills" system prompt section with configurable verbosity.
+///
+/// Backwards-compatible entry point that preserves the static load order of
+/// skills.  For effectiveness-weighted reranking call
+/// [`skills_to_prompt_with_mode_and_effectiveness`].
 pub fn skills_to_prompt_with_mode(
     skills: &[Skill],
+    workspace_dir: &Path,
+    mode: crate::config::SkillsPromptInjectionMode,
+) -> String {
+    if skills.is_empty() {
+        return String::new();
+    }
+    let ordered: Vec<&Skill> = skills.iter().collect();
+    render_skills_prompt(&ordered, workspace_dir, mode)
+}
+
+/// Render the `<available_skills>` block for an already-ordered list of
+/// skill references.  Both public entry points (with and without
+/// effectiveness reranking) share this body so the XML output stays
+/// identical when no scores are available.
+fn render_skills_prompt(
+    skills: &[&Skill],
     workspace_dir: &Path,
     mode: crate::config::SkillsPromptInjectionMode,
 ) -> String {
@@ -1675,6 +1743,84 @@ command = "echo hello"
         assert!(prompt.contains("<available_skills>"));
         assert!(prompt.contains("<name>test</name>"));
         assert!(prompt.contains("<instruction>Do the thing.</instruction>"));
+    }
+
+    #[test]
+    fn skills_to_prompt_with_effectiveness_reranks_high_success_first() {
+        use crate::skills::effectiveness::InMemoryProvider;
+
+        let mk = |name: &str| Skill {
+            name: name.to_string(),
+            description: format!("description for {name}"),
+            version: "1.0.0".to_string(),
+            author: None,
+            tags: vec![],
+            tools: vec![],
+            prompts: vec![],
+            location: None,
+        };
+        // Static load order: a, b, c.  Effectiveness order should put `c`
+        // first (rate=0.95), then `a` (rate=0.5 implicit / no data), then
+        // `b` (rate=0.1).
+        let skills = vec![mk("alpha"), mk("beta"), mk("gamma")];
+
+        let mut provider = InMemoryProvider::default();
+        provider.insert(
+            "gamma",
+            EffectivenessScore {
+                rate: Some(0.95),
+                total: 20,
+            },
+        );
+        provider.insert(
+            "beta",
+            EffectivenessScore {
+                rate: Some(0.10),
+                total: 30,
+            },
+        );
+
+        let prompt = skills_to_prompt_with_mode_and_effectiveness(
+            &skills,
+            Path::new("/tmp"),
+            crate::config::SkillsPromptInjectionMode::Full,
+            &provider,
+        );
+
+        // gamma should appear before alpha, alpha before beta in the rendered
+        // prompt — the only signal is order of <name>…</name> occurrences.
+        let pos_gamma = prompt.find("<name>gamma</name>").expect("gamma rendered");
+        let pos_alpha = prompt.find("<name>alpha</name>").expect("alpha rendered");
+        let pos_beta = prompt.find("<name>beta</name>").expect("beta rendered");
+        assert!(pos_gamma < pos_alpha, "gamma (0.95) should outrank alpha (none/0.5)");
+        assert!(pos_alpha < pos_beta, "alpha (none/0.5) should outrank beta (0.10)");
+    }
+
+    #[test]
+    fn skills_to_prompt_with_no_op_provider_preserves_load_order() {
+        let mk = |name: &str| Skill {
+            name: name.to_string(),
+            description: String::new(),
+            version: "1.0.0".to_string(),
+            author: None,
+            tags: vec![],
+            tools: vec![],
+            prompts: vec![],
+            location: None,
+        };
+        let skills = vec![mk("alpha"), mk("beta"), mk("gamma")];
+
+        let prompt = skills_to_prompt_with_mode_and_effectiveness(
+            &skills,
+            Path::new("/tmp"),
+            crate::config::SkillsPromptInjectionMode::Full,
+            crate::skills::effectiveness::no_op_provider(),
+        );
+
+        let pos_alpha = prompt.find("<name>alpha</name>").unwrap();
+        let pos_beta = prompt.find("<name>beta</name>").unwrap();
+        let pos_gamma = prompt.find("<name>gamma</name>").unwrap();
+        assert!(pos_alpha < pos_beta && pos_beta < pos_gamma);
     }
 
     #[test]
