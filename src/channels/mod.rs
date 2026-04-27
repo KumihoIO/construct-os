@@ -3939,11 +3939,23 @@ pub fn build_system_prompt_with_mode_and_autonomy(
 
     // ── 3. Skills (full or compact, based on config) ─────────────
     if !skills.is_empty() {
-        prompt.push_str(&crate::skills::skills_to_prompt_with_mode(
-            skills,
-            workspace_dir,
-            skills_prompt_mode,
-        ));
+        // If the daemon has installed a process-wide effectiveness cache,
+        // rerank skills by recency-weighted success rate before injecting
+        // them.  Otherwise fall back to the static load order.  See
+        // `crate::skills::effectiveness_cache::set_global` (called from
+        // gateway startup).
+        let rendered = match crate::skills::effectiveness_cache::global_provider() {
+            Some(provider) => crate::skills::skills_to_prompt_with_mode_and_effectiveness(
+                skills,
+                workspace_dir,
+                skills_prompt_mode,
+                provider,
+            ),
+            None => {
+                crate::skills::skills_to_prompt_with_mode(skills, workspace_dir, skills_prompt_mode)
+            }
+        };
+        prompt.push_str(&rendered);
         prompt.push_str("\n\n");
     }
 

@@ -1061,6 +1061,64 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         },
     };
 
+    // ── Skill effectiveness cache ───────────────────────────────────────
+    //
+    // Build a process-wide cache of recency-weighted skill outcomes so the
+    // channels system-prompt builder can rerank skills before injecting
+    // them into agent prompts.  See `src/skills/effectiveness_cache.rs`.
+    //
+    // On startup we:
+    //   1. Construct an empty `Arc<EffectivenessCache>`.
+    //   2. Install it as the process-wide global so
+    //      `effectiveness_cache::global_provider()` returns it.
+    //   3. Spawn a background task that refreshes scores from Kumiho every
+    //      `DEFAULT_REFRESH_INTERVAL` (5 minutes).  Until the first refresh
+    //      completes the cache is empty and skills inject in their static
+    //      load order — same as before this feature shipped.
+    {
+        let effectiveness_cache = crate::skills::EffectivenessCache::new();
+        let _ = crate::skills::effectiveness_cache::set_global(effectiveness_cache.clone());
+
+        let memory_project = config.kumiho.memory_project.clone();
+        let workspace_dir = config.workspace_dir.clone();
+        let config_for_skills = config.clone();
+
+        // Load the skill names once at startup — the refresh task only
+        // queries Kumiho for skills already loaded into the runtime, so a
+        // brand-new skill added later won't be reranked until restart.
+        let skill_names: Vec<String> =
+            crate::skills::load_skills_with_config(&workspace_dir, &config_for_skills)
+                .into_iter()
+                .map(|s| s.name)
+                .collect();
+
+        if skill_names.is_empty() {
+            tracing::info!("skill effectiveness: no skills loaded; refresh task skipped");
+        } else {
+            let kumiho_client = Arc::new(crate::gateway::kumiho_client::build_client_from_config(
+                &config,
+            ));
+            tracing::info!(
+                count = skill_names.len(),
+                project = %memory_project,
+                "skill effectiveness: starting background refresh task",
+            );
+            // JoinHandle is dropped (refresh task lives until process exit).
+            // Drop the JoinHandle — task is fire-and-forget and lives
+            // until process exit.  `drop()` rather than `let _ =` to
+            // silence clippy::let_underscore_future (the JoinHandle is
+            // a Future, but dropping it does not cancel a tokio task).
+            // Future improvement: store the handle on AppState and
+            // abort on shutdown so tests don't leak the task.
+            drop(effectiveness_cache.spawn_refresh_task(
+                kumiho_client,
+                memory_project,
+                skill_names,
+                crate::skills::effectiveness_cache::DEFAULT_REFRESH_INTERVAL,
+            ));
+        }
+    }
+
     // ── Spawn the in-process MCP server ─────────────────────────────────
     //
     // Binds 127.0.0.1:0 (ephemeral, as external clients expect), writes
