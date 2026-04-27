@@ -1740,11 +1740,51 @@ pub async fn handle_delete_workflow_run(
     };
 
     match client.delete_item(&kref).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            cleanup_local_run_files(&run_id).await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => {
             let msg = format!("Failed to delete run '{run_id}': {e}");
             tracing::warn!("{msg}");
             kumiho_err(e).into_response()
+        }
+    }
+}
+
+/// Best-effort cleanup of on-disk run state after a successful Kumiho hard delete.
+/// Removes the checkpoint at `~/.construct/workflow_checkpoints/{run_id}.json` and
+/// any artifacts directory at `~/.construct/artifacts/<workflow>/{run_id}/`. Since
+/// the workflow name isn't carried into this handler, we scan the artifacts root
+/// for any subdirectory containing a matching run_id directory. Failures are logged
+/// but do not affect the API response — the authoritative delete already succeeded.
+async fn cleanup_local_run_files(run_id: &str) {
+    let Some(user_dirs) = directories::UserDirs::new() else {
+        return;
+    };
+    let home = user_dirs.home_dir().to_path_buf();
+
+    let checkpoint = home.join(format!(".construct/workflow_checkpoints/{run_id}.json"));
+    if let Err(e) = tokio::fs::remove_file(&checkpoint).await {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            tracing::warn!("Failed to remove checkpoint {}: {e}", checkpoint.display());
+        }
+    }
+
+    let artifacts_root = home.join(".construct/artifacts");
+    let mut entries = match tokio::fs::read_dir(&artifacts_root).await {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let candidate = entry.path().join(run_id);
+        if tokio::fs::metadata(&candidate).await.is_ok() {
+            if let Err(e) = tokio::fs::remove_dir_all(&candidate).await {
+                tracing::warn!(
+                    "Failed to remove artifacts dir {}: {e}",
+                    candidate.display()
+                );
+            }
         }
     }
 }

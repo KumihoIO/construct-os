@@ -33,6 +33,28 @@ from .._log import _log
 
 _LOCK_PATH = os.path.expanduser("~/.construct/recovery.lock")
 _RUN_LOCK_DIR = os.path.expanduser("~/.construct/workflow_locks")
+_CHECKPOINT_DIR = os.path.expanduser("~/.construct/workflow_checkpoints")
+
+# Statuses that mean the run is finished — don't resurrect them.
+_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
+
+
+def _local_checkpoint_status(run_id: str) -> str | None:
+    """Return the on-disk checkpoint's status for a run, or None if absent.
+
+    The local checkpoint is authoritative for terminal status: the Kumiho
+    persist on workflow finalize is best-effort, so a failed run can leave
+    Kumiho metadata at "running" even though the checkpoint correctly says
+    "failed". Recovery uses this as the trump card.
+    """
+    path = os.path.join(_CHECKPOINT_DIR, f"{run_id}.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f).get("status")
+    except Exception:
+        return None
 
 # How long to wait for a still-running agent before giving up (seconds)
 _AGENT_HARVEST_TIMEOUT = 30.0
@@ -171,6 +193,16 @@ async def _recover_one_run(
     from .memory import reconstruct_step_results
     from .loader import resolve_workflow
     from .schema import WorkflowState, WorkflowStatus, StepResult
+
+    # If the on-disk checkpoint already records a terminal status, the run
+    # is done — Kumiho metadata may still say "running" because the persist
+    # on finalize is best-effort, but we trust the local checkpoint.
+    local_status = _local_checkpoint_status(run_id)
+    if local_status in _TERMINAL_STATUSES:
+        _log(
+            f"recovery: run={run_id[:8]} already {local_status} in checkpoint, skipping"
+        )
+        return False
 
     # Per-run lock: prevents duplicate recovery across operator processes
     run_lock_fd = _acquire_run_lock(run_id)

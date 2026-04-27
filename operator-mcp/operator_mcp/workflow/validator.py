@@ -440,7 +440,17 @@ def validate_workflow(wf: WorkflowDef) -> ValidationResult:
     # Pass 3: cycle detection + topological sort
     if result.valid:
         order = _check_cycles(adj, result)
-        result.execution_order = order
+        # Exclude steps that are owned by a parent (parallel/for_each) — those
+        # are invoked by the parent's executor, so the top-level scheduler
+        # must not also run them. Otherwise sub-tasks execute twice and one
+        # copy races against the other.
+        owned_ids: set[str] = set()
+        for s in wf.steps:
+            if s.type == StepType.PARALLEL and s.parallel:
+                owned_ids.update(s.parallel.steps)
+            elif s.type == StepType.FOR_EACH and s.for_each:
+                owned_ids.update(s.for_each.steps)
+        result.execution_order = [sid for sid in order if sid not in owned_ids]
 
     # Pass 4: step config validation
     _check_step_configs(wf, valid_ids, result)

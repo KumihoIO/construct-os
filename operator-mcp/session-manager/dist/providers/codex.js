@@ -25,7 +25,7 @@ export function createCodexSession(config, onEvent) {
         onEvent({ type: "status_changed", status: "running" });
         handle.stdout = "";
         handle.stderr = "";
-        const args = ["--quiet", "-a", "full-auto", prompt];
+        const args = ["exec", "--full-auto", "--skip-git-repo-check", prompt];
         log(`Spawning codex: ${args.slice(0, 3).join(" ")}... (${prompt.length} chars)`);
         const proc = spawn("codex", args, {
             cwd: config.cwd,
