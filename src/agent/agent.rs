@@ -671,6 +671,7 @@ impl Agent {
             tools: &self.tools,
             skills: &self.skills,
             skills_prompt_mode: self.skills_prompt_mode,
+            skill_effectiveness: None,
             identity_config: Some(&self.identity_config),
             dispatcher_instructions: &instructions,
             tool_descriptions: self.tool_descriptions.as_ref(),

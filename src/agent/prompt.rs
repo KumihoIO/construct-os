@@ -3,7 +3,7 @@ use crate::config::IdentityConfig;
 use crate::i18n::ToolDescriptions;
 use crate::identity;
 use crate::security::AutonomyLevel;
-use crate::skills::Skill;
+use crate::skills::{Skill, SkillEffectivenessProvider};
 use crate::tools::Tool;
 use anyhow::Result;
 use chrono::{Datelike, Local, Timelike};
@@ -16,6 +16,11 @@ pub struct PromptContext<'a> {
     pub tools: &'a [Box<dyn Tool>],
     pub skills: &'a [Skill],
     pub skills_prompt_mode: crate::config::SkillsPromptInjectionMode,
+    /// Optional provider that returns recency-weighted success rates per
+    /// skill name.  When present, [`SkillsSection`] reranks skills by
+    /// effectiveness before injecting them — high-success skills bubble
+    /// to the top.  When `None` the static load order is preserved.
+    pub skill_effectiveness: Option<&'a dyn SkillEffectivenessProvider>,
     pub identity_config: Option<&'a IdentityConfig>,
     pub dispatcher_instructions: &'a str,
     /// Locale-aware tool descriptions. When present, tool descriptions in
@@ -258,11 +263,20 @@ impl PromptSection for SkillsSection {
     }
 
     fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
-        Ok(crate::skills::skills_to_prompt_with_mode(
-            ctx.skills,
-            ctx.workspace_dir,
-            ctx.skills_prompt_mode,
-        ))
+        let prompt = match ctx.skill_effectiveness {
+            Some(provider) => crate::skills::skills_to_prompt_with_mode_and_effectiveness(
+                ctx.skills,
+                ctx.workspace_dir,
+                ctx.skills_prompt_mode,
+                provider,
+            ),
+            None => crate::skills::skills_to_prompt_with_mode(
+                ctx.skills,
+                ctx.workspace_dir,
+                ctx.skills_prompt_mode,
+            ),
+        };
+        Ok(prompt)
     }
 }
 
@@ -392,6 +406,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: Some(&identity_config),
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -425,6 +440,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "instr",
             tool_descriptions: None,
@@ -465,6 +481,7 @@ mod tests {
             tools: &tools,
             skills: &skills,
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -509,6 +526,7 @@ mod tests {
             tools: &tools,
             skills: &skills,
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Compact,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -539,6 +557,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "instr",
             tool_descriptions: None,
@@ -582,6 +601,7 @@ mod tests {
             tools: &tools,
             skills: &skills,
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -618,6 +638,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -655,6 +676,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -684,6 +706,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
@@ -721,6 +744,7 @@ mod tests {
             tools: &tools,
             skills: &[],
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
             identity_config: None,
             dispatcher_instructions: "",
             tool_descriptions: None,
