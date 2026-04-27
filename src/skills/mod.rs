@@ -19,6 +19,7 @@ pub mod effectiveness;
 pub mod effectiveness_cache;
 #[cfg(feature = "skill-creation")]
 pub mod improver;
+pub mod registration;
 pub mod testing;
 
 // Re-export the trait + score type so consumers can use them as
@@ -73,39 +74,46 @@ pub struct SkillTool {
 
 /// Skill manifest parsed from SKILL.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SkillManifest {
-    skill: SkillMeta,
+pub(crate) struct SkillManifest {
+    pub(crate) skill: SkillMeta,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<SkillTool>,
+    pub(crate) tools: Vec<SkillTool>,
     /// Legacy embedded prompt content.  Kept on the manifest for
     /// backwards compatibility — newer manifests use
     /// `[skill].content_file` instead and leave this empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    prompts: Vec<String>,
+    pub(crate) prompts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SkillMeta {
-    name: String,
-    description: String,
+pub(crate) struct SkillMeta {
+    pub(crate) name: String,
+    pub(crate) description: String,
     #[serde(default = "default_version")]
-    version: String,
+    pub(crate) version: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    author: Option<String>,
+    pub(crate) author: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
     /// Optional pointer to an external content file (markdown), relative
     /// to the SKILL.toml directory.  When present, the file's body is used
     /// as the skill's prompt content and the manifest's embedded
     /// `prompts = [...]` array is ignored.
-    ///
-    /// Step 6a in the self-improving plan: lifting prompt content out of
-    /// the manifest is the prerequisite for making each improvement
-    /// create a NEW file at a NEW path (so revisions don't clobber each
-    /// other on disk).  Step 6b will add a `kref` alternative that
-    /// resolves through Kumiho's `?t=published` revision selector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    content_file: Option<String>,
+    pub(crate) content_file: Option<String>,
+    /// Optional Kumiho kref pointing at this skill's published revision,
+    /// e.g. `kref://CognitiveMemory/Skills/my-skill.skilldef?t=published`.
+    /// Set by [`crate::skills::registration::register_skill_with_kumiho`]
+    /// the first time a skill is installed; thereafter every install path
+    /// (ClawHub, GitHub link, dashboard, creator.rs, daemon-startup scan)
+    /// is idempotent because the manifest already carries the pointer.
+    ///
+    /// The `?t=published` query is what makes the manifest write-once
+    /// across revisions: when SkillImprover creates a new revision and
+    /// retags `published`, this pointer resolves to the new revision
+    /// automatically without rewriting SKILL.toml.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) kref: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1583,6 +1591,73 @@ fn install_clawhub_skill_source(
 
 /// Handle the `skills` CLI command
 #[allow(clippy::too_many_lines)]
+/// Best-effort Kumiho registration after a CLI skill install.
+///
+/// `handle_command` is synchronous (CLI entry point — no surrounding
+/// tokio runtime), so we spin up a single-thread runtime just for this
+/// async call.  Any failure here is logged + printed but does NOT
+/// propagate: the install itself already succeeded on disk, and the
+/// daemon-startup scan in `src/gateway/mod.rs::run_gateway` will retry
+/// registration on next daemon start.
+fn register_after_install_best_effort(installed_dir: &Path, config: &crate::config::Config) {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                skill_dir = %installed_dir.display(),
+                "skill install: could not start tokio runtime for Kumiho registration; \
+                 daemon-startup scan will retry",
+            );
+            return;
+        }
+    };
+
+    let memory_project = config.kumiho.memory_project.clone();
+    let kumiho_client = crate::gateway::kumiho_client::build_client_from_config(config);
+
+    let result = runtime.block_on(registration::register_skill_with_kumiho(
+        installed_dir,
+        &kumiho_client,
+        &memory_project,
+    ));
+
+    match result {
+        Ok(registration::SkillRegistration::AlreadyRegistered { kref }) => {
+            println!(
+                "  {} Already registered with Kumiho: {}",
+                console::style("·").dim(),
+                kref
+            );
+        }
+        Ok(registration::SkillRegistration::Registered { kref, .. }) => {
+            println!(
+                "  {} Registered with Kumiho: {}",
+                console::style("✓").green().bold(),
+                kref
+            );
+        }
+        Err(e) => {
+            println!(
+                "  {} Could not register with Kumiho yet: {e}",
+                console::style("⚠").yellow().bold(),
+            );
+            println!(
+                "    The skill is installed and will be picked up by the daemon's \
+                 startup scan on next start."
+            );
+            tracing::warn!(
+                error = ?e,
+                skill_dir = %installed_dir.display(),
+                "skill install: Kumiho registration deferred",
+            );
+        }
+    }
+}
+
 pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Config) -> Result<()> {
     let workspace_dir = &config.workspace_dir;
     match command {
@@ -1686,8 +1761,16 @@ pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Con
                 installed_dir.display(),
                 files_scanned
             );
-
             println!("  Security audit completed successfully.");
+
+            // Register the skill with Kumiho so it gets a versioned identity
+            // (item + revision + artifact + published tag) and SKILL.toml is
+            // rewritten with `[skill].kref = "kref://<memory_project>/Skills/
+            // <slug>.skilldef?t=published"`.  Best-effort — when Kumiho is
+            // unreachable we log and continue; the daemon-startup scan in
+            // src/gateway/mod.rs picks up unregistered skills on next start.
+            register_after_install_best_effort(&installed_dir, config);
+
             Ok(())
         }
         crate::SkillCommands::Remove { name } => {
