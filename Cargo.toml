@@ -68,7 +68,7 @@ path = "src/lib.rs"
 [dependencies]
 # CLI - minimal and fast
 clap = { version = "4.5", features = ["derive"] }
-clap_complete = "4.5"
+clap_complete = "4.6"
 
 # Async runtime - feature-optimized for size
 tokio = { version = "1.50", default-features = false, features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync", "process", "io-std", "fs", "signal"] }
@@ -124,7 +124,7 @@ flate2 = "1.1"
 tar = "0.4"
 
 # Zip extraction for ClawHub registry installers
-zip = { version = "8.1", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
 
 # Embed built-in workflow YAMLs into the binary (seeded during onboarding)
 include_dir = "0.7"
@@ -198,7 +198,7 @@ regex = "1.10"
 hostname = "0.4.2"
 rustls = "0.23"
 rustls-pemfile = "2"
-rustls-pki-types = "1.14.0"
+rustls-pki-types = "1.14.1"
 tokio-rustls = "0.26.4"
 webpki-roots = "1.0.6"
 
