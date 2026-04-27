@@ -2579,7 +2579,7 @@ dependencies = [
  "ed25519",
  "rand_core 0.6.4",
  "serde",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
  "zeroize",
 ]
@@ -2763,7 +2763,7 @@ dependencies = [
  "nix 0.30.1",
  "object 0.39.1",
  "serde",
- "sha2",
+ "sha2 0.10.9",
  "strum 0.28.0",
  "thiserror 2.0.18",
 ]
@@ -2819,7 +2819,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
@@ -4762,7 +4762,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_json",
- "sha2",
+ "sha2 0.11.0",
  "shellexpand",
  "tar",
  "tempfile",
@@ -4996,7 +4996,7 @@ dependencies = [
  "nom_locate",
  "rand 0.9.4",
  "rangemap",
- "sha2",
+ "sha2 0.10.9",
  "stringprep",
  "thiserror 2.0.18",
  "ttf-parser",
@@ -5270,7 +5270,7 @@ dependencies = [
  "serde",
  "serde_html_form",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -5363,7 +5363,7 @@ dependencies = [
  "ruma",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
  "thiserror 2.0.18",
  "time",
@@ -5398,7 +5398,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -5452,7 +5452,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -6035,7 +6035,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "url",
 ]
@@ -8050,7 +8050,7 @@ dependencies = [
  "rand 0.8.6",
  "ruma-common",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
 ]
 
@@ -8098,7 +8098,7 @@ version = "8.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5bcdef0be6fe7f6fa333b1073c949729274b05f123a0ad7efcb8efd878e5c3b1"
 dependencies = [
- "sha2",
+ "sha2 0.10.9",
  "walkdir",
 ]
 
@@ -8351,7 +8351,7 @@ dependencies = [
  "password-hash",
  "pbkdf2",
  "salsa20",
- "sha2",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -8765,6 +8765,17 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest 0.10.7",
+]
+
+[[package]]
+name = "sha2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "digest 0.11.2",
 ]
 
 [[package]]
@@ -9364,7 +9375,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "syn 2.0.117",
  "tauri-utils",
  "thiserror 2.0.18",
@@ -10599,7 +10610,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
  "thiserror 2.0.18",
  "x25519-dalek",
@@ -10671,7 +10682,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "wa-rs-binary",
  "wa-rs-libsignal",
@@ -10721,7 +10732,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "typed-builder",
  "wa-rs-appstate",
@@ -10769,7 +10780,7 @@ dependencies = [
  "rand 0.9.4",
  "serde",
  "sha1",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
  "thiserror 2.0.18",
  "uuid",
@@ -10791,7 +10802,7 @@ dependencies = [
  "prost 0.14.3",
  "rand 0.9.4",
  "rand_core 0.10.1",
- "sha2",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "wa-rs-binary",
  "wa-rs-libsignal",
@@ -11224,7 +11235,7 @@ dependencies = [
  "rustix 1.1.4",
  "serde",
  "serde_derive",
- "sha2",
+ "sha2 0.10.9",
  "toml 0.9.12+spec-1.1.0",
  "wasmtime-environ",
  "windows-sys 0.61.2",
@@ -12380,7 +12391,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "raw-window-handle",
- "sha2",
+ "sha2 0.10.9",
  "soup3",
  "tao-macros",
  "thiserror 2.0.18",
