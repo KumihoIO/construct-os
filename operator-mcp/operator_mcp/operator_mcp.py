@@ -1955,6 +1955,49 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="record_skill_outcome",
+            description=(
+                "Record whether a single skill use succeeded or failed. Stores under "
+                "<memory_project>/Skills/<skill>/Outcomes/ with an edge back to the "
+                "skill revision so the graph traces each outcome to the exact skill "
+                "version that produced it. Call this AFTER any non-trivial skill "
+                "invocation — the data feeds get_skill_effectiveness which the "
+                "prompt builder uses to rerank skills by recency-weighted success."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "skill_name": {"type": "string", "description": "Slug of the skill (e.g. 'operator-orchestrator'). Either this or skill_kref required."},
+                    "skill_kref": {"type": "string", "description": "Full kref of the skill revision exercised. Recorded as provenance edge."},
+                    "success": {"type": "boolean", "description": "Whether the skill use achieved its goal."},
+                    "summary": {"type": "string", "description": "Short summary of what happened (markdown ok)."},
+                    "error": {"type": "string", "description": "Error message if success=false."},
+                    "agent_id": {"type": "string"},
+                    "session_id": {"type": "string"},
+                    "duration_ms": {"type": "integer"},
+                },
+                "required": ["success"],
+            },
+        ),
+        Tool(
+            name="get_skill_effectiveness",
+            description=(
+                "Compute the rolling success rate for a skill from its recent recorded "
+                "outcomes. Returns {total, successes, failures, rate, recent[]}. The "
+                "Rust-side SkillsSection prompt builder consumes this to rerank skills "
+                "before injecting them into agent system prompts (effectiveness-weighted "
+                "selection)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "skill_name": {"type": "string"},
+                    "skill_kref": {"type": "string"},
+                    "limit": {"type": "integer", "default": 50, "description": "Max outcomes to consider (1..500)."},
+                },
+            },
+        ),
+        Tool(
             name="recall_session_outcomes",
             description=(
                 "Recall outcomes recorded by sibling agents in the same session (or a list of "
@@ -2475,6 +2518,12 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "recall_session_outcomes":
         from .tool_handlers.outcomes import tool_recall_session_outcomes_op
         return await tool_recall_session_outcomes_op(args)
+    if name == "record_skill_outcome":
+        from .tool_handlers.skill_outcomes import tool_record_skill_outcome_op
+        return await tool_record_skill_outcome_op(args)
+    if name == "get_skill_effectiveness":
+        from .tool_handlers.skill_outcomes import tool_get_skill_effectiveness_op
+        return await tool_get_skill_effectiveness_op(args)
     if name == "memory_engage":
         from .tool_handlers.memory import tool_memory_engage_op
         return await tool_memory_engage_op(args)
