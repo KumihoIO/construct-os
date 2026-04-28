@@ -176,13 +176,8 @@ if %ERRORLEVEL% NEQ 0 (
     powershell -Command "Expand-Archive -Force '%TEMP%\construct-windows.zip' '%USERPROFILE%\.construct\bin'"
 )
 
-:: Add to PATH if not already there
-echo %PATH% | findstr /I /C:".construct\bin" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    setx PATH "%PATH%;%USERPROFILE%\.construct\bin" >nul 2>&1
-    set "PATH=%PATH%;%USERPROFILE%\.construct\bin"
-    echo   %GREEN%OK%RESET% Added to PATH
-)
+:: Add to User PATH (idempotent, registry-backed — see :add_to_user_path)
+call :add_to_user_path
 
 echo   %GREEN%OK%RESET% Binary installed to %USERPROFILE%\.construct\bin\construct.exe
 goto :install_sidecars
@@ -247,13 +242,8 @@ mkdir "%USERPROFILE%\.construct\bin" 2>nul
 copy /Y "target\%TARGET%\release\construct.exe" "%USERPROFILE%\.construct\bin\construct.exe" >nul
 echo   %GREEN%OK%RESET% Installed to %USERPROFILE%\.construct\bin\construct.exe
 
-:: Add to PATH if not already there
-echo %PATH% | findstr /I /C:".construct\bin" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    setx PATH "%PATH%;%USERPROFILE%\.construct\bin" >nul 2>&1
-    set "PATH=%PATH%;%USERPROFILE%\.construct\bin"
-    echo   %GREEN%OK%RESET% Added to PATH
-)
+:: Add to User PATH (idempotent, registry-backed — see :add_to_user_path)
+call :add_to_user_path
 
 goto :install_sidecars
 
@@ -288,19 +278,29 @@ if !ERRORLEVEL! NEQ 0 (
 echo.
 echo %BOLD%[5/5] Verifying installation...%RESET%
 
+:: Step A: prove the binary itself runs (uses absolute path, independent
+:: of PATH state).  Failure here is a build/copy bug.
 "%USERPROFILE%\.construct\bin\construct.exe" --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo   %RED%ERROR:%RESET% Binary not found at %USERPROFILE%\.construct\bin\construct.exe
+    goto :error_exit
+)
+for /f "tokens=*" %%v in ('"%USERPROFILE%\.construct\bin\construct.exe" --version 2^>nul') do (
+    echo   %GREEN%OK%RESET% %%v
+)
+
+:: Step B: confirm the User PATH registry entry is present (NOT just
+:: this session's %PATH% — that's a separate, in-memory copy).  This
+:: tests what new terminals will inherit, which is the user's actual
+:: question: "will `construct` work after I close and reopen my shell?"
+where powershell >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    for /f "tokens=*" %%v in ('"%USERPROFILE%\.construct\bin\construct.exe" --version 2^>nul') do (
-        echo   %GREEN%OK%RESET% %%v
-    )
-) else (
-    construct --version >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        for /f "tokens=*" %%v in ('construct --version 2^>nul') do (
-            echo   %GREEN%OK%RESET% %%v
-        )
+    powershell -NoProfile -Command "$u = [Environment]::GetEnvironmentVariable('Path', 'User'); if (($u -split ';') -contains ($env:USERPROFILE + '\.construct\bin')) { exit 0 } else { exit 1 }" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo   %GREEN%OK%RESET% On User PATH ^(close + reopen your terminal to use 'construct'^)
     ) else (
-        echo   %YELLOW%Binary installed but not on PATH yet. Restart your terminal.%RESET%
+        echo   %YELLOW%WARNING:%RESET% Not on User PATH yet. Add manually:
+        echo     %USERPROFILE%\.construct\bin
     )
 )
 
@@ -350,6 +350,47 @@ echo   - Visual Studio Build Tools with C++ workload (for source builds)
 echo   - Node.js (optional, for web dashboard)
 echo.
 goto :end
+
+:: ---- Subroutine: idempotent User PATH append ─────────────────────────────
+:: Appends %USERPROFILE%\.construct\bin to the **User** PATH (HKCU\Environment\Path)
+:: via PowerShell's [Environment]::SetEnvironmentVariable API.
+::
+:: Why not `setx PATH "%PATH%;..."`?  That's the obvious-looking call but it's
+:: broken for our purpose: %PATH% in cmd is the MERGED System+User PATH, so
+:: setx ends up writing the merged string into the User scope — which (a)
+:: duplicates every System PATH entry into User PATH on the first run, and
+:: (b) silently truncates writes longer than 1024 chars (well-documented
+:: setx limitation), corrupting whatever was there before.
+::
+:: PowerShell's [Environment] API touches only the requested scope and has
+:: no length cap.  It writes through the same registry path Windows reads
+:: when spawning new terminals, so closing + reopening a shell picks up
+:: the new entry without a logoff.
+::
+:: Idempotent: re-running setup.bat does not append duplicates.
+:: Also updates the current session's %PATH% so the verification step
+:: below can resolve `construct` without the user restarting their shell.
+:add_to_user_path
+where powershell >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo   %YELLOW%WARNING:%RESET% PowerShell not found — cannot update User PATH.
+    echo   %YELLOW%Add manually:%RESET% %USERPROFILE%\.construct\bin
+    goto :eof
+)
+set "PATH_RESULT=error"
+for /f "delims=" %%r in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$b=$env:USERPROFILE+'\.construct\bin'; $u=[Environment]::GetEnvironmentVariable('Path','User'); if (($u -split ';') -notcontains $b) { $n = if ([string]::IsNullOrEmpty($u)) { $b } else { $u.TrimEnd(';') + ';' + $b }; [Environment]::SetEnvironmentVariable('Path',$n,'User'); 'added' } else { 'present' }" 2^>nul') do set "PATH_RESULT=%%r"
+
+if "!PATH_RESULT!"=="added" (
+    set "PATH=!PATH!;%USERPROFILE%\.construct\bin"
+    echo   %GREEN%OK%RESET% Added %USERPROFILE%\.construct\bin to User PATH
+) else if "!PATH_RESULT!"=="present" (
+    set "PATH=!PATH!;%USERPROFILE%\.construct\bin"
+    echo   %GREEN%OK%RESET% %USERPROFILE%\.construct\bin already on User PATH
+) else (
+    echo   %YELLOW%WARNING:%RESET% Failed to update User PATH automatically.
+    echo   %YELLOW%Add manually:%RESET% %USERPROFILE%\.construct\bin
+)
+goto :eof
 
 :: ---- Error exit ----
 :error_exit
