@@ -31,14 +31,13 @@ function WorkflowNode({
         data.runInfo?.skills?.length ? `Skills: ${data.runInfo.skills.join(', ')}` : null,
       ].filter(Boolean).join('\n')}
       style={{
-        // Fill the React Flow node container exactly.  yamlSync.ts sets
-        // node.height = 140 (needed so the MiniMap can compute a rect
-        // up-front), and React Flow positions the source/target Handles
-        // at the edges of that container — so when the visual card was
-        // shorter than 140px the bottom Handle floated below the card.
-        // Stretch the card to fill so handles always land on the edge.
+        // No fixed height — React Flow auto-measures the rendered card
+        // and anchors source/target Handles to its actual bounding box,
+        // so the bottom dot follows variable content (description,
+        // chips, run badges) instead of floating at a hardcoded offset.
+        // minHeight gives short cards a baseline so they don't collapse.
         width: '100%',
-        height: '100%',
+        minHeight: 140,
         minWidth: 220,
         maxWidth: 280,
         borderColor: selected ? operationalAccent : 'color-mix(in srgb, var(--construct-border-soft) 75%, transparent)',
@@ -136,11 +135,9 @@ function GateNodeV2({ data, selected }: { data: TaskNodeData; selected?: boolean
     <div
       className="rounded-[14px] border px-4 py-3 shadow-sm flex flex-col"
       style={{
-        // Fill the React Flow node container — yamlSync.ts sets gate
-        // nodes to height: 96; without `height: 100%` here the visual
-        // card is shorter and Handles float below it.
+        // Auto-measured height — handles follow the rendered bottom edge.
         width: '100%',
-        height: '100%',
+        minHeight: 96,
         minWidth: 200,
         maxWidth: 250,
         borderColor: selected ? accent : 'color-mix(in srgb, var(--construct-border-soft) 75%, transparent)',
