@@ -119,6 +119,14 @@ When a workflow runs, you watch the signal propagate:
 | **Audit** | `/audit` | Merkle hash-chain tamper-evident event log with chain verification |
 | **Doctor** | `/doctor` | Automated runtime diagnostics and recovery posture |
 
+### Operator Chat (Header Dropdown)
+
+The **Operator** isn't only available through workflows — every page in the dashboard exposes a one-click chat dropdown from the header. Drop it down, ask a question, get an answer streamed back from the same Operator that drives your workflows. The chat tab and a terminal tab live side-by-side, so you can switch between asking and inspecting without leaving the page you're on.
+
+![Construct dashboard with the Operator chat dropdown open over the Workflows view, showing a streaming reply alongside the chat / terminal tabs](docs/assets/dashboard/readme-06-operator-chat.png)
+
+Backed by the same `/ws/chat` endpoint listed below, with auto-focus on open and per-route session memory so context carries across navigation.
+
 ### Real-time Capabilities
 
 - **WebSocket Chat** (`/ws/chat`) — streaming agent responses with token-by-token rendering
