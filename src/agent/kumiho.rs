@@ -232,27 +232,26 @@ pub fn kumiho_mcp_server_config(kumiho_cfg: &KumihoConfig) -> McpServerConfig {
         "KUMIHO_HARNESS_PROJECT".to_string(),
         kumiho_cfg.harness_project.clone(),
     );
-    // Forward KUMIHO_AUTH_TOKEN only when it is explicitly set in the
-    // environment. The kumiho Python SDK's own _token_loader already reads
-    // ~/.kumiho/kumiho_authentication.json and correctly prefers `id_token`
-    // (the Firebase JWT the discovery endpoint validates) over
-    // `control_plane_token` (a long-lived service token).
+    // Forward the bearer token to the spawned Python MCP. KUMIHO_AUTH_TOKEN
+    // (what the SDK reads) and KUMIHO_SERVICE_TOKEN (what Construct's own
+    // gateway code reads) carry the same dashboard-issued service_token —
+    // the discovery endpoint at control.kumiho.cloud accepts service_tokens
+    // via verifyControlPlaneToken and returns the tenant gRPC routing.
     //
-    // Earlier code sourced KUMIHO_AUTH_TOKEN from KUMIHO_SERVICE_TOKEN or
-    // from the auth file's `control_plane_token` field. Both ended up
-    // shipping a control-plane token to the Firebase-validated discovery
-    // endpoint, producing `DiscoveryError: invalid_id_token` on fresh
-    // installs whose only credentials live in the auth file. Letting the
-    // Python SDK load from the file itself is correct because the two
-    // tokens serve different audiences:
-    //   - KUMIHO_SERVICE_TOKEN  → Construct's own X-Kumiho-Token header
-    //                             (long-lived, sourced from control_plane_token)
-    //   - KUMIHO_AUTH_TOKEN     → Python SDK bearer auth + discovery
-    //                             (short-lived Firebase id_token)
-    if let Ok(token) = std::env::var("KUMIHO_AUTH_TOKEN") {
-        if !token.trim().is_empty() {
-            env.insert("KUMIHO_AUTH_TOKEN".to_string(), token);
-        }
+    // Priority: explicit KUMIHO_AUTH_TOKEN > KUMIHO_SERVICE_TOKEN. When
+    // neither is set, leave KUMIHO_AUTH_TOKEN unset and let the Python SDK's
+    // _token_loader read ~/.kumiho/kumiho_authentication.json directly
+    // (path used by `kumiho login`).
+    let auth_token = std::env::var("KUMIHO_AUTH_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            std::env::var("KUMIHO_SERVICE_TOKEN")
+                .ok()
+                .filter(|t| !t.trim().is_empty())
+        });
+    if let Some(token) = auth_token {
+        env.insert("KUMIHO_AUTH_TOKEN".to_string(), token);
     }
     // Also forward the control plane URL if set.
     if let Ok(url) = std::env::var("KUMIHO_CONTROL_PLANE_URL") {
