@@ -309,7 +309,8 @@ For the integration patterns — engage/reflect, capture types, provenance edges
 - **Multi-Node Distribution** (`src/nodes/`) — distribute agent workloads across remote nodes via WebSocket for horizontal scaling
 - **Cross-Session Continuity** — session journals capture handoff notes; Kumiho archival lets a new session resume with full recall
 - **Goal Hierarchy** — three-tier tracking (strategic/tactical/task) with graph-persisted status, dependencies, and progress
-- **Skill Library & SkillForge** (`src/skills/`, `src/skillforge/`) — agents discover, use, create, and evaluate skills under `CognitiveMemory/Skills/`; Dream State runs LLM-assessed consolidation
+- **Skill Library** (`src/skills/`, `CognitiveMemory/Skills/`) — agents discover, register, and execute reusable skills shared across the runtime; markdown prompts plus `SKILL.toml` metadata, addressable as Kumiho krefs
+- **Self-Improving Skills** (`src/skills/auto_improve.rs`, `effectiveness.rs`, `auto_rollback.rs`) — the operator records per-call success/failure outcomes; recency-weighted effectiveness scores surface regressing skills; an LLM rewrites their markdown prompts; the new content publishes as a fresh Kumiho-versioned revision tagged `published` (with auto-rollback if the rewrite itself regresses)
 - **Audit Trail** (`src/security/audit.rs`) — Merkle hash-chain tamper-evident logging with cryptographic verification
 - **Cost Tracking** (`src/cost/`) — per-model token and cost breakdown with budget governance at agent or system level
 - **Cron Scheduling** (`src/cron/`) — recurring, one-shot, and interval jobs with history and catch-up behaviour
