@@ -502,9 +502,22 @@ fn plan_spawn_with_discovery(
             }
         }
         None => {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+            // SHELL isn't set on Windows by default and `/bin/sh` doesn't
+            // exist there. Pick the platform-native default so spawn
+            // doesn't fail with "specified path cannot be found".
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+                if cfg!(windows) {
+                    std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
+                } else {
+                    "/bin/sh".to_string()
+                }
+            });
             let mut cmd = CommandBuilder::new(&shell);
-            cmd.arg("-l");
+            // `-l` is a Unix login-shell flag; cmd.exe / powershell.exe
+            // reject it.
+            if !cfg!(windows) {
+                cmd.arg("-l");
+            }
             (cmd, None)
         }
     };

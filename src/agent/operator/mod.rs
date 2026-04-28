@@ -105,7 +105,7 @@ pub fn operator_mcp_server_config(cfg: &OperatorConfig) -> McpServerConfig {
     McpServerConfig {
         name: OPERATOR_SERVER_NAME.to_string(),
         transport: McpTransport::Stdio,
-        command: "python3".to_string(),
+        command: crate::sidecars::python::default_python_command().to_string(),
         args: vec![script_path],
         env,
         url: None,
