@@ -1,0 +1,164 @@
+name: Pub Homebrew Tap
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Existing release tag (vX.Y.Z)"
+        required: true
+        type: string
+      dry_run:
+        description: "Generate formula only (no push)"
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: false
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag (vX.Y.Z)"
+        required: true
+        type: string
+      dry_run:
+        description: "Generate formula only (no push)"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: homebrew-tap-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish-homebrew-tap:
+    name: Update Homebrew Tap
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate and compute metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_tag must be vX.Y.Z format."
+            exit 1
+          fi
+
+          version="${RELEASE_TAG#v}"
+          sums_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/SHA256SUMS"
+          sums="$(curl -fsSL "$sums_url")"
+
+          extract_sha() {
+            local name="$1"
+            local sha
+            sha="$(printf '%s\n' "$sums" | awk -v n="$name" '$2==n {print $1}')"
+            if [[ -z "$sha" ]]; then
+              echo "::error::Missing $name in SHA256SUMS for ${RELEASE_TAG}." >&2
+              exit 1
+            fi
+            printf '%s' "$sha"
+          }
+
+          darwin_arm64="$(extract_sha construct-aarch64-apple-darwin.tar.gz)"
+          linux_arm64="$(extract_sha construct-aarch64-unknown-linux-gnu.tar.gz)"
+          linux_x86_64="$(extract_sha construct-x86_64-unknown-linux-gnu.tar.gz)"
+
+          {
+            echo "version=$version"
+            echo "darwin_arm64=$darwin_arm64"
+            echo "linux_arm64=$linux_arm64"
+            echo "linux_x86_64=$linux_x86_64"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Homebrew Tap Metadata"
+            echo "- version: \`${version}\`"
+            echo "- darwin_arm64: \`${darwin_arm64}\`"
+            echo "- linux_arm64: \`${linux_arm64}\`"
+            echo "- linux_x86_64: \`${linux_x86_64}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate formula
+        id: formula
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          DARWIN_ARM64_SHA: ${{ steps.meta.outputs.darwin_arm64 }}
+          LINUX_ARM64_SHA: ${{ steps.meta.outputs.linux_arm64 }}
+          LINUX_X86_64_SHA: ${{ steps.meta.outputs.linux_x86_64 }}
+        run: |
+          set -euo pipefail
+
+          formula_file="$(mktemp)"
+          sed -e "s|@@VERSION@@|${VERSION}|g" \
+              -e "s|@@DARWIN_ARM64_SHA@@|${DARWIN_ARM64_SHA}|g" \
+              -e "s|@@LINUX_ARM64_SHA@@|${LINUX_ARM64_SHA}|g" \
+              -e "s|@@LINUX_X86_64_SHA@@|${LINUX_X86_64_SHA}|g" \
+              dist/homebrew/construct.rb > "$formula_file"
+
+          echo "formula_file=$formula_file" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Generated Formula"
+            echo '```ruby'
+            cat "$formula_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push to tap
+        if: inputs.dry_run == false
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          FORMULA_FILE: ${{ steps.formula.outputs.formula_file }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${HOMEBREW_TAP_REPO}" ]]; then
+            echo "::error::Repository variable HOMEBREW_TAP_REPO is required (e.g. KumihoIO/homebrew-construct)."
+            exit 1
+          fi
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::error::Secret HOMEBREW_TAP_TOKEN is required for non-dry-run."
+            exit 1
+          fi
+
+          tmp_dir="$(mktemp -d)"
+          gh repo clone "${HOMEBREW_TAP_REPO}" "$tmp_dir/tap" -- --depth=1
+
+          mkdir -p "$tmp_dir/tap/Formula"
+          cp "$FORMULA_FILE" "$tmp_dir/tap/Formula/construct.rb"
+
+          cd "$tmp_dir/tap"
+          git config user.name "construct-bot"
+          git config user.email "bot@construct.dev"
+          git add Formula/construct.rb
+          git commit -m "construct ${VERSION}"
+          gh auth setup-git
+          git push origin HEAD
+
+          echo "Homebrew tap updated to ${VERSION}"
+
+      - name: Summary
+        shell: bash
+        run: |
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry run complete: formula generated, no push performed."
+          else
+            echo "Publish complete: tap pushed."
+          fi
