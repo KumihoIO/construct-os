@@ -31,6 +31,19 @@ jobs:
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      # Sync the fork from upstream BEFORE checkout, so the PR we open
+      # below diffs cleanly against current upstream and not against
+      # whatever stale state the fork drifted into since the last run.
+      # The `|| true` keeps the job alive if upstream diverged in a
+      # conflict-y way — the resulting PR will get a "please pull
+      # latest" comment from a reviewer (recoverable) rather than
+      # blocking the whole release pipeline (not recoverable).
+      - name: Sync KumihoIO/coolify from coollabsio/coolify
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/coolify/merge-upstream -f branch=next || true
+
       - name: Checkout Coolify fork
         uses: actions/checkout@v4
         with:
@@ -140,6 +153,12 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync KumihoIO/templates from Dokploy/templates
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/templates/merge-upstream -f branch=main || true
 
       - name: Checkout Dokploy templates fork
         uses: actions/checkout@v4
@@ -294,6 +313,12 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync KumihoIO/templates-1 from easypanel-io/templates
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/templates-1/merge-upstream -f branch=main || true
 
       - name: Checkout EasyPanel templates fork
         uses: actions/checkout@v4
