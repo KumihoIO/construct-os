@@ -1096,6 +1096,13 @@ async fn main() -> Result<()> {
         }
     }
 
+    // If KUMIHO_SERVICE_TOKEN is still missing after .env loading, fall back
+    // to the Kumiho CLI's auth file (~/.kumiho/kumiho_authentication.json,
+    // `control_plane_token`). This lets `kumiho login` propagate to Construct
+    // without requiring the user to export the token manually — matching the
+    // resolution chain that src/agent/kumiho.rs already uses for MCP auth.
+    inject_kumiho_service_token_from_auth_file();
+
     config.apply_env_overrides();
     observability::runtime_trace::init_from_config(&config.observability, &config.workspace_dir);
     if config.security.otp.enabled {
@@ -2118,6 +2125,45 @@ fn set_owner_only_permissions(path: &std::path::Path) -> Result<()> {
 #[cfg(not(unix))]
 fn set_owner_only_permissions(_path: &std::path::Path) -> Result<()> {
     Ok(())
+}
+
+/// Populate `KUMIHO_SERVICE_TOKEN` from the Kumiho CLI's auth file when it is
+/// not already set in the environment.
+///
+/// `kumiho login` writes `~/.kumiho/kumiho_authentication.json` with a
+/// `control_plane_token` field. Without this fallback, fresh installs that
+/// have logged in via the Kumiho CLI but never exported the token would see
+/// gateway/operator code paths silently send empty `X-Kumiho-Token` headers.
+fn inject_kumiho_service_token_from_auth_file() {
+    if std::env::var("KUMIHO_SERVICE_TOKEN")
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let Some(user_dirs) = directories::UserDirs::new() else {
+        return;
+    };
+    let auth_path = user_dirs
+        .home_dir()
+        .join(".kumiho")
+        .join("kumiho_authentication.json");
+    let Ok(content) = std::fs::read_to_string(&auth_path) else {
+        return;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return;
+    };
+    let Some(token) = parsed
+        .get("control_plane_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    else {
+        return;
+    };
+    // SAFETY: called once early in main before worker threads are spawned.
+    unsafe { std::env::set_var("KUMIHO_SERVICE_TOKEN", token) };
 }
 
 fn save_pending_oauth_login(config: &Config, pending: &PendingOAuthLogin) -> Result<()> {
