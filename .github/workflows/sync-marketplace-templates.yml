@@ -57,7 +57,7 @@ jobs:
               restart: unless-stopped
               environment:
                 - API_KEY=${SERVICE_PASSWORD_APIKEY:-}
-                - PROVIDER=${PROVIDER:-openrouter}
+                - PROVIDER=openrouter
                 - CONSTRUCT_ALLOW_PUBLIC_BIND=true
                 - CONSTRUCT_GATEWAY_PORT=42617
               volumes:
@@ -165,7 +165,7 @@ jobs:
               restart: unless-stopped
               environment:
                 - API_KEY=\${API_KEY}
-                - PROVIDER=\${PROVIDER:-openrouter}
+                - PROVIDER=openrouter
                 - CONSTRUCT_ALLOW_PUBLIC_BIND=true
                 - CONSTRUCT_GATEWAY_PORT=42617
               volumes:
@@ -216,7 +216,7 @@ jobs:
             "logo": "construct.png",
             "links": {
               "github": "https://github.com/KumihoIO/construct-os",
-              "website": "https://construct.com/",
+              "website": "https://kumiho.io/",
               "docs": "https://github.com/KumihoIO/construct-os#readme"
             },
             "tags": ["ai", "self-hosted"]
@@ -340,7 +340,7 @@ jobs:
 
           links:
             - label: Website
-              url: https://construct.com
+              url: https://kumiho.io
             - label: Documentation
               url: https://github.com/KumihoIO/construct-os#readme
             - label: Github
