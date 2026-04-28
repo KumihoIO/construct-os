@@ -216,7 +216,7 @@ jobs:
             "logo": "construct.png",
             "links": {
               "github": "https://github.com/KumihoIO/construct-os",
-              "website": "https://kumiho.io/",
+              "website": "https://kumiho.io",
               "docs": "https://github.com/KumihoIO/construct-os#readme"
             },
             "tags": ["ai", "self-hosted"]
