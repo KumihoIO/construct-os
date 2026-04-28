@@ -1848,6 +1848,35 @@ async fn handle_pair(
                 let _ =
                     logger.log_auth_success("gateway", &format!("Client paired from {rate_key}"));
             }
+
+            // Mirror the pairing into the SQLite device registry so the
+            // dashboard's Pairing page lists this client. The legacy /pair
+            // path historically only wrote to gateway.paired_tokens (auth);
+            // the new /api/pairing/* flow writes both. Without this mirror,
+            // anyone pairing via X-Pairing-Code (the documented flow for
+            // the one-time onboarding code, including the QR-printed code
+            // shown at startup) appears to have an empty Paired Devices
+            // table even though their bearer token works.
+            if let Some(ref registry) = state.device_registry {
+                use chrono::Utc;
+                let now = Utc::now();
+                let info = api_pairing::DeviceInfo {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: None,
+                    device_type: Some("legacy-pair".to_string()),
+                    paired_at: now,
+                    last_seen: now,
+                    ip_address: Some(peer_addr.ip().to_string()),
+                };
+                if let Err(err) =
+                    registry.register(crate::security::pairing::hash_token(&token), info)
+                {
+                    tracing::warn!(
+                        "🔐 Pairing succeeded but device registry insert failed: {err:#}"
+                    );
+                }
+            }
+
             if let Err(err) =
                 Box::pin(persist_pairing_tokens(state.config.clone(), &state.pairing)).await
             {
