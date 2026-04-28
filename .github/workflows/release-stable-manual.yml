@@ -740,11 +740,24 @@ jobs:
       dry_run: false
     secrets: inherit
 
-  homebrew:
-    name: Update Homebrew Core
+  # homebrew-core path disabled — Homebrew/homebrew-core's Acceptable Formulae
+  # popularity bar (stars/watchers/forks) blocks new projects. Re-enable once
+  # construct meets the criteria and a manual first-PR has landed upstream.
+  # homebrew:
+  #   name: Update Homebrew Core
+  #   needs: [validate, publish]
+  #   if: ${{ !cancelled() && needs.publish.result == 'success' }}
+  #   uses: ./.github/workflows/pub-homebrew-core.yml
+  #   with:
+  #     release_tag: ${{ needs.validate.outputs.tag }}
+  #     dry_run: false
+  #   secrets: inherit
+
+  homebrew-tap:
+    name: Update Homebrew Tap
     needs: [validate, publish]
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    uses: ./.github/workflows/pub-homebrew-core.yml
+    uses: ./.github/workflows/pub-homebrew-tap.yml
     with:
       release_tag: ${{ needs.validate.outputs.tag }}
       dry_run: false
