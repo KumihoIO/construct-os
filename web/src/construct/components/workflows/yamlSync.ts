@@ -1074,6 +1074,11 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
     type: isGate(task) ? 'gateNode' : 'taskNode',
     position: { x: 0, y: i * 150 },
     width: isGate(task) ? 220 : 280,
+    // Initial height hint — required for the MiniMap to render rectangles
+    // before nodes are measured. The actual rendered card uses minHeight
+    // and grows past this; WorkflowNode.tsx calls useUpdateNodeInternals
+    // via a ResizeObserver so React Flow re-anchors handles + redraws
+    // the MiniMap to the measured dimensions whenever the card resizes.
     height: isGate(task) ? 96 : 140,
     data: {
       label: task.name || task.id,
@@ -1332,7 +1337,7 @@ export function stepsToFlow(steps: TaskDefinition[]): { nodes: Node<StepNodeData
     type: 'stepNode',
     position: { x: 0, y: i * 150 },
     width: 280,
-    height: 140,
+    height: 140, // Initial hint for MiniMap; cards grow via minHeight.
     data: {
       label: step.id,
       stepId: step.id,

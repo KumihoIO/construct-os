@@ -1,14 +1,38 @@
-import { Handle, Position, type NodeTypes } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeTypes } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
 import type { TaskNodeData } from '@/construct/components/workflows/yamlSync';
 import { workflowActionTone, workflowStatusTone } from '../../lib/orchestration';
 
+// Tells React Flow to re-measure this node and re-anchor handles + MiniMap
+// rectangles whenever the rendered card resizes. Cards grow past their
+// initial `node.height` hint when content (description, chips, run badges)
+// pushes them taller, and without this hook the bottom Handle stays glued
+// to the original 140px hint and the MiniMap shows stale rectangles.
+function useNodeAutoSize(id: string) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => updateNodeInternals(id));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [id, updateNodeInternals]);
+
+  return ref;
+}
+
 function WorkflowNode({
+  id,
   data,
   selected,
 }: {
+  id: string;
   data: TaskNodeData & { blocked?: boolean; failing?: boolean; running?: boolean };
   selected?: boolean;
 }) {
+  const ref = useNodeAutoSize(id);
   const accent = data.runInfo ? workflowStatusTone(data.runInfo.status) : workflowActionTone(data.action);
   const operationalAccent = data.failing
     ? 'var(--construct-status-danger)'
@@ -20,6 +44,7 @@ function WorkflowNode({
 
   return (
     <div
+      ref={ref}
       className="rounded-[14px] border px-4 py-3 shadow-sm flex flex-col"
       title={[
         data.name || data.taskId,
@@ -31,14 +56,13 @@ function WorkflowNode({
         data.runInfo?.skills?.length ? `Skills: ${data.runInfo.skills.join(', ')}` : null,
       ].filter(Boolean).join('\n')}
       style={{
-        // Fill the React Flow node container exactly.  yamlSync.ts sets
-        // node.height = 140 (needed so the MiniMap can compute a rect
-        // up-front), and React Flow positions the source/target Handles
-        // at the edges of that container — so when the visual card was
-        // shorter than 140px the bottom Handle floated below the card.
-        // Stretch the card to fill so handles always land on the edge.
+        // The React Flow node entry sets `height: 140` so the MiniMap
+        // can render rectangles before measurement; minHeight here keeps
+        // the same baseline visually but lets the card grow with content.
+        // useNodeAutoSize() above pushes the new measured dimensions back
+        // to React Flow so handles + MiniMap update on resize.
         width: '100%',
-        height: '100%',
+        minHeight: 140,
         minWidth: 220,
         maxWidth: 280,
         borderColor: selected ? operationalAccent : 'color-mix(in srgb, var(--construct-border-soft) 75%, transparent)',
@@ -129,18 +153,19 @@ function WorkflowNode({
   );
 }
 
-function GateNodeV2({ data, selected }: { data: TaskNodeData; selected?: boolean }) {
+function GateNodeV2({ id, data, selected }: { id: string; data: TaskNodeData; selected?: boolean }) {
   const accent = 'var(--construct-status-warning)';
+  const ref = useNodeAutoSize(id);
 
   return (
     <div
+      ref={ref}
       className="rounded-[14px] border px-4 py-3 shadow-sm flex flex-col"
       style={{
-        // Fill the React Flow node container — yamlSync.ts sets gate
-        // nodes to height: 96; without `height: 100%` here the visual
-        // card is shorter and Handles float below it.
+        // node.height = 96 hint for MiniMap; minHeight here keeps the
+        // baseline and lets the gate card grow if labels push it taller.
         width: '100%',
-        height: '100%',
+        minHeight: 96,
         minWidth: 200,
         maxWidth: 250,
         borderColor: selected ? accent : 'color-mix(in srgb, var(--construct-border-soft) 75%, transparent)',
