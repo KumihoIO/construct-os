@@ -31,6 +31,19 @@ jobs:
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      # Sync the fork from upstream BEFORE checkout, so the PR we open
+      # below diffs cleanly against current upstream and not against
+      # whatever stale state the fork drifted into since the last run.
+      # The `|| true` keeps the job alive if upstream diverged in a
+      # conflict-y way — the resulting PR will get a "please pull
+      # latest" comment from a reviewer (recoverable) rather than
+      # blocking the whole release pipeline (not recoverable).
+      - name: Sync KumihoIO/coolify from coollabsio/coolify
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/coolify/merge-upstream -f branch=next || true
+
       - name: Checkout Coolify fork
         uses: actions/checkout@v4
         with:
@@ -53,11 +66,11 @@ jobs:
 
           services:
             construct:
-              image: ghcr.io/KumihoIO/construct-os:latest
+              image: ghcr.io/kumihoio/construct-os:latest
               restart: unless-stopped
               environment:
                 - API_KEY=${SERVICE_PASSWORD_APIKEY:-}
-                - PROVIDER=${PROVIDER:-openrouter}
+                - PROVIDER=openrouter
                 - CONSTRUCT_ALLOW_PUBLIC_BIND=true
                 - CONSTRUCT_GATEWAY_PORT=42617
               volumes:
@@ -114,7 +127,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates the Construct one-click service template
-          - Image: `ghcr.io/KumihoIO/construct-os:latest`
+          - Image: `ghcr.io/kumihoio/construct-os:latest`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
@@ -141,6 +154,12 @@ jobs:
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Sync KumihoIO/templates from Dokploy/templates
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/templates/merge-upstream -f branch=main || true
+
       - name: Checkout Dokploy templates fork
         uses: actions/checkout@v4
         with:
@@ -161,11 +180,11 @@ jobs:
           version: "3.8"
           services:
             construct:
-              image: ghcr.io/KumihoIO/construct-os:${VERSION}
+              image: ghcr.io/kumihoio/construct-os:${VERSION}
               restart: unless-stopped
               environment:
                 - API_KEY=\${API_KEY}
-                - PROVIDER=\${PROVIDER:-openrouter}
+                - PROVIDER=openrouter
                 - CONSTRUCT_ALLOW_PUBLIC_BIND=true
                 - CONSTRUCT_GATEWAY_PORT=42617
               volumes:
@@ -181,11 +200,12 @@ jobs:
           [variables]
           main_domain = "${domain}"
           api_key = "${password:64}"
+          provider = "openrouter"
 
           [config]
           env = [
             "API_KEY=${api_key}",
-            "PROVIDER=openrouter",
+            "PROVIDER=${provider}",
             "CONSTRUCT_ALLOW_PUBLIC_BIND=true",
             "CONSTRUCT_GATEWAY_PORT=42617"
           ]
@@ -216,7 +236,7 @@ jobs:
             "logo": "construct.png",
             "links": {
               "github": "https://github.com/KumihoIO/construct-os",
-              "website": "https://construct.com/",
+              "website": "https://kumiho.io",
               "docs": "https://github.com/KumihoIO/construct-os#readme"
             },
             "tags": ["ai", "self-hosted"]
@@ -262,7 +282,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates Construct template to v${VERSION}
-          - Image: `ghcr.io/KumihoIO/construct-os:${VERSION}`
+          - Image: `ghcr.io/kumihoio/construct-os:${VERSION}`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
@@ -293,6 +313,12 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync KumihoIO/templates-1 from easypanel-io/templates
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_PAT }}
+        run: |
+          gh api -X POST repos/KumihoIO/templates-1/merge-upstream -f branch=main || true
 
       - name: Checkout EasyPanel templates fork
         uses: actions/checkout@v4
@@ -340,7 +366,7 @@ jobs:
 
           links:
             - label: Website
-              url: https://construct.com
+              url: https://kumiho.io
             - label: Documentation
               url: https://github.com/KumihoIO/construct-os#readme
             - label: Github
@@ -365,7 +391,7 @@ jobs:
               appServiceImage:
                 type: string
                 title: App Service Image
-                default: ghcr.io/KumihoIO/construct-os:${VERSION}
+                default: ghcr.io/kumihoio/construct-os:${VERSION}
               apiKey:
                 type: string
                 title: LLM Provider API Key
@@ -495,7 +521,7 @@ jobs:
             --body "$(cat <<'EOF'
           ## Summary
           - Adds/updates Construct template to v${VERSION}
-          - Image: `ghcr.io/KumihoIO/construct-os:${VERSION}`
+          - Image: `ghcr.io/kumihoio/construct-os:${VERSION}`
           - Construct is a fast, small, fully autonomous AI personal assistant (100% Rust)
           - Multi-arch: linux/amd64 + linux/arm64
 
