@@ -10815,8 +10815,15 @@ async fn sync_directory(path: &Path) -> Result<()> {
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
             .open(path)
             .with_context(|| format!("Failed to open directory for fsync: {}", path.display()))?;
-        dir.sync_all()
-            .with_context(|| format!("Failed to fsync directory metadata: {}", path.display()))?;
+        // FlushFileBuffers on a directory handle is not portably supported on
+        // Windows: NTFS commonly returns ERROR_ACCESS_DENIED (os error 5) for
+        // user-profile paths like C:\Users\<user>\.construct, even when the
+        // process owns the directory. NTFS journals directory metadata
+        // updates internally, so the file-level sync_all() that callers
+        // perform on the actual file inside the directory already covers the
+        // crash-safety guarantee that fsync(dir) provides on Unix. Swallow
+        // the sync error rather than failing the operation it gates.
+        let _ = dir.sync_all();
         Ok(())
     }
 
