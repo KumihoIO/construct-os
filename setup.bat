@@ -70,7 +70,7 @@ if %ERRORLEVEL% NEQ 0 (
 :: Check Node.js (optional)
 where node >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo   %YELLOW%Node.js not found (optional - web dashboard will use stub).%RESET%
+    echo   %YELLOW%Node.js not found ^(optional - web dashboard will use stub^).%RESET%
 ) else (
     for /f "tokens=1" %%v in ('node --version 2^>nul') do set "NODE_VER=%%v"
     echo   %GREEN%OK%RESET% Node.js !NODE_VER! found
@@ -164,7 +164,7 @@ if not defined DOWNLOAD_URL (
 echo   Downloading from release...
 curl -sSfL -o "%TEMP%\construct-windows.zip" "!DOWNLOAD_URL!"
 if %ERRORLEVEL% NEQ 0 (
-    echo   %YELLOW%Prebuilt binary not available. Falling back to source build (standard).%RESET%
+    echo   %YELLOW%Prebuilt binary not available. Falling back to source build ^(standard^).%RESET%
     goto :build_standard
 )
 
@@ -232,9 +232,9 @@ if %ERRORLEVEL% NEQ 0 (
     echo.
     echo   %RED%ERROR: Build failed.%RESET%
     echo   Common fixes:
-    echo   - Ensure Visual Studio Build Tools are installed (C++ workload)
+    echo   - Ensure Visual Studio Build Tools are installed ^(C++ workload^)
     echo   - Run: rustup update
-    echo   - Check disk space (6 GB needed)
+    echo   - Check disk space ^(6 GB needed^)
     goto :error_exit
 )
 

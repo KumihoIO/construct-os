@@ -398,8 +398,10 @@ cd construct-os
 
 ./install.sh          # macOS / Linux / WSL
 # or
-setup.bat             # Windows
+.\setup.bat           # Windows (PowerShell — note the leading .\)
 ```
+
+> **PowerShell note.** PowerShell does not run scripts from the current directory unless you prefix with `.\`. If you see *"setup.bat is not recognized as a name of a cmdlet"*, use `.\setup.bat`. From `cmd.exe`, plain `setup.bat` works.
 
 The installer auto-installs Rust via rustup if missing, builds `construct`, installs the Kumiho + Operator Python MCP sidecars under `~/.construct/`, runs `construct onboard` for interactive provider + API-key setup, and opens the dashboard at `http://127.0.0.1:42617`.
 
