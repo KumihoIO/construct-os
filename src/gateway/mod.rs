@@ -1868,10 +1868,9 @@ async fn handle_pair(
                     last_seen: now,
                     ip_address: Some(peer_addr.ip().to_string()),
                 };
-                if let Err(err) = registry.register(
-                    crate::security::pairing::hash_token(&token),
-                    info,
-                ) {
+                if let Err(err) =
+                    registry.register(crate::security::pairing::hash_token(&token), info)
+                {
                     tracing::warn!(
                         "🔐 Pairing succeeded but device registry insert failed: {err:#}"
                     );
