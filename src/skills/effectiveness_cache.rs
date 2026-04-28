@@ -50,6 +50,19 @@ pub const DEFAULT_IMPROVEMENT_THRESHOLD: f64 = 0.4;
 /// to act on in practice without firing on a single bad run.
 pub const DEFAULT_IMPROVEMENT_MIN_SAMPLES: u32 = 10;
 
+/// Minimum success-rate drop between the previous and current published
+/// revision before [`EffectivenessCache::regression_candidates`] flags a
+/// rollback candidate.  15 percentage points is large enough to dwarf
+/// the natural per-revision sampling noise on a 10-sample window, but
+/// small enough to catch a meaningfully worse rewrite.
+pub const DEFAULT_REGRESSION_DROP: f64 = 0.15;
+
+/// Minimum number of outcomes recorded against the *current* published
+/// revision before regression detection will consider rolling it back.
+/// Without this guard a skill with one bad outcome on a freshly-published
+/// revision would be reverted before it had a chance to prove itself.
+pub const DEFAULT_REGRESSION_MIN_SAMPLES: u32 = 10;
+
 /// A skill whose recent rolling success rate has dropped below the
 /// improvement threshold.  Future work (LLM-driven `SkillImprover`
 /// integration) consumes this signal to actually rewrite the skill;
@@ -62,6 +75,28 @@ pub struct SkillImprovementCandidate {
     pub rate: f64,
     /// Total resolved outcomes feeding the rate.
     pub total: u32,
+}
+
+/// A skill whose freshly-published revision is performing materially
+/// worse than its predecessor.  Step 6f-B emits these so the daemon's
+/// auto-rollback loop can call `rollback_skill_revision` and put the
+/// previous revision back in front of agents.
+#[derive(Debug, Clone)]
+pub struct SkillRegressionCandidate {
+    pub skill_name: String,
+    /// Kref of the freshly published revision whose stats are bad.
+    pub current_revision_kref: String,
+    /// Success rate observed against the current revision.
+    pub current_rate: f64,
+    /// Total resolved outcomes against the current revision.
+    pub current_total: u32,
+    /// Kref of the prior `published` revision — the rollback target.
+    pub previous_revision_kref: String,
+    /// Success rate observed against the previous revision.  Useful for
+    /// audit logging the size of the regression.
+    pub previous_rate: f64,
+    /// Total resolved outcomes against the previous revision.
+    pub previous_total: u32,
 }
 
 // ── Process-wide cache handle ───────────────────────────────────────────────
@@ -95,6 +130,25 @@ pub fn global_provider() -> Option<&'static dyn SkillEffectivenessProvider> {
         .map(|arc| arc.as_ref() as &dyn SkillEffectivenessProvider)
 }
 
+/// Per-revision regression state captured during refresh.  Step 6f-B
+/// stores both the currently-published revision kref and the
+/// immediately-prior one (resolved via Kumiho's `published` /
+/// `previous_published` tags) along with the outcome scores bucketed by
+/// `skill_kref` metadata.  The `regression_candidates` filter consumes
+/// this synchronously without any further Kumiho calls.
+#[derive(Default)]
+struct RevisionState {
+    /// Kref currently tagged `published` for this skill.
+    current_kref: Option<String>,
+    /// Kref currently tagged `previous_published` — the rollback target.
+    previous_kref: Option<String>,
+    /// Outcome scores bucketed by the `skill_kref` metadata field.
+    /// Outcomes recorded without a `skill_kref` tag (legacy / pre-step-6e
+    /// runs) are dropped from this map and only contribute to the
+    /// aggregate `scores` map above.
+    per_revision: HashMap<String, EffectivenessScore>,
+}
+
 /// Process-wide cache of recency-weighted skill effectiveness scores.
 ///
 /// Construct this once at daemon startup, share via `Arc`, and call
@@ -102,6 +156,12 @@ pub fn global_provider() -> Option<&'static dyn SkillEffectivenessProvider> {
 /// [`Self::spawn_refresh_task`] for the standard background loop).
 pub struct EffectivenessCache {
     scores: RwLock<HashMap<String, EffectivenessScore>>,
+    /// Step 6f-B: per-skill state needed to detect regressions across a
+    /// fresh `publish_skill_revision` and decide whether to roll back
+    /// to the prior `previous_published` revision.  Empty for skills
+    /// the refresh task hasn't been able to resolve tags for (e.g.
+    /// brand-new skills with only one published revision so far).
+    revision_state: RwLock<HashMap<String, RevisionState>>,
     /// Wall-clock time of the most recent successful refresh.  Used by
     /// callers that want to know whether the cache has any usable data
     /// before consulting it.
@@ -114,6 +174,7 @@ impl EffectivenessCache {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             scores: RwLock::new(HashMap::new()),
+            revision_state: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(None),
         })
     }
@@ -151,12 +212,49 @@ impl EffectivenessCache {
         *self.last_refresh.write() = Some(Instant::now());
     }
 
+    /// Replace the per-skill revision state.  Pure helper exposed for
+    /// tests and the refresh task; production callers go through
+    /// `refresh_for_skills`.
+    fn replace_revision_state(&self, state: HashMap<String, RevisionState>) {
+        *self.revision_state.write() = state;
+    }
+
+    /// Test-only: install a synthetic revision state so unit tests can
+    /// exercise `regression_candidates` without spinning up Kumiho.
+    #[cfg(test)]
+    fn install_test_revision_state(
+        &self,
+        skill_name: &str,
+        current_kref: &str,
+        previous_kref: &str,
+        per_revision: HashMap<String, EffectivenessScore>,
+    ) {
+        let mut map = self.revision_state.write();
+        map.insert(
+            skill_name.to_string(),
+            RevisionState {
+                current_kref: Some(current_kref.to_string()),
+                previous_kref: Some(previous_kref.to_string()),
+                per_revision,
+            },
+        );
+    }
+
     /// Refresh scores for the given skill names by listing each skill's
     /// outcomes space and tallying success / failure items.
     ///
     /// Failures for individual skills are logged and counted as zero —
     /// they don't poison the whole refresh.  The cache is replaced
     /// atomically once all skills have been processed.
+    ///
+    /// Step 6f-B: alongside the legacy aggregate score, this also
+    /// resolves the skill's `published` and `previous_published`
+    /// revision krefs and buckets outcomes by their `skill_kref`
+    /// metadata field.  That state powers `regression_candidates()`.
+    /// Skills that fail any individual Kumiho call (404, network) are
+    /// silently dropped from the per-revision map for this cycle — the
+    /// aggregate score still publishes so improvement detection isn't
+    /// affected.
     pub async fn refresh_for_skills(
         &self,
         client: &KumihoClient,
@@ -164,6 +262,7 @@ impl EffectivenessCache {
         skill_names: &[String],
     ) -> Result<(), KumihoError> {
         let mut new_scores: HashMap<String, EffectivenessScore> = HashMap::new();
+        let mut new_revision_state: HashMap<String, RevisionState> = HashMap::new();
 
         for name in skill_names {
             let safe = sanitize_skill_name(name);
@@ -190,9 +289,65 @@ impl EffectivenessCache {
             };
 
             new_scores.insert(name.clone(), classify_outcomes(&items));
+
+            // Per-revision bucketing.  Resolves both the live `published`
+            // and the rollback target `previous_published` so the
+            // regression detector can compare them synchronously.
+            let item_kref = format!(
+                "kref://{memory_project}/Skills/{safe}.{kind}",
+                kind = crate::skills::registration::SKILL_ITEM_KIND,
+            );
+            let mut state = RevisionState {
+                per_revision: classify_outcomes_per_revision(&items),
+                ..Default::default()
+            };
+            // Best-effort tag resolution.  Either lookup failing leaves
+            // the kref as None, which the regression detector treats as
+            // "no candidate" and skips silently.
+            match client
+                .get_revision_by_tag(&item_kref, crate::skills::registration::PUBLISHED_TAG)
+                .await
+            {
+                Ok(rev) => state.current_kref = Some(rev.kref),
+                Err(KumihoError::Api { status: 404, .. }) => {
+                    // Skill not registered yet — leave empty.
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        skill = %name,
+                        item_kref = %item_kref,
+                        error = %e,
+                        "regression refresh: published tag lookup failed; \
+                         per-revision bucketing skipped this cycle",
+                    );
+                }
+            }
+            match client
+                .get_revision_by_tag(
+                    &item_kref,
+                    crate::skills::registration::PREVIOUS_PUBLISHED_TAG,
+                )
+                .await
+            {
+                Ok(rev) => state.previous_kref = Some(rev.kref),
+                Err(KumihoError::Api { status: 404, .. }) => {
+                    // First publish — no rollback target yet.  Common
+                    // and silent.
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        skill = %name,
+                        item_kref = %item_kref,
+                        error = %e,
+                        "regression refresh: previous_published tag lookup failed",
+                    );
+                }
+            }
+            new_revision_state.insert(name.clone(), state);
         }
 
         self.replace_scores(new_scores);
+        self.replace_revision_state(new_revision_state);
 
         // Emit a tracing warning per candidate.  This is the daemon-side
         // signal that something has regressed and is the hook a future
@@ -206,6 +361,23 @@ impl EffectivenessCache {
                 total = cand.total,
                 "skill effectiveness: rolling success rate below threshold; \
                  candidate for SkillImprover",
+            );
+        }
+
+        // Step 6f-B: regression candidates get their own warning log so
+        // operators can trace each auto-rollback back to the data that
+        // triggered it.
+        for cand in self.regression_candidates() {
+            tracing::warn!(
+                skill = %cand.skill_name,
+                current_revision = %cand.current_revision_kref,
+                current_rate = cand.current_rate,
+                current_total = cand.current_total,
+                previous_revision = %cand.previous_revision_kref,
+                previous_rate = cand.previous_rate,
+                previous_total = cand.previous_total,
+                "skill effectiveness: revision regressed against predecessor; \
+                 candidate for auto-rollback",
             );
         }
 
@@ -239,6 +411,68 @@ impl EffectivenessCache {
         candidates.sort_by(|a, b| {
             a.rate
                 .partial_cmp(&b.rate)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        candidates
+    }
+
+    /// Skills whose freshly-published revision is performing materially
+    /// worse than its predecessor.  Step 6f-B's auto-rollback loop
+    /// consumes these to call `rollback_skill_revision`.
+    ///
+    /// A skill is a regression candidate when ALL of:
+    ///   - Both `published` and `previous_published` revision krefs
+    ///     resolved during the last refresh cycle.
+    ///   - The current revision has at least
+    ///     [`DEFAULT_REGRESSION_MIN_SAMPLES`] outcomes recorded against
+    ///     its kref (via the outcome's `skill_kref` metadata field).
+    ///   - Both revisions have a defined success rate.
+    ///   - The current rate is at least
+    ///     [`DEFAULT_REGRESSION_DROP`] below the previous rate —
+    ///     i.e. demonstrably worse, not just within sampling noise.
+    ///
+    /// Sorted by drop magnitude (worst regression first) so callers
+    /// iterating with a budget hit the most-broken skills first.
+    pub fn regression_candidates(&self) -> Vec<SkillRegressionCandidate> {
+        let revision_state = self.revision_state.read();
+        let mut candidates: Vec<SkillRegressionCandidate> = revision_state
+            .iter()
+            .filter_map(|(name, state)| {
+                let current_kref = state.current_kref.as_deref()?;
+                let previous_kref = state.previous_kref.as_deref()?;
+                if current_kref == previous_kref {
+                    // Right after a rollback both tags point at the same
+                    // revision until the next publish moves
+                    // previous_published forward.  Skip — no candidate.
+                    return None;
+                }
+                let current_score = state.per_revision.get(current_kref)?;
+                let previous_score = state.per_revision.get(previous_kref)?;
+                if current_score.total < DEFAULT_REGRESSION_MIN_SAMPLES {
+                    return None;
+                }
+                let current_rate = current_score.rate?;
+                let previous_rate = previous_score.rate?;
+                if previous_rate - current_rate < DEFAULT_REGRESSION_DROP {
+                    return None;
+                }
+                Some(SkillRegressionCandidate {
+                    skill_name: name.clone(),
+                    current_revision_kref: current_kref.to_string(),
+                    current_rate,
+                    current_total: current_score.total,
+                    previous_revision_kref: previous_kref.to_string(),
+                    previous_rate,
+                    previous_total: previous_score.total,
+                })
+            })
+            .collect();
+        // Sort by drop magnitude descending (largest regression first).
+        candidates.sort_by(|a, b| {
+            let drop_a = a.previous_rate - a.current_rate;
+            let drop_b = b.previous_rate - b.current_rate;
+            drop_b
+                .partial_cmp(&drop_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         candidates
@@ -316,6 +550,66 @@ pub(crate) fn classify_outcomes(items: &[ItemResponse]) -> EffectivenessScore {
         Some(f64::from(successes) / f64::from(total))
     };
     EffectivenessScore { rate, total }
+}
+
+/// Step 6f-B: bucket outcomes by their `skill_kref` metadata so the
+/// regression detector can compare a freshly-published revision
+/// against its predecessor.
+///
+/// Outcomes recorded without a `skill_kref` (legacy / pre-step-6e
+/// runs) are dropped — they only contribute to the aggregate score
+/// `classify_outcomes` produces, not to per-revision regression
+/// detection.  This keeps the per-revision view honest at the cost of
+/// silently discarding pre-migration data.
+///
+/// Outcomes whose `skill_kref` is a tag-pointer (`?t=published`) are
+/// also dropped — those identify "whichever revision was current at
+/// some point" rather than a concrete revision, so bucketing by them
+/// would conflate every revision into one bucket.  Step 6f-C upgrades
+/// the operator-side `record_skill_outcome` to resolve tag-pointers
+/// to concrete revision krefs at write time.
+pub(crate) fn classify_outcomes_per_revision(
+    items: &[ItemResponse],
+) -> HashMap<String, EffectivenessScore> {
+    // Tally successes / failures per kref in a single pass.
+    let mut tallies: HashMap<String, (u32, u32)> = HashMap::new();
+    for it in items {
+        let Some(kref) = it.metadata.get("skill_kref") else {
+            continue;
+        };
+        if is_tag_pointer_kref(kref) {
+            continue;
+        }
+        let entry = tallies.entry(kref.clone()).or_insert((0, 0));
+        if it.item_name.starts_with("ok-") {
+            entry.0 = entry.0.saturating_add(1);
+        } else if it.item_name.starts_with("fail-") {
+            entry.1 = entry.1.saturating_add(1);
+        }
+    }
+    tallies
+        .into_iter()
+        .map(|(kref, (successes, failures))| {
+            let total = successes.saturating_add(failures);
+            let rate = if total == 0 {
+                None
+            } else {
+                Some(f64::from(successes) / f64::from(total))
+            };
+            (kref, EffectivenessScore { rate, total })
+        })
+        .collect()
+}
+
+/// Detect kref strings that name a *tag* (e.g. `?t=published`) rather
+/// than a concrete revision (`?r=3` or no query string).  Used by
+/// `classify_outcomes_per_revision` to drop outcomes that can't be
+/// reliably attributed to a specific revision.
+fn is_tag_pointer_kref(kref: &str) -> bool {
+    let Some((_, query)) = kref.split_once('?') else {
+        return false;
+    };
+    query.split('&').any(|part| part.starts_with("t="))
 }
 
 #[cfg(test)]
@@ -525,5 +819,192 @@ mod tests {
         assert_eq!(sanitize_skill_name("plain"), "plain");
         assert_eq!(sanitize_skill_name("with/slash"), "with-slash");
         assert_eq!(sanitize_skill_name("a/b/c"), "a-b-c");
+    }
+
+    // ── Per-revision classification (step 6f-B) ──────────────────────
+
+    fn item_with_kref(item_name: &str, skill_kref: &str) -> ItemResponse {
+        let mut metadata = HashMap::new();
+        metadata.insert("skill_kref".to_string(), skill_kref.to_string());
+        ItemResponse {
+            kref: format!("kref://test/outcomes/{item_name}"),
+            name: item_name.to_string(),
+            item_name: item_name.to_string(),
+            kind: "skill_outcome".to_string(),
+            deprecated: false,
+            created_at: None,
+            metadata,
+        }
+    }
+
+    #[test]
+    fn classify_outcomes_per_revision_buckets_by_skill_kref() {
+        let r1 = "kref://m/Skills/foo.skilldef?r=1";
+        let r2 = "kref://m/Skills/foo.skilldef?r=2";
+        let items = vec![
+            item_with_kref("ok-a", r1),
+            item_with_kref("ok-b", r1),
+            item_with_kref("fail-c", r1),
+            item_with_kref("ok-d", r2),
+            item_with_kref("fail-e", r2),
+            item_with_kref("fail-f", r2),
+        ];
+        let scores = classify_outcomes_per_revision(&items);
+        assert_eq!(scores.len(), 2);
+        let s1 = scores.get(r1).expect("r1 present");
+        assert_eq!(s1.total, 3);
+        assert!((s1.rate.unwrap() - (2.0 / 3.0)).abs() < 1e-9);
+        let s2 = scores.get(r2).expect("r2 present");
+        assert_eq!(s2.total, 3);
+        assert!((s2.rate.unwrap() - (1.0 / 3.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn classify_outcomes_per_revision_drops_items_without_skill_kref() {
+        let r1 = "kref://m/Skills/foo.skilldef?r=1";
+        let items = vec![
+            item_with_kref("ok-a", r1),
+            // Legacy item with no skill_kref metadata — should be ignored.
+            item("ok-legacy"),
+        ];
+        let scores = classify_outcomes_per_revision(&items);
+        assert_eq!(scores.len(), 1);
+        assert_eq!(scores.get(r1).unwrap().total, 1);
+    }
+
+    #[test]
+    fn classify_outcomes_per_revision_drops_tag_pointer_krefs() {
+        // Outcomes recorded with the manifest's `?t=published` pointer
+        // (instead of a concrete revision_kref) cannot be attributed
+        // to a specific revision and must be dropped.  Step 6f-C
+        // upgrades the operator to record concrete krefs so this
+        // bucket vanishes in production.
+        let tag_pointer = "kref://m/Skills/foo.skilldef?t=published";
+        let r1 = "kref://m/Skills/foo.skilldef?r=1";
+        let items = vec![
+            item_with_kref("ok-a", tag_pointer),
+            item_with_kref("fail-b", tag_pointer),
+            item_with_kref("ok-c", r1),
+        ];
+        let scores = classify_outcomes_per_revision(&items);
+        assert_eq!(scores.len(), 1);
+        assert!(scores.contains_key(r1));
+        assert!(!scores.contains_key(tag_pointer));
+    }
+
+    #[test]
+    fn is_tag_pointer_kref_recognises_t_query() {
+        assert!(is_tag_pointer_kref(
+            "kref://m/Skills/foo.skilldef?t=published"
+        ));
+        assert!(is_tag_pointer_kref(
+            "kref://m/Skills/foo.skilldef?r=1&t=stable"
+        ));
+        assert!(!is_tag_pointer_kref("kref://m/Skills/foo.skilldef?r=1"));
+        assert!(!is_tag_pointer_kref("kref://m/Skills/foo.skilldef"));
+    }
+
+    // ── Regression candidates (step 6f-B) ────────────────────────────
+
+    fn rev_score(rate: f64, total: u32) -> EffectivenessScore {
+        EffectivenessScore {
+            rate: Some(rate),
+            total,
+        }
+    }
+
+    #[test]
+    fn regression_candidates_flags_drop_above_threshold() {
+        let cache = EffectivenessCache::new();
+        let mut per_rev = HashMap::new();
+        per_rev.insert("kref://r/2".to_string(), rev_score(0.30, 12));
+        per_rev.insert("kref://r/1".to_string(), rev_score(0.80, 50));
+        cache.install_test_revision_state("regressed", "kref://r/2", "kref://r/1", per_rev);
+
+        let candidates = cache.regression_candidates();
+        assert_eq!(candidates.len(), 1);
+        let c = &candidates[0];
+        assert_eq!(c.skill_name, "regressed");
+        assert_eq!(c.current_revision_kref, "kref://r/2");
+        assert!((c.current_rate - 0.30).abs() < 1e-9);
+        assert_eq!(c.previous_revision_kref, "kref://r/1");
+        assert!((c.previous_rate - 0.80).abs() < 1e-9);
+    }
+
+    #[test]
+    fn regression_candidates_skips_when_drop_below_threshold() {
+        let cache = EffectivenessCache::new();
+        let mut per_rev = HashMap::new();
+        // Drop is only 0.05 — below DEFAULT_REGRESSION_DROP (0.15).
+        per_rev.insert("kref://r/2".to_string(), rev_score(0.55, 30));
+        per_rev.insert("kref://r/1".to_string(), rev_score(0.60, 50));
+        cache.install_test_revision_state("flat", "kref://r/2", "kref://r/1", per_rev);
+
+        assert!(cache.regression_candidates().is_empty());
+    }
+
+    #[test]
+    fn regression_candidates_skips_when_current_below_min_samples() {
+        let cache = EffectivenessCache::new();
+        let mut per_rev = HashMap::new();
+        // Drop is huge but only 5 samples on the new revision — too noisy.
+        per_rev.insert("kref://r/2".to_string(), rev_score(0.0, 5));
+        per_rev.insert("kref://r/1".to_string(), rev_score(0.9, 100));
+        cache.install_test_revision_state("noisy", "kref://r/2", "kref://r/1", per_rev);
+
+        assert!(cache.regression_candidates().is_empty());
+    }
+
+    #[test]
+    fn regression_candidates_skips_when_no_previous_published() {
+        let cache = EffectivenessCache::new();
+        // First publish — only current_kref is known.
+        let mut per_rev = HashMap::new();
+        per_rev.insert("kref://r/1".to_string(), rev_score(0.10, 50));
+        let mut state_map = cache.revision_state.write();
+        state_map.insert(
+            "first-publish".to_string(),
+            RevisionState {
+                current_kref: Some("kref://r/1".to_string()),
+                previous_kref: None,
+                per_revision: per_rev,
+            },
+        );
+        drop(state_map);
+
+        assert!(cache.regression_candidates().is_empty());
+    }
+
+    #[test]
+    fn regression_candidates_skips_when_current_equals_previous() {
+        // Right after a rollback both tags can briefly point at the
+        // same revision until the next publish moves previous_published
+        // forward.  Detector must skip so we don't ping-pong.
+        let cache = EffectivenessCache::new();
+        let mut per_rev = HashMap::new();
+        per_rev.insert("kref://r/1".to_string(), rev_score(0.10, 50));
+        cache.install_test_revision_state("post-rollback", "kref://r/1", "kref://r/1", per_rev);
+
+        assert!(cache.regression_candidates().is_empty());
+    }
+
+    #[test]
+    fn regression_candidates_sorted_worst_drop_first() {
+        let cache = EffectivenessCache::new();
+        // Skill A: drop = 0.20.
+        let mut per_rev_a = HashMap::new();
+        per_rev_a.insert("kref://a/2".to_string(), rev_score(0.50, 20));
+        per_rev_a.insert("kref://a/1".to_string(), rev_score(0.70, 50));
+        cache.install_test_revision_state("a", "kref://a/2", "kref://a/1", per_rev_a);
+        // Skill B: drop = 0.50.
+        let mut per_rev_b = HashMap::new();
+        per_rev_b.insert("kref://b/2".to_string(), rev_score(0.30, 20));
+        per_rev_b.insert("kref://b/1".to_string(), rev_score(0.80, 50));
+        cache.install_test_revision_state("b", "kref://b/2", "kref://b/1", per_rev_b);
+
+        let candidates = cache.regression_candidates();
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].skill_name, "b");
+        assert_eq!(candidates[1].skill_name, "a");
     }
 }

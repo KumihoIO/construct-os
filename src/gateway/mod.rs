@@ -1258,13 +1258,25 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                         provider: auto_provider,
                         model: auto_model,
                         temperature: crate::skills::auto_improve::DEFAULT_REWRITE_TEMPERATURE,
+                        kumiho_client: auto_kumiho.clone(),
+                        memory_project: auto_project.clone(),
+                    };
+                    let mut improver = crate::skills::improver::SkillImprover::new(
+                        auto_workspace.clone(),
+                        auto_improver_config,
+                    );
+
+                    // Step 6f-B: rollback context shares the workspace
+                    // and Kumiho client with the improver so a single
+                    // background loop runs both the improvement pass
+                    // and the regression-rollback pass on each tick.
+                    let rollback_ctx = crate::skills::auto_rollback::AutoRollbackContext {
+                        workspace_dir: auto_workspace.clone(),
                         kumiho_client: auto_kumiho,
                         memory_project: auto_project,
                     };
-                    let mut improver = crate::skills::improver::SkillImprover::new(
-                        auto_workspace,
-                        auto_improver_config,
-                    );
+                    let mut rollback_tracker =
+                        crate::skills::auto_rollback::SkillRollbackTracker::new(auto_workspace);
 
                     let mut ticker = tokio::time::interval(
                         crate::skills::effectiveness_cache::DEFAULT_REFRESH_INTERVAL,
@@ -1300,6 +1312,41 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                                     skill = %cand.skill_name,
                                     error = %e,
                                     "auto-improve: attempt failed",
+                                ),
+                            }
+                        }
+
+                        // Step 6f-B: regression rollback pass.  Iterates
+                        // skills whose freshly-published revision is
+                        // measurably worse than its predecessor and
+                        // retags `published` back onto the previous
+                        // revision.  Cooldown is per-skill so a healthy
+                        // skill that ping-pongs once won't be rolled
+                        // back again before its stats settle.
+                        for cand in cache_for_improver.regression_candidates() {
+                            match crate::skills::auto_rollback::attempt_skill_rollback(
+                                &rollback_ctx,
+                                &cand,
+                                &mut rollback_tracker,
+                            )
+                            .await
+                            {
+                                Ok(Some(outcome)) => tracing::warn!(
+                                    skill = %outcome.slug,
+                                    restored_revision_kref = %outcome.restored_revision_kref,
+                                    demoted_revision_kref = %outcome.demoted_revision_kref,
+                                    content_file = %outcome.content_file,
+                                    current_rate = cand.current_rate,
+                                    previous_rate = cand.previous_rate,
+                                    "auto-rollback: reverted regressed skill revision",
+                                ),
+                                Ok(None) => {
+                                    // cooldown / no rollback target — silent skip
+                                }
+                                Err(e) => tracing::warn!(
+                                    skill = %cand.skill_name,
+                                    error = %e,
+                                    "auto-rollback: attempt failed",
                                 ),
                             }
                         }
