@@ -28,6 +28,7 @@ from ..construct_config import memory_project
 
 try:
     from kumiho.mcp_server import (
+        tool_get_revision_by_tag,
         tool_memory_store,
         tool_search_items,
     )
@@ -73,6 +74,69 @@ def _outcomes_space(skill_name: str) -> str:
     return f"/{memory_project()}/Skills/{safe}/Outcomes"
 
 
+def _resolve_to_concrete_revision_kref(skill_kref: str) -> str:
+    """Resolve a tag-pointer kref (``?t=published``) to a concrete
+    revision kref (``?r=N``) so per-revision outcome bucketing on the
+    Rust side can attribute each outcome to a specific revision.
+
+    Step 6f-C of the kumiho-versioned skill plan.  Without this the
+    daemon's ``classify_outcomes_per_revision`` drops every outcome
+    whose ``skill_kref`` metadata is a tag-pointer (because a tag
+    points at "whichever revision is current right now" and that
+    moves out from under us as new revisions land), and
+    ``regression_candidates`` returns an empty list — the
+    auto-rollback infrastructure is in place but never fires.
+
+    Behaviour:
+
+    - Krefs without ``?t=`` (no query, ``?r=N``, ``?as_of=…``) are
+      returned unchanged — they're already concrete.
+    - Krefs with ``?t=<tag>`` are resolved via Kumiho's
+      ``get_revision_by_tag`` and the returned revision's kref is
+      substituted.
+    - On any resolver failure (Kumiho unreachable, tag not found,
+      malformed response) we log + return the original kref.  This
+      keeps ``record_skill_outcome`` resilient: a recording attempt
+      never fails because the resolver hiccupped, even if that
+      single outcome ends up unattributed.
+    """
+    if not skill_kref or "?t=" not in skill_kref:
+        return skill_kref
+
+    base, query = skill_kref.split("?", 1)
+    tag = None
+    for part in query.split("&"):
+        if part.startswith("t="):
+            tag = part[2:]
+            break
+    if not tag:
+        return skill_kref
+
+    try:
+        result = tool_get_revision_by_tag(base, tag)
+    except Exception as e:  # noqa: BLE001
+        _log(f"resolve_skill_kref: kumiho call failed for {skill_kref!r}: {e}")
+        return skill_kref
+
+    if not isinstance(result, dict) or "error" in result:
+        _log(
+            "resolve_skill_kref: kumiho returned error for "
+            f"{skill_kref!r}: {result!r}"
+        )
+        return skill_kref
+
+    revision = result.get("revision", result)
+    resolved = revision.get("kref") if isinstance(revision, dict) else None
+    if not resolved:
+        _log(
+            "resolve_skill_kref: kumiho response missing revision.kref for "
+            f"{skill_kref!r}: {result!r}"
+        )
+        return skill_kref
+
+    return resolved
+
+
 # ---------------------------------------------------------------------------
 # record_skill_outcome
 # ---------------------------------------------------------------------------
@@ -100,7 +164,12 @@ async def tool_record_skill_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
     agent_id = args.get("agent_id", "")
     session_id = args.get("session_id", "")
     duration_ms = args.get("duration_ms")
-    skill_kref = args.get("skill_kref", "")
+    skill_kref_input = args.get("skill_kref", "")
+    # Step 6f-C: resolve tag-pointer krefs (?t=published) to concrete
+    # revision krefs so the daemon's per-revision regression detector
+    # can attribute each outcome to a specific revision.  No-op when
+    # the caller already passed a concrete kref or omitted skill_kref.
+    skill_kref = _resolve_to_concrete_revision_kref(skill_kref_input)
 
     kind = "success" if success else "failure"
     when = datetime.now(timezone.utc).strftime("%b %d %H:%M UTC")
@@ -136,6 +205,11 @@ async def tool_record_skill_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
         metadata["error"] = error
     if skill_kref:
         metadata["skill_kref"] = skill_kref
+        # Preserve the original pointer the caller passed so audit
+        # trails can tell whether this outcome was recorded against a
+        # tag-pointer (legacy) or a concrete revision kref (post-6f-C).
+        if skill_kref_input and skill_kref_input != skill_kref:
+            metadata["skill_kref_input"] = skill_kref_input
 
     space_path = _outcomes_space(skill_name)
 
