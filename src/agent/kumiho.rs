@@ -232,30 +232,27 @@ pub fn kumiho_mcp_server_config(kumiho_cfg: &KumihoConfig) -> McpServerConfig {
         "KUMIHO_HARNESS_PROJECT".to_string(),
         kumiho_cfg.harness_project.clone(),
     );
-    // Forward auth token for MCP server authentication.
-    // Priority: KUMIHO_SERVICE_TOKEN env → KUMIHO_AUTH_TOKEN env → control_plane_token from auth file.
-    let auth_token = std::env::var("KUMIHO_SERVICE_TOKEN")
-        .ok()
-        .filter(|t| !t.trim().is_empty())
-        .or_else(|| {
-            std::env::var("KUMIHO_AUTH_TOKEN")
-                .ok()
-                .filter(|t| !t.trim().is_empty())
-        })
-        .or_else(|| {
-            // Read control_plane_token from ~/.kumiho/kumiho_authentication.json
-            let auth_path = expand_tilde("~/.kumiho/kumiho_authentication.json");
-            std::fs::read_to_string(&auth_path)
-                .ok()
-                .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
-                .and_then(|v| {
-                    v.get("control_plane_token")
-                        .and_then(|t| t.as_str().map(String::from))
-                })
-                .filter(|t| !t.trim().is_empty())
-        });
-    if let Some(token) = auth_token {
-        env.insert("KUMIHO_AUTH_TOKEN".to_string(), token);
+    // Forward KUMIHO_AUTH_TOKEN only when it is explicitly set in the
+    // environment. The kumiho Python SDK's own _token_loader already reads
+    // ~/.kumiho/kumiho_authentication.json and correctly prefers `id_token`
+    // (the Firebase JWT the discovery endpoint validates) over
+    // `control_plane_token` (a long-lived service token).
+    //
+    // Earlier code sourced KUMIHO_AUTH_TOKEN from KUMIHO_SERVICE_TOKEN or
+    // from the auth file's `control_plane_token` field. Both ended up
+    // shipping a control-plane token to the Firebase-validated discovery
+    // endpoint, producing `DiscoveryError: invalid_id_token` on fresh
+    // installs whose only credentials live in the auth file. Letting the
+    // Python SDK load from the file itself is correct because the two
+    // tokens serve different audiences:
+    //   - KUMIHO_SERVICE_TOKEN  → Construct's own X-Kumiho-Token header
+    //                             (long-lived, sourced from control_plane_token)
+    //   - KUMIHO_AUTH_TOKEN     → Python SDK bearer auth + discovery
+    //                             (short-lived Firebase id_token)
+    if let Ok(token) = std::env::var("KUMIHO_AUTH_TOKEN") {
+        if !token.trim().is_empty() {
+            env.insert("KUMIHO_AUTH_TOKEN".to_string(), token);
+        }
     }
     // Also forward the control plane URL if set.
     if let Ok(url) = std::env::var("KUMIHO_CONTROL_PLANE_URL") {
