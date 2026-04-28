@@ -775,22 +775,25 @@ jobs:
 
   # ── Post-publish: announce after release + website are live ───────────
   # Docker push can be slow; don't let it block announcements.
-  tweet:
-    name: Tweet Release
-    needs: [validate, publish, redeploy-website]
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    uses: ./.github/workflows/tweet-release.yml
-    with:
-      release_tag: ${{ needs.validate.outputs.tag }}
-      release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
-    secrets: inherit
-
-  discord:
-    name: Discord Announcement
-    needs: [validate, publish, redeploy-website]
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    uses: ./.github/workflows/discord-release.yml
-    with:
-      release_tag: ${{ needs.validate.outputs.tag }}
-      release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
-    secrets: inherit
+  #
+  # NOTE: tweet + discord announcements are temporarily disabled for the
+  # v2026.4.29 bug-fix release. Re-enable in the next release-prep PR.
+  # tweet:
+  #   name: Tweet Release
+  #   needs: [validate, publish, redeploy-website]
+  #   if: ${{ !cancelled() && needs.publish.result == 'success' }}
+  #   uses: ./.github/workflows/tweet-release.yml
+  #   with:
+  #     release_tag: ${{ needs.validate.outputs.tag }}
+  #     release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
+  #   secrets: inherit
+  #
+  # discord:
+  #   name: Discord Announcement
+  #   needs: [validate, publish, redeploy-website]
+  #   if: ${{ !cancelled() && needs.publish.result == 'success' }}
+  #   uses: ./.github/workflows/discord-release.yml
+  #   with:
+  #     release_tag: ${{ needs.validate.outputs.tag }}
+  #     release_url: https://github.com/KumihoIO/construct-os/releases/tag/${{ needs.validate.outputs.tag }}
+  #   secrets: inherit
