@@ -161,6 +161,7 @@ function ChatPane({
   config: AssistantConfig;
   colors: SchemeColors;
 }) {
+  const { open } = useV2Assistant();
   const {
     activities,
     connected,
@@ -188,9 +189,16 @@ function ChatPane({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [activities, messages, streamingContent, typing]);
 
+  // Focus the message input each time the panel opens. The 320ms delay
+  // matches the panel's 300ms slide-down transition (line 532) so the
+  // textarea is on screen and clickable when the cursor lands. inputRef
+  // is a stable ref so depending on `open` is what actually drives the
+  // re-focus on every dropdown.
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 120);
-  }, [inputRef]);
+    if (!open) return;
+    const id = setTimeout(() => inputRef.current?.focus(), 320);
+    return () => clearTimeout(id);
+  }, [open, inputRef]);
 
   const roleColor = useCallback(
     (role: string) => {
@@ -326,7 +334,7 @@ function ChatPane({
             }}
             placeholder={connected ? 'message…' : 'connecting…'}
             disabled={!connected}
-            className="min-h-[2rem] flex-1 resize-none bg-transparent font-mono outline-none disabled:opacity-50"
+            className="min-h-[2rem] flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
             style={{
               color: 'var(--construct-text-primary)',
               caretColor: colors.cursorColor,
