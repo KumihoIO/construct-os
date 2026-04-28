@@ -291,7 +291,7 @@ pub fn kumiho_mcp_server_config(kumiho_cfg: &KumihoConfig) -> McpServerConfig {
     McpServerConfig {
         name: KUMIHO_SERVER_NAME.to_string(),
         transport: McpTransport::Stdio,
-        command: "python3".to_string(),
+        command: crate::sidecars::python::default_python_command().to_string(),
         args: vec![script_path],
         env,
         url: None,

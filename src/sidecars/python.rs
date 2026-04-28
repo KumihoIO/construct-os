@@ -13,6 +13,15 @@ const MIN_MINOR: u32 = 11;
 
 const DOWNLOAD_URL: &str = "https://www.python.org/downloads/";
 
+/// Platform-native default name for the Python interpreter when spawning a
+/// sidecar launcher. On Windows there is no `python3` executable — installs
+/// from python.org expose `python.exe` (or `py.exe`), so hardcoding
+/// `python3` causes "program not found" at spawn time. On Unix `python3`
+/// remains the convention.
+pub fn default_python_command() -> &'static str {
+    if cfg!(windows) { "python" } else { "python3" }
+}
+
 /// Resolve a usable Python interpreter, honoring `explicit` if provided.
 ///
 /// Returns the absolute path to the interpreter on success.

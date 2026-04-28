@@ -2159,7 +2159,16 @@ impl Provider for OpenAiCompatibleProvider {
                 ),
                 temperature,
                 reasoning_effort: self.reasoning_effort.clone(),
-                tool_stream: if options.enabled { Some(true) } else { None },
+                // `tool_stream` is a z.ai-specific extension; OpenAI-compatible
+                // endpoints like NVIDIA NIM reject it as an unknown parameter
+                // (400 "Unsupported parameter(s): tool_stream"). Gate on the
+                // same `requires_tool_stream` check used elsewhere so we only
+                // send it to providers that actually accept it.
+                tool_stream: if options.enabled {
+                    self.tool_stream_for_tools(true)
+                } else {
+                    None
+                },
                 stream: Some(options.enabled),
                 stream_options: if options.enabled {
                     Some(StreamOptionsPayload {
@@ -2190,7 +2199,9 @@ impl Provider for OpenAiCompatibleProvider {
                 messages,
                 temperature,
                 reasoning_effort: self.reasoning_effort.clone(),
-                tool_stream: if options.enabled { Some(true) } else { None },
+                // No tools in this branch, so `tool_stream` is meaningless
+                // regardless of provider. Always None.
+                tool_stream: None,
                 stream: Some(options.enabled),
                 stream_options: if options.enabled {
                     Some(StreamOptionsPayload {
