@@ -22,6 +22,36 @@ pub fn default_python_command() -> &'static str {
     if cfg!(windows) { "python" } else { "python3" }
 }
 
+/// Detect the `npm` executable on PATH. Returns the resolved absolute path
+/// on success, or an error with a download link when missing. Used by the
+/// session-manager sidecar installer (Node.js sidecar that drives the
+/// Claude Agent SDK and codex CLI).
+pub fn detect_npm() -> Result<PathBuf> {
+    // On Windows the executable is npm.cmd; Command will resolve either name.
+    let candidate = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    let output = Command::new(candidate)
+        .arg("--version")
+        .output()
+        .map_err(|_| {
+            anyhow!(
+                "npm not found on PATH. Install Node.js LTS (includes npm) from \
+                 https://nodejs.org/ or via your package manager (`brew install node`, \
+                 `apt install nodejs npm`, `winget install OpenJS.NodeJS`)."
+            )
+        })?;
+
+    if !output.status.success() {
+        return Err(anyhow!(
+            "npm found on PATH but `npm --version` exited with status {:?}. \
+             Verify your Node.js install: {}",
+            output.status.code(),
+            "https://nodejs.org/"
+        ));
+    }
+
+    Ok(PathBuf::from(candidate))
+}
+
 /// Resolve a usable Python interpreter, honoring `explicit` if provided.
 ///
 /// Returns the absolute path to the interpreter on success.

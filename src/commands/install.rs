@@ -19,6 +19,15 @@ pub struct InstallOptions {
     pub skip_kumiho: bool,
     /// Skip installing the Operator sidecar.
     pub skip_operator: bool,
+    /// Opt-in: install the Node.js Session Manager sidecar.
+    ///
+    /// Default `false`. When false, agents run via the subprocess path
+    /// (`claude --print` + `codex exec`) which uses each CLI's own OAuth
+    /// → routes spawned-agent calls through the user's Claude Pro/Max +
+    /// Codex CLI subscriptions. When true, agents run via the Claude
+    /// Agent SDK in the Session Manager — supports streaming timeline
+    /// events but requires `ANTHROPIC_API_KEY` (pay-per-token).
+    pub with_session_manager: bool,
     /// Print what would be done without executing.
     pub dry_run: bool,
     /// Optional explicit Python interpreter.
@@ -40,6 +49,7 @@ pub async fn run(opts: InstallOptions) -> Result<()> {
     sidecars::install_sidecars(&SidecarInstallOptions {
         skip_kumiho: opts.skip_kumiho,
         skip_operator: opts.skip_operator,
+        with_session_manager: opts.with_session_manager,
         dry_run: opts.dry_run,
         python: opts.python,
     })
