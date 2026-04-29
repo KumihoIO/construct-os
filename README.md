@@ -147,6 +147,8 @@ Backed by the same `/ws/chat` endpoint listed below, with auto-focus on open and
 
 The **Operator** is Construct's hand on the controls — a Python MCP server that drives declarative YAML workflows through 17 step types and several advanced orchestration patterns. Agents run inside the Construct; the Operator sees the whole board.
 
+Workflows live as YAML files on disk (`.construct/workflows/` per project, `~/.construct/workflows/` user-global), so pipelines are git-trackable, code-reviewable, and diff-readable like any other source artifact. The step grammar covers multi-agent patterns directly — `supervisor`, `group_chat`, `map_reduce`, `handoff`, `human_approval` — declarative enough to read end-to-end without running a Python interpreter, and expressive enough to skip sub-graph workarounds or node-palette stitching.
+
 <!-- TODO screenshot: Workflows view with YAML editor on the left and DAG workspace on the right, showing a declarative multi-agent workflow definition with step dependencies -->
 ![Workflows view with YAML editor and DAG workspace for declarative multi-agent workflow definition](docs/assets/dashboard/readme-03-workflow-yaml.png)
 
@@ -189,6 +191,24 @@ Shortcut aliases like `type: notify` (equivalent to `agent` with `role: notifier
 **Handoff** — agent-to-agent context transfer preserving last message, files touched, and tool call summaries. Records `HANDED_OFF_TO` edges in Kumiho for provenance.
 
 **Refinement Loop** — creator/critic pattern with structured quality scoring (0-100), verdict classification (APPROVED/NEEDS_CHANGES/BLOCKED), and fallback ladder.
+
+### Reactive Graph — Tag-Triggered Workflows
+
+Workflows can subscribe to **revision tags** in Kumiho instead of polling or external webhooks. Tagging a revision (`tag: ready` on a `qs-arc-plan` entity, for example) fires a `revision.tagged` event; any workflow whose `triggers:` block matches the entity kind + tag launches automatically with the trigger's metadata mapped into its inputs.
+
+The result is a graph that reacts: an `output` step in workflow A publishes an entity → workflow B's trigger matches → B launches with A's output as context → B's output triggers C. No orchestrator-side cron, no external webhook plumbing, no manual chaining.
+
+```yaml
+triggers:
+  - on_kind: "qs-arc-plan"
+    on_tag: "ready"
+    on_name_pattern: "qs-*"
+    input_map:
+      arc_kref: "${trigger.entity_kref}"
+      arc_name: "${trigger.metadata.arc_name}"
+```
+
+Full grammar, cron triggers, auto-input mapping, and end-to-end chaining examples in [WORKFLOWS.md](WORKFLOWS.md).
 
 ### Variable Interpolation
 
