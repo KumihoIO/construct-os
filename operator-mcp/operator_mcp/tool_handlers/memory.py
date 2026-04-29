@@ -14,8 +14,6 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from .._log import _log
-
 try:
     from kumiho.mcp_server import (
         tool_memory_store,
@@ -31,10 +29,33 @@ try:
 except ImportError:
     _HAS_KUMIHO = False
 
+# kumiho-memory provides the smart engage/reflect path (graph-augmented
+# recall + sibling enrichment + post-consolidation edge discovery). The
+# operator wrappers below delegate to these instead of re-implementing
+# the same flow on top of the lower-level kumiho.mcp_server primitives.
+try:
+    from kumiho_memory.mcp_tools import (
+        tool_memory_engage as _km_tool_memory_engage,
+        tool_memory_reflect as _km_tool_memory_reflect,
+    )
+
+    _HAS_KUMIHO_MEMORY = True
+except ImportError:
+    _HAS_KUMIHO_MEMORY = False
+
 
 def _unavailable() -> dict[str, Any]:
     return {
         "error": "kumiho package not available — install via `construct sidecars install`",
+    }
+
+
+def _unavailable_kumiho_memory() -> dict[str, Any]:
+    return {
+        "error": (
+            "kumiho-memory package not available — install via "
+            "`construct sidecars install` or `pip install kumiho-memory`"
+        ),
     }
 
 
@@ -163,163 +184,69 @@ async def tool_memory_store_op(args: dict[str, Any]) -> dict[str, Any]:
 # Composite skill-behaviors (engage / reflect)
 #
 # These mirror the agent-side kumiho_memory_engage / kumiho_memory_reflect
-# tools so the Operator gets the same ergonomic two-reflex API. They are
-# composed from the underlying kumiho.mcp_server primitives: engage =
-# retrieve + summarize, reflect = store-with-provenance for each capture.
+# tools so the Operator uses the exact same recall + write paths the agents
+# do (graph-augmented recall, sibling enrichment, post-consolidation edge
+# discovery). Both delegate to kumiho_memory.mcp_tools so there's a single
+# upstream-maintained implementation; older versions of this file
+# re-implemented retrieve+stitch on the lower-level kumiho.mcp_server
+# primitives, which silently dropped results when the SDK's return shape
+# evolved.
 # ---------------------------------------------------------------------------
-
-
-def _summarize_for_context(items: list[dict[str, Any]]) -> str:
-    """Format retrieve results into a compact context string for the caller."""
-    if not items:
-        return "(no relevant memories)"
-    lines: list[str] = []
-    for it in items:
-        title = it.get("title") or it.get("name") or it.get("item_name") or "(untitled)"
-        memory_type = it.get("memory_type") or it.get("kind") or ""
-        summary = (it.get("summary") or it.get("preview") or "").strip()
-        created = it.get("created_at") or ""
-        prefix = f"- [{memory_type}] " if memory_type else "- "
-        suffix = f" ({created})" if created else ""
-        body = f" — {summary}" if summary else ""
-        lines.append(f"{prefix}{title}{suffix}{body}")
-    return "\n".join(lines)
-
-
-def _extract_kref(item: dict[str, Any]) -> str | None:
-    """Pull the most-specific kref available from a retrieve result."""
-    for key in ("revision_kref", "kref", "item_kref"):
-        v = item.get(key)
-        if isinstance(v, str) and v:
-            return v
-    return None
 
 
 async def tool_memory_engage_op(args: dict[str, Any]) -> dict[str, Any]:
     """Recall + context-build in one call. Operator-side equivalent of
     ``kumiho_memory_engage``.
 
-    Returns ``{context, results, source_krefs, count}`` — pass ``source_krefs``
-    to ``memory_reflect`` to create DERIVED_FROM edges from new captures back
-    to the recalled items (provenance graph).
+    Delegates to ``kumiho_memory.tool_memory_engage`` so the orchestrator
+    uses the same recall path agents use:
+
+      - graph-augmented recall (multi-query reformulation + edge traversal)
+      - sibling enrichment for connected memories
+      - LLM-based reranking when an adapter is available
+      - server-side context building via ``build_recalled_context``
+      - 5-second recall deduplication
+
+    Returns ``{context, results, source_krefs, count, recall_mode}`` — pass
+    ``source_krefs`` to ``memory_reflect`` to create DERIVED_FROM provenance
+    edges from new captures back to the recalled items.
+
+    Defaults ``graph_augmented`` to True so chain-of-decision questions
+    surface connected memories vector search alone misses. Caller can
+    pass ``graph_augmented=False`` for fast single-query recall.
     """
-    if not _HAS_KUMIHO:
-        return _unavailable()
-    query = args.get("query")
-    if not query:
+    if not _HAS_KUMIHO_MEMORY:
+        return _unavailable_kumiho_memory()
+    if not args.get("query"):
         return {"error": "query is required"}
 
-    raw = await asyncio.to_thread(
-        tool_memory_retrieve,
-        project=args.get("project", "CognitiveMemory"),
-        query=query,
-        keywords=args.get("keywords"),
-        topics=args.get("topics"),
-        space_paths=args.get("space_paths"),
-        memory_item_kind=args.get("memory_item_kind", "conversation"),
-        limit=args.get("limit", 5),
-        mode=args.get("mode", "search"),
-        memory_types=args.get("memory_types"),
-        include_revision_metadata=True,
-    )
+    forwarded = dict(args)
+    forwarded.setdefault("graph_augmented", True)
 
-    if isinstance(raw, dict) and "error" in raw:
-        return raw
-
-    # tool_memory_retrieve may key results under "items" or "results"
-    items = []
-    if isinstance(raw, dict):
-        items = raw.get("items") or raw.get("results") or []
-    elif isinstance(raw, list):
-        items = raw
-
-    source_krefs: list[str] = []
-    seen: set[str] = set()
-    for it in items:
-        kref = _extract_kref(it) if isinstance(it, dict) else None
-        if kref and kref not in seen:
-            seen.add(kref)
-            source_krefs.append(kref)
-
-    return {
-        "context": _summarize_for_context(items if isinstance(items, list) else []),
-        "results": items,
-        "source_krefs": source_krefs,
-        "count": len(items) if isinstance(items, list) else 0,
-    }
+    return await asyncio.to_thread(_km_tool_memory_engage, forwarded)
 
 
 async def tool_memory_reflect_op(args: dict[str, Any]) -> dict[str, Any]:
-    """Store captures with provenance edges to the krefs from a prior engage.
-    Operator-side equivalent of ``kumiho_memory_reflect``.
+    """Buffer response + store captures with provenance edges. Operator-side
+    equivalent of ``kumiho_memory_reflect``.
 
-    Each capture is ``{type, title, content, tags?, space_hint?}``. For each
-    capture we call ``tool_memory_store`` with ``source_revision_krefs`` set
-    to the engage source_krefs (creates DERIVED_FROM edges) and stack
-    revisions on similar items by default.
+    Delegates to ``kumiho_memory.tool_memory_reflect`` so the orchestrator
+    writes via the same path agents use:
+
+      - response buffering into Redis working memory
+      - capture storage with stack-revisions semantics
+      - DERIVED_FROM edges to engage source_krefs
+      - post-consolidation edge discovery for durable capture types
+        (decision, architecture, implementation, synthesis, reflection)
+
+    Each capture is ``{type, title, content, tags?, space_hint?}``.
+    Returns ``{buffered, captures_stored, edges_discovered, stored_krefs}``.
     """
-    if not _HAS_KUMIHO:
-        return _unavailable()
-
-    session_id = args.get("session_id", "")
-    response = args.get("response", "")
-    captures = args.get("captures") or []
-    source_krefs = args.get("source_krefs") or []
-    space_path = args.get("space_path", "")
-    project = args.get("project", "CognitiveMemory")
-
-    if not isinstance(captures, list):
+    if not _HAS_KUMIHO_MEMORY:
+        return _unavailable_kumiho_memory()
+    if not args.get("session_id"):
+        return {"error": "session_id is required"}
+    if not isinstance(args.get("captures") or [], list):
         return {"error": "captures must be a list of {type, title, content, ...}"}
 
-    stored_krefs: list[str] = []
-    failed: list[dict[str, Any]] = []
-
-    for cap in captures:
-        if not isinstance(cap, dict):
-            failed.append({"capture": str(cap), "error": "capture must be an object"})
-            continue
-        title = cap.get("title", "")
-        content = cap.get("content", "")
-        if not title:
-            failed.append({"capture": cap, "error": "title is required"})
-            continue
-        try:
-            # tool_memory_store requires user_text or assistant_text in addition
-            # to summary; pass content as assistant_text so the conversation
-            # artifact is well-formed.
-            r = await asyncio.to_thread(
-                tool_memory_store,
-                project=project,
-                space_path=cap.get("space_hint") or space_path,
-                memory_type=cap.get("type", "summary"),
-                title=title,
-                summary=content,
-                assistant_text=content,
-                tags=cap.get("tags") or [],
-                source_revision_krefs=list(source_krefs),
-                metadata={"session_id": session_id} if session_id else None,
-                edge_type="DERIVED_FROM",
-                stack_revisions=True,
-            )
-            kref = (
-                r.get("revision_kref")
-                or r.get("item_kref")
-                or r.get("kref")
-                if isinstance(r, dict)
-                else None
-            )
-            if kref:
-                stored_krefs.append(kref)
-            elif isinstance(r, dict) and "error" in r:
-                failed.append({"title": title, "error": r["error"]})
-        except Exception as e:  # noqa: BLE001
-            _log(f"memory_reflect: store failed for {title!r}: {e}")
-            failed.append({"title": title, "error": str(e)})
-
-    return {
-        "buffered": bool(response),
-        "captures_stored": len(stored_krefs),
-        "stored_krefs": stored_krefs,
-        "failed": failed,
-        "session_id": session_id,
-    }
+    return await asyncio.to_thread(_km_tool_memory_reflect, args)
