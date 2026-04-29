@@ -33,6 +33,30 @@ _OPERATOR_DIR = os.path.dirname(os.path.abspath(__file__))
 _OPERATOR_SUBAGENT_MCP = os.path.join(_OPERATOR_DIR, "subagent_mcp.py")
 
 
+def _venv_python(venv_root: str) -> str:
+    """Return the path to the venv's Python interpreter, or a system fallback.
+
+    Mirrors the platform detection in resources/sidecars/run_kumiho_mcp.py:
+    Windows venvs put their interpreter at `Scripts\\python.exe`, POSIX at
+    `bin/python3` (with `bin/python` as a secondary). The system fallback
+    must also be platform-correct — `python3` is the convention on POSIX
+    but typically isn't on PATH on Windows, where `python.exe` (or `py.exe`
+    via the launcher) is the convention.
+    """
+    if os.name == "nt":
+        candidate = os.path.join(venv_root, "Scripts", "python.exe")
+        if os.path.exists(candidate):
+            return candidate
+        return "python"
+    candidate = os.path.join(venv_root, "bin", "python3")
+    if os.path.exists(candidate):
+        return candidate
+    candidate = os.path.join(venv_root, "bin", "python")
+    if os.path.exists(candidate):
+        return candidate
+    return "python3"
+
+
 # -- MCP server configs ------------------------------------------------------
 
 def kumiho_memory_config() -> dict[str, Any] | None:
@@ -50,10 +74,8 @@ def kumiho_memory_config() -> dict[str, Any] | None:
         return None
 
     # Prefer the kumiho venv interpreter — the launcher self-execs into it
-    # anyway, so calling it directly skips one fork. Fall back to system
-    # python3 if the venv interpreter isn't materialized yet.
-    venv_python = os.path.join(_KUMIHO_SIDECAR_ROOT, "venv/bin/python3")
-    python = venv_python if os.path.exists(venv_python) else "python3"
+    # anyway, so calling it directly skips one fork.
+    python = _venv_python(_KUMIHO_SIDECAR_ROOT)
 
     # Forward the same env the Rust daemon forwards when it spawns kumiho —
     # see src/agent/kumiho.rs::kumiho_mcp_server_config for the canonical set.
@@ -93,9 +115,7 @@ def operator_tools_config(socket_path: str | None = None) -> dict[str, Any]:
     Exposes a subset of operator tools so sub-agents can spawn children,
     check siblings, and (Phase 4) post to chat rooms.
     """
-    python = os.path.join(_HOME, ".construct/operator_mcp/venv/bin/python3")
-    if not os.path.exists(python):
-        python = "python3"
+    python = _venv_python(os.path.join(_HOME, ".construct", "operator_mcp", "venv"))
 
     env: dict[str, str] = {}
     if socket_path:

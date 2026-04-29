@@ -1,4 +1,4 @@
-"""Tests for operator.mcp_injection — config builders and system prompt layering."""
+"""Tests for operator_mcp.mcp_injection — config builders and system prompt layering."""
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -6,11 +6,58 @@ from unittest.mock import patch
 import pytest
 
 from operator_mcp.mcp_injection import (
+    _venv_python,
     build_mcp_servers,
     build_system_prompt,
     operator_tools_config,
     kumiho_memory_config,
 )
+
+
+class TestVenvPython:
+    """Platform-aware venv interpreter resolution.
+
+    The kumiho launcher self-execs into the venv interpreter at runtime,
+    but `mcp_injection.py` writes the interpreter path into the MCP config
+    JSON ahead of time — so it has to pick the right one for the host OS.
+    A POSIX-shaped fallback ("python3") doesn't exist on Windows where the
+    convention is `python.exe` / `py.exe`, and getting this wrong manifests
+    as silent MCP-server-fails-to-start in the spawned subprocess.
+    """
+
+    def test_posix_prefers_venv_python3(self, tmp_path):
+        venv = tmp_path / "venv"
+        (venv / "bin").mkdir(parents=True)
+        bin_python3 = venv / "bin" / "python3"
+        bin_python3.touch()
+        with patch("operator_mcp.mcp_injection.os.name", "posix"):
+            assert _venv_python(str(venv)) == str(bin_python3)
+
+    def test_posix_falls_back_to_venv_python(self, tmp_path):
+        venv = tmp_path / "venv"
+        (venv / "bin").mkdir(parents=True)
+        bin_python = venv / "bin" / "python"
+        bin_python.touch()
+        with patch("operator_mcp.mcp_injection.os.name", "posix"):
+            assert _venv_python(str(venv)) == str(bin_python)
+
+    def test_posix_system_fallback(self, tmp_path):
+        with patch("operator_mcp.mcp_injection.os.name", "posix"):
+            assert _venv_python(str(tmp_path / "missing")) == "python3"
+
+    def test_windows_uses_scripts_python_exe(self, tmp_path):
+        venv = tmp_path / "venv"
+        (venv / "Scripts").mkdir(parents=True)
+        scripts_python = venv / "Scripts" / "python.exe"
+        scripts_python.touch()
+        with patch("operator_mcp.mcp_injection.os.name", "nt"):
+            assert _venv_python(str(venv)) == str(scripts_python)
+
+    def test_windows_system_fallback_is_python_not_python3(self, tmp_path):
+        # python3 isn't conventionally on PATH on Windows; falling back to
+        # "python3" was the bug fixed in this PR.
+        with patch("operator_mcp.mcp_injection.os.name", "nt"):
+            assert _venv_python(str(tmp_path / "missing")) == "python"
 
 
 class TestKumihoMemoryConfig:
