@@ -1,18 +1,51 @@
 """Tests for operator_mcp.agent_subprocess — _build_command, compose_agent_prompt, stderr filtering."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from operator_mcp.agent_subprocess import (
     _build_command,
     _codex_mcp_overrides,
     _is_stderr_noise,
+    _resolve_cli,
     compose_agent_prompt,
 )
+
+
+class TestResolveCli:
+    """asyncio.create_subprocess_exec on Windows doesn't apply PATHEXT, so
+    bare names like "claude" / "codex" fail to spawn (claude.cmd is the
+    real npm shim). shutil.which() handles PATHEXT and returns the full
+    path including extension — _resolve_cli wraps it with a bare-name
+    fallback so a missing binary still produces a useful subprocess error.
+    """
+
+    def test_returns_resolved_path_when_found(self):
+        with patch("operator_mcp.agent_subprocess.shutil.which",
+                   return_value="C:\\Users\\x\\AppData\\Roaming\\npm\\claude.cmd"):
+            assert _resolve_cli("claude") == "C:\\Users\\x\\AppData\\Roaming\\npm\\claude.cmd"
+
+    def test_falls_back_to_bare_name_when_not_found(self):
+        with patch("operator_mcp.agent_subprocess.shutil.which", return_value=None):
+            assert _resolve_cli("claude") == "claude"
 
 
 class TestBuildCommand:
     # Prompt is piped via stdin (not passed as a CLI arg) to dodge ARG_MAX
     # and shell-encoding bugs with Korean/Unicode text — so _build_command
     # only emits flags, not the prompt body.
+    #
+    # Tests here patch shutil.which to None so cmd[0] is the bare name;
+    # the actual path-resolution behavior is covered in TestResolveCli.
+
+    def setup_method(self):
+        self._which_patcher = patch(
+            "operator_mcp.agent_subprocess.shutil.which", return_value=None
+        )
+        self._which_patcher.start()
+
+    def teardown_method(self):
+        self._which_patcher.stop()
 
     def test_codex_command(self):
         cmd = _build_command("codex")
@@ -40,6 +73,16 @@ class TestBuildCommand:
         cmd = _build_command("claude", mcp_config_path="/tmp/mcp.json")
         assert "--mcp-config" in cmd
         assert "/tmp/mcp.json" in cmd
+
+    def test_resolved_binary_replaces_bare_name(self):
+        # End-to-end: when shutil.which returns a path, _build_command
+        # uses that as cmd[0], not the bare name. Critical for Windows.
+        resolved = "C:\\Users\\x\\AppData\\Roaming\\npm\\codex.cmd"
+        with patch(
+            "operator_mcp.agent_subprocess.shutil.which", return_value=resolved
+        ):
+            cmd = _build_command("codex")
+            assert cmd[0] == resolved
 
     def test_codex_with_mcp_servers(self):
         servers = {
