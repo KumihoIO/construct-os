@@ -236,6 +236,11 @@ async def tool_create_agent(args: dict[str, Any], journal: SessionJournal, pool_
     run_log = get_or_create_log(agent_id, title=title, agent_type=agent_type, cwd=expanded_cwd)
     if initial_prompt:
         run_log.record_prompt(initial_prompt)
+        # Stash the original prompt on the agent so subprocess-mode follow-ups
+        # can re-include it; sidecar path uses send_query and preserves context
+        # internally, so this is only consumed by the subprocess fallback in
+        # tool_send_agent_prompt below.
+        agent._original_prompt = initial_prompt
 
     # Build role identity from template if available
     role_identity = ""
@@ -691,9 +696,32 @@ async def tool_send_agent_prompt(args: dict[str, Any], journal: SessionJournal) 
         _log(f"Sidecar send_query failed, falling through: {result.get('error')}")
 
     # Subprocess fallback
+    #
+    # `claude --print` and `codex exec` are one-shot: each invocation is a
+    # fresh process with no memory of prior turns. So a bare follow-up like
+    # "execute the task now" arrives without the original task context and
+    # the agent legitimately responds "I don't see a specific task in your
+    # message." Stitch the original prompt + last response + new follow-up
+    # so the agent resumes coherently. The previous response is truncated
+    # to keep the composite within reasonable prompt-length limits.
+    prev_response = agent.stdout_buffer.strip()
+    original = agent._original_prompt
+    if original or prev_response:
+        parts: list[str] = []
+        if original:
+            parts.append(f"## Original task\n\n{original}")
+        if prev_response:
+            truncated = prev_response[-6000:]
+            elision = "[…earlier output truncated…]\n\n" if len(prev_response) > 6000 else ""
+            parts.append(f"## Your previous response\n\n{elision}{truncated}")
+        parts.append(f"## Follow-up\n\n{prompt}")
+        full_prompt = "\n\n".join(parts)
+    else:
+        full_prompt = prompt
+
     agent.stdout_buffer = ""
     agent.stderr_buffer = ""
-    await spawn_agent(agent, prompt, journal)
+    await spawn_agent(agent, full_prompt, journal)
 
     return {
         "agent_id": agent_id,
