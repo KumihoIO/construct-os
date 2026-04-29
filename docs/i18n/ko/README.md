@@ -12,12 +12,20 @@
 
 ---
 
+## 시작 전: Kumiho 계정 만들고 서비스 토큰 받기
+
+Construct를 본격적으로 쓰려면 먼저 [Kumiho](https://kumiho.io) 계정과 서비스 토큰이 필요합니다. 자세한 절차는 [setup-guides/README.md](setup-guides/README.md#시작-전-준비-kumiho-계정과-서비스-토큰)에 있습니다. 요약하면:
+
+1. [kumiho.io](https://kumiho.io)에서 가입 (무료 티어 5,000 노드)
+2. 대시보드에서 **Service Token** 발급
+3. `construct onboard` 실행 시 토큰 붙여넣기 → 워크스페이스 `.env`에 저장됨
+
 ## 대상별 시작점
 
-- **Construct가 처음이라면?** → [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) *(영문)* → [setup-guides/README.md](../../setup-guides/README.md) *(영문)*
-- **하드웨어/임베디드?** → [hardware/README.md](../../hardware/README.md) *(영문)*
-- **프로덕션 운영?** → [ops/README.md](../../ops/README.md) *(영문)*
-- **API/MCP 통합?** → [reference/README.md](../../reference/README.md) *(영문)* + [contributing/README.md](../../contributing/README.md) *(영문)*
+- **Construct가 처음이라면?** → [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) → [setup-guides/README.md](setup-guides/README.md)
+- **하드웨어/임베디드?** → [hardware/README.md](hardware/README.md)
+- **프로덕션 운영?** → [ops/README.md](ops/README.md)
+- **API/MCP 통합?** → [reference/README.md](reference/README.md) + [contributing/README.md](contributing/README.md) (CLI: [commands-reference.md](reference/cli/commands-reference.md), 구성: [config-reference.md](reference/api/config-reference.md))
 - **PR 리뷰/머지?** → [pr-workflow.md](../../contributing/pr-workflow.md) *(영문)* + [reviewer-playbook.md](../../contributing/reviewer-playbook.md) *(영문)*
 - **전체 목차** → [SUMMARY.md](SUMMARY.md)
 
@@ -26,18 +34,18 @@
 | 하고 싶은 것… | 이것을 읽으세요 |
 |---|---|
 | Construct를 빠르게 설치 | [README.md (설치)](../../../README.md#install) *(영문)* |
-| 한 번의 명령으로 부트스트랩 | [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) *(영문)* |
-| Kumiho 메모리 사이드카 설치 | [kumiho-operator-setup.md](../../setup-guides/kumiho-operator-setup.md) *(영문)* |
-| macOS 업데이트/제거 | [macos-update-uninstall.md](../../setup-guides/macos-update-uninstall.md) *(영문)* |
-| Windows 설치 | [windows-setup.md](../../setup-guides/windows-setup.md) *(영문)* |
-| 작업별 명령어 찾기 | [commands-reference.md](../../reference/cli/commands-reference.md) *(영문)* |
-| 구성 키와 기본값 확인 | [config-reference.md](../../reference/api/config-reference.md) *(영문)* |
+| 한 번의 명령으로 부트스트랩 | [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) |
+| Kumiho 메모리 사이드카 설치 | [kumiho-operator-setup.md](setup-guides/kumiho-operator-setup.md) |
+| macOS 업데이트/제거 | [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md) |
+| Windows 설치 | [windows-setup.md](setup-guides/windows-setup.md) |
+| 작업별 명령어 찾기 | [commands-reference.md](reference/cli/commands-reference.md) |
+| 구성 키와 기본값 확인 | [config-reference.md](reference/api/config-reference.md) |
 | 사용자 정의 프로바이더 구성 | [custom-providers.md](../../contributing/custom-providers.md) *(영문)* |
 | Z.AI / GLM 프로바이더 구성 | [zai-glm-setup.md](../../setup-guides/zai-glm-setup.md) *(영문)* |
 | Kumiho 그래프 네이티브 인지 메모리 통합 | [kumiho-memory-integration.md](../../contributing/kumiho-memory-integration.md) *(영문)* |
 | 임베디드 React 대시보드 로컬 실행 | [dashboard-dev.md](../../setup-guides/dashboard-dev.md) *(영문)* |
 | 런타임 운영 (2일차 런북) | [operations-runbook.md](../../ops/operations-runbook.md) *(영문)* |
-| 설치/런타임/채널 문제 해결 | [troubleshooting.md](../../ops/troubleshooting.md) *(영문)* |
+| 설치/런타임/채널 문제 해결 | [troubleshooting.md](ops/troubleshooting.md) |
 | Matrix 암호화 방 설정 및 진단 | [matrix-e2ee-guide.md](../../security/matrix-e2ee-guide.md) *(영문)* |
 
 ## Construct를 Construct답게 만드는 것
@@ -53,20 +61,20 @@
 
 ## 설치 및 온보딩
 
-- [setup-guides/README.md](../../setup-guides/README.md) — 설치 가이드 색인 *(영문)*
-- [one-click-bootstrap.md](../../setup-guides/one-click-bootstrap.md) — 단일 명령 설치 *(영문)*
-- [kumiho-operator-setup.md](../../setup-guides/kumiho-operator-setup.md) — Kumiho 메모리 사이드카 *(영문)*
-- [macos-update-uninstall.md](../../setup-guides/macos-update-uninstall.md) — macOS 라이프사이클 *(영문)*
-- [windows-setup.md](../../setup-guides/windows-setup.md) — Windows 설치 *(영문)*
+- [setup-guides/README.md](setup-guides/README.md) — 설치 가이드 색인
+- [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) — 단일 명령 설치
+- [kumiho-operator-setup.md](setup-guides/kumiho-operator-setup.md) — Kumiho 메모리 사이드카
+- [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md) — macOS 라이프사이클
+- [windows-setup.md](setup-guides/windows-setup.md) — Windows 설치
 - [dashboard-dev.md](../../setup-guides/dashboard-dev.md) — `web/` 대시보드 로컬 실행 *(영문)*
 - [browser-setup.md](../../browser-setup.md) — 브라우저 채널 / VNC 모드 *(영문)*
 
 ## 일상 운영
 
-- [commands-reference.md](../../reference/cli/commands-reference.md) — CLI 명령어 색인 *(영문)*
-- [config-reference.md](../../reference/api/config-reference.md) — 구성 키, 기본값, 보안 기본값 *(영문)*
-- [providers-reference.md](../../reference/api/providers-reference.md) — 프로바이더 ID, 별칭, 환경 변수 *(영문)*
-- [channels-reference.md](../../reference/api/channels-reference.md) — 채널 능력 및 설정 *(영문)*
+- [commands-reference.md](reference/cli/commands-reference.md) — CLI 명령어 색인
+- [config-reference.md](reference/api/config-reference.md) — 구성 키, 기본값, 보안 기본값
+- [providers-reference.md](reference/api/providers-reference.md) — 프로바이더 ID, 별칭, 환경 변수
+- [channels-reference.md](reference/api/channels-reference.md) — 채널 능력 및 설정
 - [reference/sop/observability.md](../../reference/sop/observability.md) — SOP 실행 상태 및 메트릭 *(영문)*
 
 ## 통합
@@ -78,16 +86,16 @@
 
 ## 운영 및 배포
 
-- [ops/README.md](../../ops/README.md) — 운영 색인 *(영문)*
+- [ops/README.md](ops/README.md) — 운영 색인
 - [ops/operations-runbook.md](../../ops/operations-runbook.md) — 2일차 런북 *(영문)*
-- [ops/troubleshooting.md](../../ops/troubleshooting.md) — 장애 시그니처 및 복구 *(영문)*
+- [ops/troubleshooting.md](ops/troubleshooting.md) — 장애 시그니처 및 복구
 - [ops/network-deployment.md](../../ops/network-deployment.md) — 라즈베리 파이 / LAN 배포 *(영문)*
 - [ops/proxy-agent-playbook.md](../../ops/proxy-agent-playbook.md) — 프록시 모드 *(영문)*
 - [ops/resource-limits.md](../../ops/resource-limits.md) — 리소스 컨트롤 *(영문)*
 
 ## 보안
 
-- [security/README.md](../../security/README.md) — 보안 색인 *(영문)*
+- [security/README.md](security/README.md) — 보안 색인
 - [security/agnostic-security.md](../../security/agnostic-security.md) — 프로바이더 무관 보안 모델 *(영문)*
 - [security/sandboxing.md](../../security/sandboxing.md) — Seatbelt / Landlock / Firejail / Bubblewrap *(영문)*
 - [security/audit-logging.md](../../security/audit-logging.md) — Merkle 체인 감사 로그 *(영문)*
@@ -95,7 +103,7 @@
 
 ## 하드웨어 및 주변 장치
 
-- [hardware/README.md](../../hardware/README.md) — 하드웨어 색인 *(영문)*
+- [hardware/README.md](hardware/README.md) — 하드웨어 색인
 - [hardware/hardware-peripherals-design.md](../../hardware/hardware-peripherals-design.md) — 주변 장치 아키텍처 *(영문)*
 - [hardware/nucleo-setup.md](../../hardware/nucleo-setup.md) — STM32 Nucleo *(영문)*
 - [hardware/arduino-uno-q-setup.md](../../hardware/arduino-uno-q-setup.md) — Arduino Uno Q *(영문)*
@@ -104,7 +112,7 @@
 ## 기여
 
 - [../../../CONTRIBUTING.md](../../../CONTRIBUTING.md) — 최상위 기여자 진입 *(영문)*
-- [contributing/README.md](../../contributing/README.md) — 기여자 색인 *(영문)*
+- [contributing/README.md](contributing/README.md) — 기여자 색인
 - [contributing/pr-workflow.md](../../contributing/pr-workflow.md) — PR 거버넌스 및 리뷰 레인 *(영문)*
 - [contributing/reviewer-playbook.md](../../contributing/reviewer-playbook.md) — 리뷰어 가이드 *(영문)*
 - [contributing/ci-map.md](../../contributing/ci-map.md) — CI 워크플로 맵 *(영문)*
