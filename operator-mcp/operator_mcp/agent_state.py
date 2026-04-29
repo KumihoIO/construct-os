@@ -41,6 +41,11 @@ class ManagedAgent:
     _reader_task: asyncio.Task | None = field(default=None, repr=False)
     _sidecar_id: str | None = field(default=None, repr=False)
     _cached_params: CacheSafeParams | None = field(default=None, repr=False)
+    # First prompt sent to this agent. Stashed so subprocess-mode follow-ups
+    # can stitch back the original task context — subprocess CLIs don't
+    # preserve sessions across invocations and would otherwise receive bare
+    # follow-up text like "execute the task now" with no task to execute.
+    _original_prompt: str = field(default="", repr=False)
 
 
 # ---------------------------------------------------------------------------
