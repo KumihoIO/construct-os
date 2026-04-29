@@ -51,6 +51,12 @@ pub struct SidecarInstallOptions {
     pub with_session_manager: bool,
     pub dry_run: bool,
     pub python: Option<String>,
+    /// Dev-mode: install `operator-mcp` from a local source tree instead of
+    /// the embedded copy. Path should point at a construct-os repo root —
+    /// we'll use `<path>/operator-mcp/` as the pip install source. Lets
+    /// developers iterate on the Python side without rebuilding the Rust
+    /// binary (whose `include_dir!` snapshot is fixed at compile time).
+    pub from_source: Option<PathBuf>,
 }
 
 pub async fn install_sidecars(opts: &SidecarInstallOptions) -> Result<()> {
@@ -62,7 +68,7 @@ pub async fn install_sidecars(opts: &SidecarInstallOptions) -> Result<()> {
     std::fs::create_dir_all(&root).with_context(|| format!("creating {}", root.display()))?;
 
     if !opts.skip_operator {
-        install_operator(&python, opts.dry_run)?;
+        install_operator(&python, opts.dry_run, opts.from_source.as_deref())?;
     } else {
         eprintln!("    [skip] Operator (--skip-operator)");
     }
@@ -135,14 +141,20 @@ fn install_kumiho(python: &Path, dry_run: bool) -> Result<()> {
     Ok(())
 }
 
-fn install_operator(python: &Path, dry_run: bool) -> Result<()> {
+fn install_operator(python: &Path, dry_run: bool, from_source: Option<&Path>) -> Result<()> {
     let dir = construct_root()?.join("operator_mcp");
     let venv = dir.join("venv");
     let launcher = dir.join("run_operator_mcp.py");
 
     eprintln!("==> Installing Operator MCP → {}", dir.display());
     if dry_run {
-        eprintln!("    + extract embedded operator-mcp source");
+        match from_source {
+            Some(repo) => eprintln!(
+                "    + use local source: {}",
+                repo.join("operator-mcp").display()
+            ),
+            None => eprintln!("    + extract embedded operator-mcp source"),
+        }
         eprintln!("    + create {}", venv.display());
         eprintln!("    + pip install operator-mcp");
         eprintln!("    + write {}", launcher.display());
@@ -151,9 +163,32 @@ fn install_operator(python: &Path, dry_run: bool) -> Result<()> {
 
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
 
-    let staging = tempfile::tempdir().context("creating operator-mcp staging dir")?;
-    extract_operator_source(staging.path())?;
-    eprintln!("    [ok] extracted operator-mcp source → staging");
+    // Determine the pip install source. With --from-source we point pip
+    // straight at the repo's operator-mcp/ dir and skip the embedded
+    // extraction entirely. The TempDir holder keeps the staging dir alive
+    // until after the pip install completes — drop order matters here.
+    let (install_src, _staging_holder): (PathBuf, Option<tempfile::TempDir>) = match from_source {
+        Some(repo_root) => {
+            let local_src = repo_root.join("operator-mcp");
+            let pyproject = local_src.join("pyproject.toml");
+            if !pyproject.exists() {
+                return Err(anyhow!(
+                    "--from-source {} doesn't look like a construct-os repo: \
+                     missing operator-mcp/pyproject.toml",
+                    repo_root.display()
+                ));
+            }
+            eprintln!("    [ok] using local source: {}", local_src.display());
+            (local_src, None)
+        }
+        None => {
+            let staging = tempfile::tempdir().context("creating operator-mcp staging dir")?;
+            extract_operator_source(staging.path())?;
+            eprintln!("    [ok] extracted operator-mcp source → staging");
+            let path = staging.path().to_path_buf();
+            (path, Some(staging))
+        }
+    };
 
     ensure_venv(python, &venv)?;
     let venv_py = venv_python(&venv)?;
@@ -162,8 +197,30 @@ fn install_operator(python: &Path, dry_run: bool) -> Result<()> {
         &venv_py,
         &["-m", "pip", "install", "--quiet", "--upgrade", "pip"],
     )?;
-    let staging_str = staging.path().to_string_lossy().to_string();
-    run(&venv_py, &["-m", "pip", "install", "--quiet", &staging_str])?;
+    let install_src_str = install_src.to_string_lossy().to_string();
+    // --from-source iteration: force-reinstall + skip deps so pip doesn't
+    // see the same version-pin already installed and no-op. Skipping deps
+    // keeps the loop fast (mcp/httpx/etc don't get re-resolved every time).
+    // Embedded path stays unchanged — end-user installs don't need either.
+    if from_source.is_some() {
+        run(
+            &venv_py,
+            &[
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--force-reinstall",
+                "--no-deps",
+                &install_src_str,
+            ],
+        )?;
+    } else {
+        run(
+            &venv_py,
+            &["-m", "pip", "install", "--quiet", &install_src_str],
+        )?;
+    }
     eprintln!("    [ok] operator-mcp installed");
 
     write_launcher(&launcher, OPERATOR_LAUNCHER_SRC)?;
