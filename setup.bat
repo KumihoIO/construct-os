@@ -7,7 +7,14 @@ setlocal enabledelayedexpansion
 :: Usage: setup.bat [--prebuilt | --minimal | --standard | --full | --help]
 :: ============================================================================
 
-set "VERSION=0.6.2"
+:: Derive version from Cargo.toml (single source of truth) so the banner
+:: never drifts from the workspace version we're actually setting up.
+:: findstr /b /c:"version = " matches only the [package] version line —
+:: cargo-dist-version, rust-version, etc. start with different prefixes.
+set "VERSION=unknown"
+for /f "tokens=2 delims==" %%v in ('findstr /b /c:"version = " "%~dp0Cargo.toml" 2^>nul') do set "VERSION=%%v"
+set "VERSION=%VERSION:"=%"
+set "VERSION=%VERSION: =%"
 set "RUST_MIN_VERSION=1.87"
 set "TARGET=x86_64-pc-windows-msvc"
 set "REPO=https://github.com/KumihoIO/construct-os"
