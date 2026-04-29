@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import tempfile
 from typing import Any
 
@@ -90,6 +91,25 @@ def _codex_mcp_overrides(mcp_servers: dict[str, Any]) -> list[str]:
     return flags
 
 
+def _resolve_cli(name: str) -> str:
+    """Resolve a CLI binary name to its full path on disk.
+
+    asyncio.create_subprocess_exec on Windows calls CreateProcess with the
+    bare name we hand it — and CreateProcess does NOT search PATH or apply
+    PATHEXT the way cmd.exe / PowerShell do. Both `claude` and `codex` are
+    installed by npm as `.cmd` shims (e.g. `claude.cmd`); spawning the
+    bare name "claude" then fails with WinError 2 even though `claude` runs
+    fine from a shell prompt.
+
+    `shutil.which()` does the right thing on every OS — it walks PATH and
+    on Windows applies PATHEXT, returning the full path including extension.
+    On POSIX it just returns the bare path. Falling back to the original
+    name lets the eventual subprocess error surface the missing binary
+    rather than us swallowing it here.
+    """
+    return shutil.which(name) or name
+
+
 def _build_command(
     agent_type: str, *,
     model: str | None = None,
@@ -97,13 +117,13 @@ def _build_command(
     mcp_servers: dict[str, Any] | None = None,
 ) -> list[str]:
     if agent_type == "codex":
-        cmd = ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
+        cmd = [_resolve_cli("codex"), "exec", "--full-auto", "--skip-git-repo-check"]
         if mcp_servers:
             cmd.extend(_codex_mcp_overrides(mcp_servers))
         return cmd
     # Prompt is piped via stdin — no -p flag, no ARG_MAX issues,
     # no shell encoding problems with Korean/Unicode text.
-    cmd = ["claude", "--print", "--dangerously-skip-permissions"]
+    cmd = [_resolve_cli("claude"), "--print", "--dangerously-skip-permissions"]
     if model:
         cmd.extend(["--model", model])
     if mcp_config_path:
