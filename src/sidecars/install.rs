@@ -199,7 +199,9 @@ fn extract_operator_source(dest: &Path) -> Result<()> {
 /// timeline + cross-turn session preservation. So fresh installs without
 /// this step end up in degraded mode by default.
 fn install_session_manager(dry_run: bool) -> Result<()> {
-    let dir = construct_root()?.join("operator_mcp").join("session-manager");
+    let dir = construct_root()?
+        .join("operator_mcp")
+        .join("session-manager");
 
     eprintln!("==> Installing Session Manager → {}", dir.display());
     if dry_run {
