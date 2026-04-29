@@ -38,7 +38,13 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # ----- Constants ---------------------------------------------------------
-$ScriptVersion = '0.6.2'
+# Derive version from Cargo.toml (single source of truth) so the banner
+# never drifts from the workspace version we're actually setting up.
+$CargoToml = Join-Path $PSScriptRoot 'Cargo.toml'
+$VersionMatch = if (Test-Path $CargoToml) {
+    Select-String -Path $CargoToml -Pattern '^version\s*=\s*"([^"]+)"' -ErrorAction SilentlyContinue | Select-Object -First 1
+} else { $null }
+$ScriptVersion = if ($VersionMatch) { $VersionMatch.Matches.Groups[1].Value } else { 'unknown' }
 $RustMinVersion = '1.87'
 $Target = 'x86_64-pc-windows-msvc'
 $Repo = 'https://github.com/KumihoIO/construct-os'
