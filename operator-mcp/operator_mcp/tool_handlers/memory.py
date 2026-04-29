@@ -12,7 +12,33 @@ the same way agents do.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
+
+# Strip question framing from queries before forwarding to engage. The
+# graph engine scores documents against the query terms; question framing
+# words ("do you recall", "tell me about", trailing "?", etc.) match
+# unrelated memories and crowd out the actual subject. The LLM should
+# normally reformulate via the tool description guidance, but this serves
+# as a belt-and-suspenders normaliser when the LLM passes the question
+# verbatim.
+_QUESTION_PREFIXES = re.compile(
+    r"^\s*(do\s+you\s+(recall|know|remember)|"
+    r"tell\s+me\s+(about|something\s+about)|"
+    r"can\s+you\s+(recall|find|tell\s+me)|"
+    r"what(?:'s|\s+is|\s+do\s+you\s+know\s+about|\s+about)|"
+    r"i\s+(want\s+to\s+know|need)\s+(about\s+)?)\s*",
+    re.IGNORECASE,
+)
+
+
+def _normalize_query(q: str) -> str:
+    """Strip common question-framing prefixes and trailing punctuation."""
+    if not q:
+        return q
+    out = _QUESTION_PREFIXES.sub("", q).strip()
+    out = re.sub(r"[?!.]+\s*$", "", out).strip()
+    return out or q
 
 try:
     from kumiho.mcp_server import (
@@ -221,6 +247,7 @@ async def tool_memory_engage_op(args: dict[str, Any]) -> dict[str, Any]:
         return {"error": "query is required"}
 
     forwarded = dict(args)
+    forwarded["query"] = _normalize_query(forwarded["query"])
     forwarded.setdefault("graph_augmented", True)
 
     return await asyncio.to_thread(_km_tool_memory_engage, forwarded)
