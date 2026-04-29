@@ -63,16 +63,44 @@ def _write_mcp_config_file(agent_id: str, mcp_servers: dict[str, Any]) -> str:
     return path
 
 
+def _codex_mcp_overrides(mcp_servers: dict[str, Any]) -> list[str]:
+    """Translate the MCP server dict into codex `-c` flag pairs.
+
+    `codex exec` doesn't accept a `--mcp-config` file flag; instead it
+    takes `-c key=value` overrides parsed as TOML. Each leaf is emitted
+    as its own `-c` so we can sidestep nested TOML escaping. JSON
+    string syntax is a subset of TOML basic-string syntax, so
+    `json.dumps()` produces values codex will parse correctly.
+    """
+    flags: list[str] = []
+    for name, config in mcp_servers.items():
+        prefix = f"mcp_servers.{name}"
+        command = config.get("command")
+        if command:
+            flags.extend(["-c", f"{prefix}.command={json.dumps(command)}"])
+        cmd_args = config.get("args")
+        if cmd_args:
+            flags.extend(["-c", f"{prefix}.args={json.dumps(cmd_args)}"])
+        env = config.get("env") or {}
+        for env_key, env_val in env.items():
+            flags.extend([
+                "-c",
+                f"{prefix}.env.{env_key}={json.dumps(env_val)}",
+            ])
+    return flags
+
+
 def _build_command(
     agent_type: str, *,
     model: str | None = None,
     mcp_config_path: str | None = None,
+    mcp_servers: dict[str, Any] | None = None,
 ) -> list[str]:
     if agent_type == "codex":
-        # Codex MCP injection requires a `~/.codex/config.toml` block
-        # rather than a CLI flag, so we don't pass --mcp-config here.
-        # Tracked as a follow-up.
-        return ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
+        cmd = ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
+        if mcp_servers:
+            cmd.extend(_codex_mcp_overrides(mcp_servers))
+        return cmd
     # Prompt is piped via stdin — no -p flag, no ARG_MAX issues,
     # no shell encoding problems with Korean/Unicode text.
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
@@ -189,20 +217,23 @@ async def spawn_agent(
     Prompts are written to a temp .md file and piped via stdin to avoid
     ARG_MAX limits and shell-encoding issues with Korean/Unicode text.
 
-    When `mcp_servers` is provided, the dict is serialized into a temp
-    JSON file and passed to `claude --print` via `--mcp-config`, giving
-    subprocess-mode agents access to the same MCP servers (kumiho-memory,
-    operator-tools) that sidecar-mode agents receive. Codex doesn't
-    accept a CLI flag for MCP config, so the param is currently a no-op
-    for codex agents (separate follow-up).
+    When `mcp_servers` is provided, the dict is injected into the spawned
+    CLI so subprocess-mode agents see the same MCP servers (kumiho-memory,
+    operator-tools) as sidecar-mode agents. The mechanism is per-CLI:
+      - Claude: serialize to a temp JSON file and pass `--mcp-config <path>`
+      - Codex: emit `-c mcp_servers.<name>.<field>=<toml-value>` overrides
     """
-    mcp_config_path = (
-        _write_mcp_config_file(agent.id, mcp_servers)
-        if mcp_servers
-        else None
-    )
+    # Claude consumes MCP config from a JSON file; codex doesn't read
+    # files (only `-c` overrides) so we skip the write for codex agents.
+    mcp_config_path: str | None = None
+    if mcp_servers and agent.agent_type != "codex":
+        mcp_config_path = _write_mcp_config_file(agent.id, mcp_servers)
+
     cmd = _build_command(
-        agent.agent_type, model=model, mcp_config_path=mcp_config_path
+        agent.agent_type,
+        model=model,
+        mcp_config_path=mcp_config_path,
+        mcp_servers=mcp_servers,
     )
     cwd = os.path.expanduser(agent.cwd)
 
