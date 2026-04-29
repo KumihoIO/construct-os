@@ -6,6 +6,8 @@
 //! into this module over time; until then, `install.sh` / `setup.bat` remain
 //! canonical for a full install.
 
+use std::path::PathBuf;
+
 use anyhow::{Result, anyhow};
 
 use crate::sidecars::{self, SidecarInstallOptions};
@@ -32,6 +34,10 @@ pub struct InstallOptions {
     pub dry_run: bool,
     /// Optional explicit Python interpreter.
     pub python: Option<String>,
+    /// Dev-mode: install operator-mcp from a local construct-os repo
+    /// rather than the binary's embedded snapshot. Avoids the Rust
+    /// rebuild cycle when iterating on the Python side.
+    pub from_source: Option<PathBuf>,
 }
 
 /// Run the install command with the given options.
@@ -52,6 +58,7 @@ pub async fn run(opts: InstallOptions) -> Result<()> {
         with_session_manager: opts.with_session_manager,
         dry_run: opts.dry_run,
         python: opts.python,
+        from_source: opts.from_source,
     })
     .await
 }

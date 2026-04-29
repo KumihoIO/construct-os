@@ -596,6 +596,13 @@ Examples:
         /// Explicit Python interpreter path (overrides auto-detection).
         #[arg(long)]
         python: Option<String>,
+        /// Dev-mode: install operator-mcp from a local construct-os checkout
+        /// instead of the binary's embedded snapshot. Pass the repo root —
+        /// pip installs from `<PATH>/operator-mcp/` with --force-reinstall
+        /// + --no-deps for fast iteration. Skips the Rust rebuild cycle when
+        /// you only changed Python.
+        #[arg(long, value_name = "REPO_PATH")]
+        from_source: Option<std::path::PathBuf>,
     },
 
     /// Check for and apply updates
@@ -1711,6 +1718,7 @@ async fn main() -> Result<()> {
             with_session_manager,
             dry_run,
             python,
+            from_source,
         } => {
             commands::install::run(commands::install::InstallOptions {
                 sidecars_only,
@@ -1719,6 +1727,7 @@ async fn main() -> Result<()> {
                 with_session_manager,
                 dry_run,
                 python,
+                from_source,
             })
             .await
         }
