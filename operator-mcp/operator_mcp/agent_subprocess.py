@@ -7,9 +7,11 @@ shell-encoding issues with Korean/Unicode text.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import tempfile
+from typing import Any
 
 from ._log import _log
 from .agent_state import ManagedAgent
@@ -46,17 +48,38 @@ def _write_prompt_file(agent_id: str, prompt: str) -> str:
     return path
 
 
+def _write_mcp_config_file(agent_id: str, mcp_servers: dict[str, Any]) -> str:
+    """Write an MCP config JSON to a per-agent temp file. Returns the path.
+
+    `claude --print --mcp-config <path-or-json>` accepts a JSON file
+    matching the same `{"mcpServers": {...}}` shape that the Claude
+    Agent SDK expects, so subprocess agents can register the operator
+    + kumiho-memory MCP servers their sidecar siblings get for free.
+    """
+    path = os.path.join(_PROMPT_DIR, f"{agent_id}.mcp.json")
+    payload = {"mcpServers": mcp_servers}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    return path
+
+
 def _build_command(
     agent_type: str, *,
     model: str | None = None,
+    mcp_config_path: str | None = None,
 ) -> list[str]:
     if agent_type == "codex":
+        # Codex MCP injection requires a `~/.codex/config.toml` block
+        # rather than a CLI flag, so we don't pass --mcp-config here.
+        # Tracked as a follow-up.
         return ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
     # Prompt is piped via stdin — no -p flag, no ARG_MAX issues,
     # no shell encoding problems with Korean/Unicode text.
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
     if model:
         cmd.extend(["--model", model])
+    if mcp_config_path:
+        cmd.extend(["--mcp-config", mcp_config_path])
     return cmd
 
 
@@ -159,13 +182,28 @@ async def spawn_agent(
     clean_build: bool = False,
     node_env: str = "development",
     env_extra: dict[str, str] | None = None,
+    mcp_servers: dict[str, Any] | None = None,
 ) -> None:
     """Spawn the CLI subprocess and kick off the background monitor.
 
     Prompts are written to a temp .md file and piped via stdin to avoid
     ARG_MAX limits and shell-encoding issues with Korean/Unicode text.
+
+    When `mcp_servers` is provided, the dict is serialized into a temp
+    JSON file and passed to `claude --print` via `--mcp-config`, giving
+    subprocess-mode agents access to the same MCP servers (kumiho-memory,
+    operator-tools) that sidecar-mode agents receive. Codex doesn't
+    accept a CLI flag for MCP config, so the param is currently a no-op
+    for codex agents (separate follow-up).
     """
-    cmd = _build_command(agent.agent_type, model=model)
+    mcp_config_path = (
+        _write_mcp_config_file(agent.id, mcp_servers)
+        if mcp_servers
+        else None
+    )
+    cmd = _build_command(
+        agent.agent_type, model=model, mcp_config_path=mcp_config_path
+    )
     cwd = os.path.expanduser(agent.cwd)
 
     # Build sanitized environment
