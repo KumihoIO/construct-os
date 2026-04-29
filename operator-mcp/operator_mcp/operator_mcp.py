@@ -1049,33 +1049,6 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="record_agent_outcome",
-            description="Record how an agent performed on a task. Updates the agent's trust score in Construct/AgentPool. Call after wait_for_agent completes.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "agent_id": {
-                        "type": "string",
-                        "description": "Agent process ID from create_agent.",
-                    },
-                    "template_name": {
-                        "type": "string",
-                        "description": "The agent template name (from pool). Omit if spawned ad-hoc.",
-                    },
-                    "outcome": {
-                        "type": "string",
-                        "description": "How the agent performed.",
-                        "enum": ["success", "partial", "failed"],
-                    },
-                    "task_summary": {
-                        "type": "string",
-                        "description": "Brief description of the task assigned.",
-                    },
-                },
-                "required": ["agent_id", "outcome", "task_summary"],
-            },
-        ),
-        Tool(
             name="get_agent_trust",
             description="Get trust/reputation scores for agent templates. Returns success rate, total runs, and recent outcomes.",
             inputSchema={
@@ -1931,7 +1904,10 @@ async def list_tools() -> list[Tool]:
                 "append-only memories that downstream agents in the same workflow / handoff chain "
                 "inherit via recall_session_outcomes. Pass `related_krefs` (e.g. an artifact kref "
                 "the agent produced) to create INFORMS edges so the graph traces which inputs led "
-                "to the outcome."
+                "to the outcome.\n\n"
+                "Pass `template_name` + `status` (success/partial/failed) to ALSO update the "
+                "agent's rolling trust score in /<harness>/AgentTrust/<template>. This is how "
+                "trust scoring accumulates across runs — call it after wait_for_agent completes."
             ),
             inputSchema={
                 "type": "object",
@@ -1947,6 +1923,15 @@ async def list_tools() -> list[Tool]:
                     "content": {"type": "string", "description": "Detailed outcome body. Markdown ok."},
                     "agent_id": {"type": "string", "description": "Recording agent's runtime id (sidecar uuid)."},
                     "agent_kref": {"type": "string", "description": "Recording agent's Kumiho kref, if it has one."},
+                    "template_name": {
+                        "type": "string",
+                        "description": "Agent template name from the pool. When set together with `status`, also updates the rolling trust score for this template.",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "How the agent performed on the task. Required (with `template_name`) to update trust score; otherwise optional. Omit for non-run outcomes (discoveries / lessons that aren't tied to a single agent's success).",
+                        "enum": ["success", "partial", "failed"],
+                    },
                     "tags": {"type": "array", "items": {"type": "string"}},
                     "related_files": {"type": "array", "items": {"type": "string"}, "description": "File paths the outcome refers to."},
                     "related_krefs": {"type": "array", "items": {"type": "string"}, "description": "Kumiho krefs (artifacts, prior outcomes, plans) this outcome was derived from. Becomes INFORMS edges."},
@@ -2522,7 +2507,10 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return await tool_memory_graph(args, KUMIHO_SDK)
     if name == "record_agent_outcome":
         from .tool_handlers.outcomes import tool_record_agent_outcome_op
-        return await tool_record_agent_outcome_op(args)
+        # KUMIHO_POOL is passed so the handler can fold in a trust-score
+        # update when the caller supplies template_name + status. Used to
+        # be a separate tool that clashed with this one's name.
+        return await tool_record_agent_outcome_op(args, KUMIHO_POOL)
     if name == "recall_session_outcomes":
         from .tool_handlers.outcomes import tool_recall_session_outcomes_op
         return await tool_recall_session_outcomes_op(args)
@@ -2612,8 +2600,10 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return result
 
     # -- Trust --
-    if name == "record_agent_outcome":
-        return await trust.tool_record_agent_outcome(args, KUMIHO_POOL)
+    # `record_agent_outcome` dispatch lives at the outcomes branch above —
+    # trust scoring is folded into the outcomes flow when the caller passes
+    # template_name + status. Two tools with the same name caused dispatch
+    # ambiguity (LLM saw one schema, dispatcher fired the other handler).
     if name == "get_agent_trust":
         return await trust.tool_get_agent_trust(args, KUMIHO_POOL)
 

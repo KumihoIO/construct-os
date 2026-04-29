@@ -86,12 +86,25 @@ def _outcomes_space(session_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
+_TRUST_STATUS_VALUES = {"success", "partial", "failed"}
+
+
+async def tool_record_agent_outcome_op(
+    args: dict[str, Any],
+    pool_client: Any | None = None,
+) -> dict[str, Any]:
     """Record an agent outcome to ``<harness>/Sessions/<session_id>/Outcomes/``.
 
     Outcomes are append-only memories that downstream agents can inherit. Each
     outcome has a ``kind`` (discovery / decision / lesson / insight / warning /
     fact) and optional ``related_krefs`` that get DERIVED_FROM-style edges.
+
+    Optional trust scoring: when ``template_name`` and ``status`` (one of
+    success / partial / failed) are both present, ALSO update the agent
+    template's rolling trust score in ``/<harness>/AgentTrust/<template>``.
+    This used to be a separate tool that clashed with this one's name —
+    folding it in keeps the LLM-facing surface to a single tool. Trust
+    update failures are non-fatal; the outcome record still succeeds.
 
     Required: ``session_id``, ``title``.
     """
@@ -112,12 +125,18 @@ async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
     related_krefs = args.get("related_krefs") or []
     agent_id = args.get("agent_id", "")
     agent_kref = args.get("agent_kref", "")
+    template_name = args.get("template_name", "") or ""
+    status = (args.get("status") or "").strip().lower()
 
     # Index tags so future engage / search calls can filter by kind / session /
     # agent without scanning content. De-duplicate.
     auto_tags = {kind, f"session:{session_id}"}
     if agent_id:
         auto_tags.add(f"agent:{agent_id}")
+    if status in _TRUST_STATUS_VALUES:
+        auto_tags.add(f"status:{status}")
+    if template_name:
+        auto_tags.add(f"template:{template_name}")
     for t in auto_tags:
         if t not in tags:
             tags.append(t)
@@ -130,6 +149,10 @@ async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
         metadata["agent_id"] = agent_id
     if agent_kref:
         metadata["agent_kref"] = agent_kref
+    if template_name:
+        metadata["template_name"] = template_name
+    if status in _TRUST_STATUS_VALUES:
+        metadata["status"] = status
     if related_files:
         # Kumiho metadata values are coerced to str — join with comma.
         metadata["related_files"] = ",".join(str(f) for f in related_files)
@@ -167,13 +190,34 @@ async def tool_record_agent_outcome_op(args: dict[str, Any]) -> dict[str, Any]:
         else None
     )
 
-    return {
+    response: dict[str, Any] = {
         "kref": kref,
         "session_id": session_id,
         "kind": kind,
         "space_path": space_path,
         "raw": result,
     }
+
+    # Optional trust-score update — only fires when the caller passed both
+    # template_name and a recognized status. Soft-fails so outcome storage
+    # remains the load-bearing path.
+    if template_name and status in _TRUST_STATUS_VALUES and pool_client is not None:
+        try:
+            from .trust import update_agent_trust
+
+            trust_result = await update_agent_trust(
+                template_name=template_name,
+                outcome=status,
+                task_summary=title,
+                agent_id=agent_id,
+                pool_client=pool_client,
+            )
+            response["trust"] = trust_result
+        except Exception as e:  # noqa: BLE001
+            _log(f"trust update failed (outcome still recorded): {e}")
+            response["trust"] = {"error": f"trust update failed: {e}"}
+
+    return response
 
 
 # ---------------------------------------------------------------------------
