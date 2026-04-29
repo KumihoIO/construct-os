@@ -18,8 +18,17 @@ from ._log import _log
 # -- Paths -------------------------------------------------------------------
 
 _HOME = os.path.expanduser("~")
-_KUMIHO_PLUGIN_ROOT = os.path.join(_HOME, ".construct/workspace/kumiho-plugins/claude")
-_KUMIHO_MCP_SCRIPT = os.path.join(_KUMIHO_PLUGIN_ROOT, "scripts/run_kumiho_mcp.py")
+# Canonical location for Construct's own kumiho MCP sidecar — materialized by
+# `construct install --sidecars-only` from resources/sidecars/run_kumiho_mcp.py.
+# The launcher self-execs into ~/.construct/kumiho/venv/bin/python3.
+#
+# This is intentionally NOT the Claude Code plugin path (~/.construct/workspace/
+# kumiho-plugins/claude/...) — that layout exists for users running Kumiho as a
+# Claude Code plugin directly. When Construct injects MCP via `--mcp-config`,
+# it ships its own sidecar and shouldn't depend on the user having the Claude
+# Code plugin installed. Mirrors src/agent/kumiho.rs::DEFAULT_MCP_PATH_SUFFIX.
+_KUMIHO_SIDECAR_ROOT = os.path.join(_HOME, ".construct/kumiho")
+_KUMIHO_MCP_SCRIPT = os.path.join(_KUMIHO_SIDECAR_ROOT, "run_kumiho_mcp.py")
 _OPERATOR_DIR = os.path.dirname(os.path.abspath(__file__))
 _OPERATOR_SUBAGENT_MCP = os.path.join(_OPERATOR_DIR, "subagent_mcp.py")
 
@@ -29,27 +38,42 @@ _OPERATOR_SUBAGENT_MCP = os.path.join(_OPERATOR_DIR, "subagent_mcp.py")
 def kumiho_memory_config() -> dict[str, Any] | None:
     """Build kumiho-memory MCP stdio config for agent injection.
 
-    Returns None if the kumiho MCP script doesn't exist.
+    Points at Construct's own kumiho sidecar (provisioned by `construct
+    install --sidecars-only`). Returns None when the sidecar isn't installed.
     """
     if not os.path.exists(_KUMIHO_MCP_SCRIPT):
-        _log(f"Kumiho MCP script not found: {_KUMIHO_MCP_SCRIPT}")
+        _log(
+            f"Kumiho sidecar not installed at {_KUMIHO_MCP_SCRIPT} — "
+            "subprocess agents will run without memory access. "
+            "Run `construct install --sidecars-only` to provision it."
+        )
         return None
 
-    # Use the system python or kumiho venv python
-    python = os.path.join(_HOME, ".kumiho/venv/bin/python3")
-    if not os.path.exists(python):
-        python = "python3"
+    # Prefer the kumiho venv interpreter — the launcher self-execs into it
+    # anyway, so calling it directly skips one fork. Fall back to system
+    # python3 if the venv interpreter isn't materialized yet.
+    venv_python = os.path.join(_KUMIHO_SIDECAR_ROOT, "venv/bin/python3")
+    python = venv_python if os.path.exists(venv_python) else "python3"
 
-    # Pass through auth token and control plane URL from environment
-    env: dict[str, str] = {
-        "CLAUDE_PLUGIN_ROOT": _KUMIHO_PLUGIN_ROOT,
-        "KUMIHO_AUTO_CONFIGURE": "1",
-    }
+    # Forward the same env the Rust daemon forwards when it spawns kumiho —
+    # see src/agent/kumiho.rs::kumiho_mcp_server_config for the canonical set.
+    env: dict[str, str] = {"KUMIHO_AUTO_CONFIGURE": "1"}
     for key in (
         "KUMIHO_AUTH_TOKEN",
+        "KUMIHO_SERVICE_TOKEN",
         "KUMIHO_CONTROL_PLANE_URL",
+        "KUMIHO_SPACE_PREFIX",
+        "KUMIHO_MEMORY_PROJECT",
+        "KUMIHO_HARNESS_PROJECT",
         "KUMIHO_MCP_LOG_LEVEL",
         "KUMIHO_AUTO_ASSESS",
+        "KUMIHO_LLM_API_KEY",
+        "KUMIHO_LLM_PROVIDER",
+        "KUMIHO_LLM_MODEL",
+        "KUMIHO_LLM_LIGHT_MODEL",
+        "KUMIHO_LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
     ):
         val = os.environ.get(key)
         if val:
