@@ -52,7 +52,8 @@ Construct를 본격적으로 쓰려면 먼저 [Kumiho](https://kumiho.io) 계정
 
 - **메모리 네이티브 Rust 에이전트 런타임** — 모든 세션, 계획, 스킬, 신뢰 점수가 Kumiho 그래프에 영속됨
 - **단일 바이너리** — 게이트웨이, 데몬, React 대시보드, MCP 사이드카, CLI가 하나의 정적 바이너리로 패키징
-- **선언적 오케스트레이션** — Operator가 YAML 워크플로로 다중 에이전트를 구동
+- **YAML로 정의하는 다중 에이전트 워크플로** — Operator가 17가지 단계 타입으로 파이프라인을 실행합니다. 워크플로 자체가 `.construct/workflows/` 또는 `~/.construct/workflows/`에 파일로 저장되므로 git에 커밋·리뷰·diff됩니다. `supervisor`, `group_chat`, `map_reduce`, `handoff`, `human_approval` 같은 다중 에이전트 패턴이 1급 단계 타입이라, Python 코드를 엮지 않고도 한 파일로 파이프라인 전체를 읽을 수 있습니다.
+- **반응형 그래프 — 태그 기반 트리거** — Kumiho에 엔티티가 발행·태그되면 `revision.tagged` 이벤트가 발생하고, 매칭되는 `triggers:` 블록을 가진 워크플로가 자동 실행됩니다. 크론이나 외부 웹훅 없이 그래프 자체가 다음 파이프라인을 호출합니다 — 자세한 문법과 체이닝 예시는 [WORKFLOWS.md](../../../WORKFLOWS.md#triggers-and-workflow-chaining) *(영문)* 또는 [한국어 번역](WORKFLOWS.md#트리거와-워크플로-체이닝).
 - **하드웨어 1급 시민** — STM32, Arduino, ESP32, Pico, Aardvark I²C/SPI를 에이전트 도구 표면으로 노출
 - **18개 라우트의 웹 대시보드** — `http://127.0.0.1:42617`에서 Orchestration / Operations / Inspection 탐색
 - **Trust 점수 + ClawHub 마켓플레이스** — 에이전트가 실행을 통해 신뢰도를 쌓고 컨텐츠 어드레서블 레지스트리에서 스킬 공유

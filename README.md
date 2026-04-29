@@ -147,6 +147,8 @@ Backed by the same `/ws/chat` endpoint listed below, with auto-focus on open and
 
 The **Operator** is Construct's hand on the controls — a Python MCP server that drives declarative YAML workflows through 17 step types and several advanced orchestration patterns. Agents run inside the Construct; the Operator sees the whole board.
 
+Workflows live as plain YAML files under `.construct/workflows/` (project) or `~/.construct/workflows/` (user) — git-trackable, code-reviewable, diff-readable. Multi-agent patterns like `supervisor`, `group_chat`, `map_reduce`, `handoff`, and `human_approval` are first-class step types, so a multi-agent pipeline reads end-to-end in one file without a Python interpreter in the loop. See [WORKFLOWS.md](WORKFLOWS.md) for the full DSL reference.
+
 <!-- TODO screenshot: Workflows view with YAML editor on the left and DAG workspace on the right, showing a declarative multi-agent workflow definition with step dependencies -->
 ![Workflows view with YAML editor and DAG workspace for declarative multi-agent workflow definition](docs/assets/dashboard/readme-03-workflow-yaml.png)
 
@@ -215,6 +217,21 @@ ${run_id}                — Workflow run ID
 - **Condition evaluation** — expression-based branching over step results
 - **Per-step timeout** — default 300s, configurable per step
 - **RunLog JSONL** — per-agent persistent audit trail at `~/.construct/operator_mcp/runlogs/`
+
+### Reactive Graph — Tag-Triggered Workflows
+
+The Kumiho memory graph isn't just storage — it's the event bus. When a workflow's `output` step publishes an entity (kind + tag), the daemon emits a `revision.tagged` event. Any workflow with a matching `triggers:` block launches automatically, with trigger metadata mapped into its inputs:
+
+```yaml
+triggers:
+  - on_kind: "qs-arc-plan"      # Watch for this entity kind
+    on_tag: "ready"             # When tagged with this
+    input_map:
+      arc_kref: "${trigger.entity_kref}"
+      arc_name: "${trigger.metadata.arc_name}"
+```
+
+This turns the graph into a reactive substrate: revising or tagging a Kumiho item is a side-effect-bearing action that fans out into downstream pipelines — no cron, no external webhook, no glue script. Workflow A publishes → Workflow B fires → Workflow C resolves the cursor → and so on, all driven by the data shape rather than orchestration code. Cron triggers (`cron: "0 9 * * 1"`) coexist for time-based schedules. See [WORKFLOWS.md](WORKFLOWS.md#triggers-and-workflow-chaining) for chaining patterns and the multi-run continuity recipe.
 
 ---
 
