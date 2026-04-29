@@ -55,6 +55,8 @@ include = [
   "/operator-mcp/README.md",
   "/operator-mcp/operator_mcp/**/*.py",
   "/operator-mcp/operator_mcp/**/*.yaml",
+  "/operator-mcp/session-manager/dist/**/*",
+  "/operator-mcp/session-manager/package.json",
 ]
 
 [[bin]]

@@ -14,13 +14,21 @@ use include_dir::{Dir, DirEntry, include_dir};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use super::python::detect_python;
+use super::python::{detect_npm, detect_python};
 use super::{construct_root, kumiho_launcher_path, operator_launcher_path};
 
 const KUMIHO_LAUNCHER_SRC: &str = include_str!("../../resources/sidecars/run_kumiho_mcp.py");
 const OPERATOR_LAUNCHER_SRC: &str = include_str!("../../resources/sidecars/run_operator_mcp.py");
 
 static OPERATOR_MCP_SRC: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/operator-mcp");
+
+/// Embedded session-manager sidecar tree (TypeScript build output + package
+/// manifest). Cargo's package include rules in `Cargo.toml` keep this to
+/// `dist/` + `package.json` only — no `node_modules/` (that gets installed
+/// fresh at deploy time via `npm install --omit=dev`) and no `src/` (we
+/// ship the prebuilt JS, not the source).
+static SESSION_MANAGER_SRC: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/operator-mcp/session-manager");
 
 /// The PyPI version pin for the Kumiho package. Must match
 /// `operator-mcp/requirements.txt`.
@@ -30,6 +38,17 @@ const KUMIHO_PIN: &str = "kumiho[mcp]>=0.9.20";
 pub struct SidecarInstallOptions {
     pub skip_kumiho: bool,
     pub skip_operator: bool,
+    /// Opt-in: install the Node.js Session Manager sidecar.
+    ///
+    /// Defaults to `false`. The Session Manager drives spawned agents via
+    /// the Claude Agent SDK, which only accepts `ANTHROPIC_API_KEY`
+    /// (pay-per-token) — it cannot use the user's Claude Pro/Max
+    /// subscription OAuth. The default subprocess path
+    /// (`claude --print` + `codex exec`) uses each CLI's own OAuth and
+    /// routes spawned-agent calls against the subscription, which is
+    /// roughly 15–30× cheaper for equivalent work. See
+    /// https://github.com/anthropics/claude-agent-sdk-python/issues/559.
+    pub with_session_manager: bool,
     pub dry_run: bool,
     pub python: Option<String>,
 }
@@ -52,6 +71,33 @@ pub async fn install_sidecars(opts: &SidecarInstallOptions) -> Result<()> {
         install_kumiho(&python, opts.dry_run)?;
     } else {
         eprintln!("    [skip] Kumiho (--skip-kumiho)");
+    }
+
+    if opts.with_session_manager {
+        // Best-effort: a session-manager install failure (missing npm,
+        // network blip) shouldn't tank the whole sidecar provisioning.
+        // Operator falls back to direct subprocess spawning when the
+        // session-manager isn't available, so the runtime still works
+        // — just without streaming timeline events.
+        if let Err(err) = install_session_manager(opts.dry_run) {
+            eprintln!(
+                "    [warn] Session manager install failed: {err:#}\n    \
+                 Operator will fall back to subprocess mode for spawned \
+                 agents (uses Claude Pro/Max subscription via OAuth — see \
+                 below). Re-run with `--with-session-manager` after fixing \
+                 the underlying issue (typically: install Node.js + npm)."
+            );
+        }
+    } else {
+        eprintln!(
+            "    [info] Session Manager (Node.js sidecar) NOT installed.\n    \
+                    Operator-spawned agents will use direct subprocess mode\n    \
+                    (`claude --print` + `codex exec`), which routes calls\n    \
+                    through each CLI's own OAuth → your Claude Pro/Max + Codex\n    \
+                    CLI subscriptions. No per-call API spend on spawned agents.\n    \
+                    To enable the streaming-event sidecar (uses ANTHROPIC_API_KEY,\n    \
+                    NOT subscription), re-run with `--with-session-manager`."
+        );
     }
 
     eprintln!("==> sidecars ready");
@@ -135,6 +181,104 @@ fn extract_operator_source(dest: &Path) -> Result<()> {
                 "embedded operator-mcp source missing `{required}` after extraction; \
                  check Cargo.toml `include` whitelist"
             ));
+        }
+    }
+    Ok(())
+}
+
+/// Install the Node.js session-manager sidecar.
+///
+/// Lays down the prebuilt `dist/` + `package.json` into
+/// `~/.construct/operator_mcp/session-manager/`, then runs
+/// `npm install --omit=dev` to fetch its node_modules. The Operator MCP
+/// (Python) discovers and spawns this sidecar at runtime to drive the
+/// Claude Agent SDK and codex CLI with structured streaming events.
+///
+/// Subprocess fallback in `agents.tool_create_agent` is what runs when
+/// this sidecar isn't installed — works, but loses the streaming
+/// timeline + cross-turn session preservation. So fresh installs without
+/// this step end up in degraded mode by default.
+fn install_session_manager(dry_run: bool) -> Result<()> {
+    let dir = construct_root()?
+        .join("operator_mcp")
+        .join("session-manager");
+
+    eprintln!("==> Installing Session Manager → {}", dir.display());
+    if dry_run {
+        eprintln!("    + extract embedded session-manager dist + package.json");
+        eprintln!("    + npm install --omit=dev");
+        return Ok(());
+    }
+
+    // Detect npm BEFORE writing files so a missing-npm machine doesn't
+    // get a half-installed session-manager dir it has to clean up.
+    let npm = detect_npm()?;
+
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+
+    // Write embedded dist/ tree + package.json. Same shape as
+    // extract_operator_source but no need to filter — Cargo's package
+    // include already restricts SESSION_MANAGER_SRC to dist + package.json.
+    walk_session_manager(&SESSION_MANAGER_SRC, &dir)?;
+    let dist_index = dir.join("dist").join("index.js");
+    if !dist_index.exists() {
+        return Err(anyhow!(
+            "embedded session-manager missing dist/index.js after extraction; \
+             check Cargo.toml `include` whitelist (need /operator-mcp/session-manager/dist/**/*)"
+        ));
+    }
+    eprintln!("    [ok] dist + package.json laid down");
+
+    // npm install --omit=dev fetches the production deps listed in
+    // package.json (no dev deps — TypeScript compiler etc. aren't needed
+    // since dist/ is prebuilt). The session-manager isn't a publishable
+    // package so we don't need --no-save quirks.
+    let mut cmd = Command::new(&npm);
+    cmd.arg("install")
+        .arg("--omit=dev")
+        .arg("--no-audit")
+        .arg("--no-fund")
+        .current_dir(&dir);
+    let status = cmd
+        .status()
+        .with_context(|| format!("running `{} install` in {}", npm.display(), dir.display()))?;
+    if !status.success() {
+        return Err(anyhow!(
+            "`npm install` failed with status {:?}. Check npm output above; \
+             a network blip is the most common cause — re-running usually fixes it.",
+            status.code()
+        ));
+    }
+    eprintln!("    [ok] session-manager dependencies installed");
+    eprintln!(
+        "    [ok] entrypoint: node {}",
+        dir.join("dist").join("index.js").display()
+    );
+    Ok(())
+}
+
+/// Walk variant for the dedicated `SESSION_MANAGER_SRC` tree. The tree's
+/// content is already pre-filtered by Cargo's package include rules, so we
+/// don't need to re-apply the operator-mcp `is_relevant` filter here.
+fn walk_session_manager(dir: &Dir<'_>, dest: &Path) -> Result<()> {
+    for entry in dir.entries() {
+        let rel = entry.path();
+        match entry {
+            DirEntry::Dir(sub) => {
+                let out = dest.join(rel);
+                std::fs::create_dir_all(&out)
+                    .with_context(|| format!("creating {}", out.display()))?;
+                walk_session_manager(sub, dest)?;
+            }
+            DirEntry::File(file) => {
+                let out = dest.join(rel);
+                if let Some(parent) = out.parent() {
+                    std::fs::create_dir_all(parent)
+                        .with_context(|| format!("creating {}", parent.display()))?;
+                }
+                std::fs::write(&out, file.contents())
+                    .with_context(|| format!("writing {}", out.display()))?;
+            }
         }
     }
     Ok(())

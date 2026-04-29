@@ -577,6 +577,19 @@ Examples:
         /// Skip the Operator MCP sidecar install.
         #[arg(long)]
         skip_operator: bool,
+        /// Opt-in: install the Node.js Session Manager sidecar.
+        ///
+        /// Default OFF. Subprocess fallback (the default) uses
+        /// `claude --print` + `codex exec`, both of which authenticate via
+        /// each CLI's OAuth and route through the user's Claude Pro/Max +
+        /// Codex CLI subscriptions — no per-call API spend on spawned
+        /// agents. The Session Manager uses the Claude Agent SDK which
+        /// requires `ANTHROPIC_API_KEY` (pay-per-token) — see
+        /// anthropics/claude-agent-sdk-python#559. Enable only if you need
+        /// the streaming timeline events the sidecar provides and accept
+        /// the API-billing trade-off.
+        #[arg(long)]
+        with_session_manager: bool,
         /// Print planned actions without executing them (POSIX only).
         #[arg(long)]
         dry_run: bool,
@@ -1695,6 +1708,7 @@ async fn main() -> Result<()> {
             sidecars_only,
             skip_kumiho,
             skip_operator,
+            with_session_manager,
             dry_run,
             python,
         } => {
@@ -1702,6 +1716,7 @@ async fn main() -> Result<()> {
                 sidecars_only,
                 skip_kumiho,
                 skip_operator,
+                with_session_manager,
                 dry_run,
                 python,
             })
