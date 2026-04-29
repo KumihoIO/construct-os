@@ -2027,7 +2027,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Natural-language query derived from the user's message."},
+                    "query": {"type": "string", "description": (
+                        "Subject-focused search query DERIVED from the user's message — "
+                        "not the message verbatim. Strip question framing ('do you recall', "
+                        "'do you know', 'tell me about', trailing '?') and keep the "
+                        "noun-phrase subject + concrete identifiers. "
+                        "Examples: 'do you recall my arXiv paper?' → 'arXiv paper'; "
+                        "'what did we decide about gRPC vs REST?' → 'gRPC vs REST decision'; "
+                        "'tell me about my favourite colour' → 'favourite colour preference'."
+                    )},
                     "project": {"type": "string", "default": "CognitiveMemory"},
                     "space_paths": {"type": "array", "items": {"type": "string"}, "description": "Restrict search to these space paths."},
                     "memory_types": {"type": "array", "items": {"type": "string"}, "description": "Filter by memory_type ('decision','fact','preference',...)"},
