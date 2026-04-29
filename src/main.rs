@@ -598,9 +598,9 @@ Examples:
         python: Option<String>,
         /// Dev-mode: install operator-mcp from a local construct-os checkout
         /// instead of the binary's embedded snapshot. Pass the repo root —
-        /// pip installs from `<PATH>/operator-mcp/` with --force-reinstall
-        /// + --no-deps for fast iteration. Skips the Rust rebuild cycle when
-        /// you only changed Python.
+        /// pip installs from `<PATH>/operator-mcp/` with `--force-reinstall`
+        /// and `--no-deps` for fast iteration. Skips the Rust rebuild cycle
+        /// when you only changed Python.
         #[arg(long, value_name = "REPO_PATH")]
         from_source: Option<std::path::PathBuf>,
     },
