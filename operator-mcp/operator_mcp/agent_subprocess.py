@@ -15,6 +15,7 @@ from ._log import _log
 from .agent_state import ManagedAgent
 from .clean_env import build_agent_env, clean_build_caches
 from .journal import SessionJournal
+from .run_log import get_log
 
 # Temp dir for agent prompt files — survives individual agent lifecycle
 _PROMPT_DIR = os.path.expanduser("~/.construct/tmp/agent_prompts")
@@ -80,7 +81,9 @@ async def _read_stream(stream: asyncio.StreamReader | None, agent: ManagedAgent,
         _log(f"Stream reader error ({target}) for agent {agent.id}: {exc}")
 
 
-async def _monitor_agent(agent: ManagedAgent, journal: SessionJournal) -> None:
+async def _monitor_agent(
+    agent: ManagedAgent, journal: SessionJournal, cmd: list[str]
+) -> None:
     """Background task: read streams and update status when process exits."""
     proc = agent.process
     if proc is None:
@@ -112,6 +115,26 @@ async def _monitor_agent(agent: ManagedAgent, journal: SessionJournal) -> None:
         summary = agent.stderr_buffer.strip()[-500:]
     else:
         summary = agent.stdout_buffer[-500:] if agent.stdout_buffer else ""
+
+    # Mirror subprocess execution into the agent's run log. The sidecar
+    # path emits structured timeline events that EventConsumer translates
+    # into run_log entries; in subprocess fallback mode (no session-manager
+    # running) the run log was previously left at just `[header, prompt]`
+    # forever — making the dashboard's RunLog drill-down look like the
+    # agent did nothing, even when it produced real output. Recording the
+    # captured stdout/stderr + exit code closes that visibility gap so
+    # both backends produce equivalent runlogs.
+    try:
+        run_log = get_log(agent.id)
+        if run_log is not None:
+            run_log.record_subprocess(
+                command=" ".join(cmd[:3]),
+                exit_code=proc.returncode,
+                stdout=agent.stdout_buffer,
+                stderr=agent.stderr_buffer,
+            )
+    except Exception as e:
+        _log(f"run_log.record_subprocess failed for {agent.id[:8]}: {e}")
 
     try:
         journal.record(
@@ -185,7 +208,7 @@ async def spawn_agent(
     except Exception as e:
         _log(f"CRITICAL: Journal write failed for spawn of {agent.id}: {e}")
         # Process is already running — continue, but state may diverge on restart
-    agent._reader_task = asyncio.create_task(_monitor_agent(agent, journal))
+    agent._reader_task = asyncio.create_task(_monitor_agent(agent, journal, cmd))
 
 
 # -- Spawn with retry (for team deployments) ---------------------------------
