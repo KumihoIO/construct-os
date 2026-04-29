@@ -7,9 +7,11 @@ shell-encoding issues with Korean/Unicode text.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import tempfile
+from typing import Any
 
 from ._log import _log
 from .agent_state import ManagedAgent
@@ -46,17 +48,66 @@ def _write_prompt_file(agent_id: str, prompt: str) -> str:
     return path
 
 
+def _write_mcp_config_file(agent_id: str, mcp_servers: dict[str, Any]) -> str:
+    """Write an MCP config JSON to a per-agent temp file. Returns the path.
+
+    `claude --print --mcp-config <path-or-json>` accepts a JSON file
+    matching the same `{"mcpServers": {...}}` shape that the Claude
+    Agent SDK expects, so subprocess agents can register the operator
+    + kumiho-memory MCP servers their sidecar siblings get for free.
+    """
+    path = os.path.join(_PROMPT_DIR, f"{agent_id}.mcp.json")
+    payload = {"mcpServers": mcp_servers}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    return path
+
+
+def _codex_mcp_overrides(mcp_servers: dict[str, Any]) -> list[str]:
+    """Translate the MCP server dict into codex `-c` flag pairs.
+
+    `codex exec` doesn't accept a `--mcp-config` file flag; instead it
+    takes `-c key=value` overrides parsed as TOML. Each leaf is emitted
+    as its own `-c` so we can sidestep nested TOML escaping. JSON
+    string syntax is a subset of TOML basic-string syntax, so
+    `json.dumps()` produces values codex will parse correctly.
+    """
+    flags: list[str] = []
+    for name, config in mcp_servers.items():
+        prefix = f"mcp_servers.{name}"
+        command = config.get("command")
+        if command:
+            flags.extend(["-c", f"{prefix}.command={json.dumps(command)}"])
+        cmd_args = config.get("args")
+        if cmd_args:
+            flags.extend(["-c", f"{prefix}.args={json.dumps(cmd_args)}"])
+        env = config.get("env") or {}
+        for env_key, env_val in env.items():
+            flags.extend([
+                "-c",
+                f"{prefix}.env.{env_key}={json.dumps(env_val)}",
+            ])
+    return flags
+
+
 def _build_command(
     agent_type: str, *,
     model: str | None = None,
+    mcp_config_path: str | None = None,
+    mcp_servers: dict[str, Any] | None = None,
 ) -> list[str]:
     if agent_type == "codex":
-        return ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
+        cmd = ["codex", "exec", "--full-auto", "--skip-git-repo-check"]
+        if mcp_servers:
+            cmd.extend(_codex_mcp_overrides(mcp_servers))
+        return cmd
     # Prompt is piped via stdin — no -p flag, no ARG_MAX issues,
     # no shell encoding problems with Korean/Unicode text.
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
     if model:
         cmd.extend(["--model", model])
+    if mcp_config_path:
+        cmd.extend(["--mcp-config", mcp_config_path])
     return cmd
 
 
@@ -159,13 +210,31 @@ async def spawn_agent(
     clean_build: bool = False,
     node_env: str = "development",
     env_extra: dict[str, str] | None = None,
+    mcp_servers: dict[str, Any] | None = None,
 ) -> None:
     """Spawn the CLI subprocess and kick off the background monitor.
 
     Prompts are written to a temp .md file and piped via stdin to avoid
     ARG_MAX limits and shell-encoding issues with Korean/Unicode text.
+
+    When `mcp_servers` is provided, the dict is injected into the spawned
+    CLI so subprocess-mode agents see the same MCP servers (kumiho-memory,
+    operator-tools) as sidecar-mode agents. The mechanism is per-CLI:
+      - Claude: serialize to a temp JSON file and pass `--mcp-config <path>`
+      - Codex: emit `-c mcp_servers.<name>.<field>=<toml-value>` overrides
     """
-    cmd = _build_command(agent.agent_type, model=model)
+    # Claude consumes MCP config from a JSON file; codex doesn't read
+    # files (only `-c` overrides) so we skip the write for codex agents.
+    mcp_config_path: str | None = None
+    if mcp_servers and agent.agent_type != "codex":
+        mcp_config_path = _write_mcp_config_file(agent.id, mcp_servers)
+
+    cmd = _build_command(
+        agent.agent_type,
+        model=model,
+        mcp_config_path=mcp_config_path,
+        mcp_servers=mcp_servers,
+    )
     cwd = os.path.expanduser(agent.cwd)
 
     # Build sanitized environment

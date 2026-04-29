@@ -46,6 +46,11 @@ class ManagedAgent:
     # preserve sessions across invocations and would otherwise receive bare
     # follow-up text like "execute the task now" with no task to execute.
     _original_prompt: str = field(default="", repr=False)
+    # MCP server config used at create-time for subprocess agents — re-used
+    # on follow-up turns so each spawn gets the same kumiho-memory /
+    # operator-tools surface as the first turn. Sidecar agents don't need
+    # this (the SDK handles MCP within the persistent session).
+    _subprocess_mcp_servers: dict[str, Any] | None = field(default=None, repr=False)
 
 
 # ---------------------------------------------------------------------------

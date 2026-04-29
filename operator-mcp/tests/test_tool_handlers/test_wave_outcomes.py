@@ -74,7 +74,7 @@ class TestRecordWaveOutcomes:
     async def test_no_sdk_returns_empty(self):
         """No Kumiho SDK → graceful empty dict."""
         AGENTS["a1"] = _make_agent("a1", "coder-Alice")
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=None):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=None):
             result = await _record_wave_outcomes(["a1"], {}, "test-team")
         assert result == {}
 
@@ -98,8 +98,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://Construct/Outcomes/test-team-coder-Alice-a1.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             result = await _record_wave_outcomes(["a1"], {}, "test-team", cwd=str(tmp_path))
 
         assert "a1" in result
@@ -138,8 +138,8 @@ class TestRecordWaveOutcomes:
 
         upstream = ["kref://upstream-coder?r=1", "kref://upstream-researcher?r=1"]
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             result = await _record_wave_outcomes(
                 ["a1"], {}, "test-team",
                 upstream_rev_krefs=upstream,
@@ -188,8 +188,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(side_effect=fake_create_revision)
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", side_effect=fake_get_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", side_effect=fake_get_log):
             result = await _record_wave_outcomes(["a1", "a2"], {}, "test-team")
 
         assert len(result) == 2
@@ -214,8 +214,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock()
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             result = await _record_wave_outcomes(["a1"], {}, "test-team")
 
         assert "a1" in result
@@ -239,8 +239,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(side_effect=[{}, RuntimeError("conflict")])
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             result = await _record_wave_outcomes(["a1"], {}, "test-team")
 
         assert "a1" in result
@@ -267,8 +267,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             result = await _record_wave_outcomes(["a1"], {}, "test-team")
 
         outcome = result["a1"]
@@ -295,8 +295,8 @@ class TestRecordWaveOutcomes:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log):
             await _record_wave_outcomes(["a1"], {}, "test-team", cwd=cwd)
 
         # Artifact name should be relative, location should be absolute
@@ -531,9 +531,9 @@ class TestRecordWaveOutcomesSupersedesAndDiff:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": f"{existing_item_kref}?r=2"})
         mock_sdk.create_edge = AsyncMock()
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log), \
-             patch("operator.tool_handlers.teams._capture_git_diff", return_value=""):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log), \
+             patch("operator_mcp.tool_handlers.teams._capture_git_diff", return_value=""):
             result = await _record_wave_outcomes(["a1"], {}, "test-team", cwd=str(tmp_path))
 
         assert "a1" in result
@@ -566,9 +566,9 @@ class TestRecordWaveOutcomesSupersedesAndDiff:
         mock_sdk.create_item = AsyncMock(return_value={"kref": "kref://new-item.outcome"})
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://new-item.outcome?r=1"})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log), \
-             patch("operator.tool_handlers.teams._capture_git_diff", return_value=""):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log), \
+             patch("operator_mcp.tool_handlers.teams._capture_git_diff", return_value=""):
             result = await _record_wave_outcomes(["a1"], {}, "test-team", cwd=str(tmp_path))
 
         assert "a1" in result
@@ -594,9 +594,9 @@ class TestRecordWaveOutcomesSupersedesAndDiff:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log), \
-             patch("operator.tool_handlers.teams._capture_git_diff", return_value=diff_text):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log), \
+             patch("operator_mcp.tool_handlers.teams._capture_git_diff", return_value=diff_text):
             result = await _record_wave_outcomes(["a1"], {}, "test-team", cwd=str(tmp_path))
 
         outcome = result["a1"]
@@ -625,9 +625,9 @@ class TestRecordWaveOutcomesSupersedesAndDiff:
         mock_sdk.create_revision = AsyncMock(return_value={"kref": "kref://item.outcome?r=1"})
         mock_sdk.create_artifact = AsyncMock(return_value={})
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
-             patch("operator.run_log.get_log", return_value=mock_log), \
-             patch("operator.tool_handlers.teams._capture_git_diff", return_value=""):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk), \
+             patch("operator_mcp.run_log.get_log", return_value=mock_log), \
+             patch("operator_mcp.tool_handlers.teams._capture_git_diff", return_value=""):
             result = await _record_wave_outcomes(["a1"], {}, "test-team", cwd=str(tmp_path))
 
         # Only 1 artifact call (the file), not 2 (no diff artifact)
@@ -646,7 +646,7 @@ class TestToolResolveOutcome:
         assert "error" in result
 
     async def test_no_sdk(self):
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=None):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=None):
             result = await tool_resolve_outcome({"revision_kref": "kref://item?r=1"})
         assert "error" in result
 
@@ -660,7 +660,7 @@ class TestToolResolveOutcome:
             {"source_kref": "kref://item?r=1", "target_kref": "kref://upstream?r=1", "edge_type": "DERIVED_FROM"},
         ])
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk):
             result = await tool_resolve_outcome({"revision_kref": "kref://item?r=1"})
 
         assert result["revision_kref"] == "kref://item?r=1"
@@ -674,7 +674,7 @@ class TestToolResolveOutcome:
         mock_sdk = AsyncMock()
         mock_sdk.get_artifacts = AsyncMock(side_effect=RuntimeError("connection lost"))
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk):
             result = await tool_resolve_outcome({"revision_kref": "kref://item?r=1"})
         assert "error" in result
 
@@ -690,7 +690,7 @@ class TestToolGetOutcomeLineage:
         assert "error" in result
 
     async def test_no_sdk(self):
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=None):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=None):
             result = await tool_get_outcome_lineage({"revision_kref": "kref://item?r=1"})
         assert "error" in result
 
@@ -710,7 +710,7 @@ class TestToolGetOutcomeLineage:
             [{"name": "review.md", "location": "/review.md"}],
         ])
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk):
             result = await tool_get_outcome_lineage({"revision_kref": "kref://item?r=1"})
 
         assert result["revision_kref"] == "kref://item?r=1"
@@ -724,7 +724,7 @@ class TestToolGetOutcomeLineage:
         mock_sdk = AsyncMock()
         mock_sdk.get_edges = AsyncMock(return_value=[])
 
-        with patch("operator.tool_handlers.teams._get_sdk", return_value=mock_sdk):
+        with patch("operator_mcp.tool_handlers.teams._get_sdk", return_value=mock_sdk):
             result = await tool_get_outcome_lineage({"revision_kref": "kref://item?r=1"})
 
         assert result["upstream"] == []

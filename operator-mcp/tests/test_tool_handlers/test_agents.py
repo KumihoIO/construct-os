@@ -54,7 +54,7 @@ def permissive_policy():
         allowed_roots=[],
         block_high_risk_commands=False,
     )
-    with patch("operator.policy.load_policy", return_value=permissive):
+    with patch("operator_mcp.policy.load_policy", return_value=permissive):
         yield
 
 
@@ -138,7 +138,7 @@ class TestToolCreateAgent:
             capabilities=["python"], description="Test",
             default_cwd=str(tmp_path),
         ))
-        with patch("operator.tool_handlers.agents.POOL", pool):
+        with patch("operator_mcp.tool_handlers.agents.POOL", pool):
             result = await tool_create_agent({
                 "title": "Template Agent",
                 "template": "test-tmpl",

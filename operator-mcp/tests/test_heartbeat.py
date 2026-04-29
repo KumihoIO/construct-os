@@ -39,7 +39,7 @@ def monitor():
 def agents_dict():
     """Provide a clean AGENTS dict for each test."""
     d: dict[str, FakeAgent] = {}
-    with patch("operator.heartbeat.AGENTS", d):
+    with patch("operator_mcp.heartbeat.AGENTS", d):
         yield d
 
 
@@ -205,7 +205,7 @@ class TestGetEventCount:
         agents_dict["a-1"] = agent
         mock_log = MagicMock()
         mock_log.get_summary.return_value = {"total_events": 42}
-        with patch("operator.heartbeat.get_log", return_value=mock_log):
+        with patch("operator_mcp.heartbeat.get_log", return_value=mock_log):
             count = monitor._get_event_count("a-1", agent)
         assert count == 42
 
@@ -213,7 +213,7 @@ class TestGetEventCount:
     async def test_falls_back_to_stdout_buffer(self, monitor, agents_dict):
         agent = FakeAgent(id="a-1", status="running", stdout_buffer=["a", "b", "c"])
         agents_dict["a-1"] = agent
-        with patch("operator.heartbeat.get_log", return_value=None):
+        with patch("operator_mcp.heartbeat.get_log", return_value=None):
             count = monitor._get_event_count("a-1", agent)
         assert count == 3
 
@@ -229,7 +229,7 @@ class TestGetEventCount:
                 return mock_log
             return None
 
-        with patch("operator.heartbeat.get_log", side_effect=fake_get_log):
+        with patch("operator_mcp.heartbeat.get_log", side_effect=fake_get_log):
             count = monitor._get_event_count("a-1", agent)
         assert count == 10
 
@@ -281,7 +281,7 @@ class TestSidecarPing:
 
 class TestSingleton:
     def test_get_heartbeat_monitor(self):
-        with patch("operator.heartbeat._monitor", None):
+        with patch("operator_mcp.heartbeat._monitor", None):
             m = get_heartbeat_monitor()
             assert isinstance(m, HeartbeatMonitor)
 
@@ -291,7 +291,7 @@ class TestSingleton:
 class TestToolGetAgentHealth:
     @pytest.mark.asyncio
     async def test_specific_agent_not_found(self):
-        with patch("operator.heartbeat.get_heartbeat_monitor") as mock_get:
+        with patch("operator_mcp.heartbeat.get_heartbeat_monitor") as mock_get:
             mock_monitor = MagicMock()
             mock_monitor.get_health.return_value = None
             mock_get.return_value = mock_monitor
@@ -300,7 +300,7 @@ class TestToolGetAgentHealth:
 
     @pytest.mark.asyncio
     async def test_all_agents(self):
-        with patch("operator.heartbeat.get_heartbeat_monitor") as mock_get:
+        with patch("operator_mcp.heartbeat.get_heartbeat_monitor") as mock_get:
             mock_monitor = MagicMock()
             mock_monitor.get_all_health.return_value = [
                 {"agent_id": "a-1", "alive": True},

@@ -44,7 +44,7 @@ def clean_state():
 @pytest.fixture
 def checkpoint_dir(tmp_path, monkeypatch):
     d = str(tmp_path / "checkpoints")
-    monkeypatch.setattr("operator.tool_handlers.teams._CHECKPOINT_DIR", d)
+    monkeypatch.setattr("operator_mcp.tool_handlers.teams._CHECKPOINT_DIR", d)
     return d
 
 
@@ -127,13 +127,13 @@ def _patch_spawn_and_wait(agent_fail_fn=None):
         return outcomes
 
     return (
-        patch("operator.tool_handlers.teams.spawn_with_retry", side_effect=mock_spawn),
-        patch("operator.tool_handlers.teams._wait_for_wave_agents", side_effect=mock_wait),
-        patch("operator.tool_handlers.teams._record_wave_outcomes", side_effect=mock_record_outcomes),
-        patch("operator.tool_handlers.teams._try_sidecar_create", return_value=None),
-        patch("operator.tool_handlers.teams._event_consumer", None),
-        patch("operator.tool_handlers.teams._TEAM_SPAWN_STAGGER_SECS", 0),
-        patch("operator.agent_subprocess._TEAM_SPAWN_STAGGER_SECS", 0),
+        patch("operator_mcp.tool_handlers.teams.spawn_with_retry", side_effect=mock_spawn),
+        patch("operator_mcp.tool_handlers.teams._wait_for_wave_agents", side_effect=mock_wait),
+        patch("operator_mcp.tool_handlers.teams._record_wave_outcomes", side_effect=mock_record_outcomes),
+        patch("operator_mcp.tool_handlers.teams._try_sidecar_create", return_value=None),
+        patch("operator_mcp.tool_handlers.teams._event_consumer", None),
+        patch("operator_mcp.tool_handlers.teams._TEAM_SPAWN_STAGGER_SECS", 0),
+        patch("operator_mcp.agent_subprocess._TEAM_SPAWN_STAGGER_SECS", 0),
     )
 
 

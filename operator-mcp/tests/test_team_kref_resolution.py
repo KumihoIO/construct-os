@@ -12,7 +12,7 @@ from operator_mcp.kumiho_clients import KumihoTeamClient
 def team_client():
     """Create a KumihoTeamClient with SDK/HTTP disabled."""
     with patch.dict("os.environ", {"KUMIHO_API_URL": "", "KUMIHO_AUTH_TOKEN": ""}):
-        with patch("operator.kumiho_clients._get_sdk", return_value=None):
+        with patch("operator_mcp.kumiho_clients._get_sdk", return_value=None):
             client = KumihoTeamClient()
             client._available = True  # pretend available for tests
             return client

@@ -275,6 +275,14 @@ async def tool_create_agent(args: dict[str, Any], journal: SessionJournal, pool_
     clean_build = args.get("clean_build", False)
     node_env = args.get("node_env", "development")
 
+    # MCP injection level. `include_memory` and `include_operator` were
+    # previously referenced inside the sidecar branch without being
+    # defined in this function (latent NameError on the top-level path
+    # where `cached_params` is None). Derive from args with sensible
+    # defaults — both on by default, matching `_try_sidecar_create`.
+    include_memory = args.get("include_memory", True)
+    include_operator = args.get("include_operator", True)
+
     # Try sidecar first, fallback to subprocess
     sidecar_info = None
     if initial_prompt:
@@ -326,7 +334,26 @@ async def tool_create_agent(args: dict[str, Any], journal: SessionJournal, pool_
             except Exception as e:
                 _log(f"Journal write failed for sidecar start of {agent_id[:8]}: {e}")
         else:
-            await spawn_agent(agent, initial_prompt, journal, clean_build=clean_build, node_env=node_env)
+            # Subprocess fallback. Build the same MCP server set the sidecar
+            # path injects (kumiho-memory + operator-tools), so subprocess
+            # agents can use memory recall / hierarchical spawning instead
+            # of running tool-less. Stash on the agent so follow-up turns
+            # via tool_send_agent_prompt can re-attach the same servers
+            # without re-deriving them.
+            sub_mcp_servers = build_mcp_servers(
+                include_memory=include_memory,
+                include_operator=include_operator,
+                socket_path=_sidecar_client.socket_path if _sidecar_client else None,
+            )
+            agent._subprocess_mcp_servers = sub_mcp_servers
+            await spawn_agent(
+                agent,
+                initial_prompt,
+                journal,
+                clean_build=clean_build,
+                node_env=node_env,
+                mcp_servers=sub_mcp_servers,
+            )
 
     result: dict[str, Any] = {
         "agent_id": agent_id,
@@ -721,7 +748,12 @@ async def tool_send_agent_prompt(args: dict[str, Any], journal: SessionJournal) 
 
     agent.stdout_buffer = ""
     agent.stderr_buffer = ""
-    await spawn_agent(agent, full_prompt, journal)
+    await spawn_agent(
+        agent,
+        full_prompt,
+        journal,
+        mcp_servers=agent._subprocess_mcp_servers,
+    )
 
     return {
         "agent_id": agent_id,

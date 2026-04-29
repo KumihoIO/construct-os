@@ -75,21 +75,20 @@ def list_skills() -> list[dict[str, Any]]:
                 continue
             seen.add(name)
             path = os.path.join(skills_dir, filename)
-        # Read first line for title
-        title = name
-        try:
-            with open(path, "r") as f:
-                first_line = f.readline().strip()
-                if first_line.startswith("# "):
-                    title = first_line[2:]
-        except Exception:
-            pass
+            title = name
+            try:
+                with open(path, "r") as f:
+                    first_line = f.readline().strip()
+                    if first_line.startswith("# "):
+                        title = first_line[2:]
+            except Exception:
+                pass
 
-        skills.append({
-            "name": name,
-            "title": title,
-            "path": path,
-        })
+            skills.append({
+                "name": name,
+                "title": title,
+                "path": path,
+            })
 
     return skills
 
