@@ -55,7 +55,7 @@ class TestSearchAgentPool:
     async def test_local_only(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
         pool.add(AgentTemplate(name="rust-dev", agent_type="codex", role="coder", capabilities=["rust"], description="Rust"))
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_search_agent_pool({"query": "rust"}, mock_pool_client)
             assert result["count"] == 1
             assert result["matches"][0]["name"] == "rust-dev"
@@ -64,7 +64,7 @@ class TestSearchAgentPool:
         pool = AgentPool(pool_path)
         pool.add(AgentTemplate(name="shared", agent_type="claude", role="coder", capabilities=[], description="Shared"))
         mock_pool_client.search_agents = AsyncMock(return_value=[{"item_name": "shared"}])
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_search_agent_pool({"query": "shared"}, mock_pool_client)
             assert result["count"] == 1  # not duplicated
 
@@ -77,7 +77,7 @@ class TestSearchAgentPool:
 class TestSaveAgentTemplate:
     async def test_save_new(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_save_agent_template({
                 "name": "new-agent",
                 "agent_type": "claude",
@@ -91,7 +91,7 @@ class TestSaveAgentTemplate:
     async def test_update_existing(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
         pool.add(AgentTemplate(name="existing", agent_type="claude", role="coder", capabilities=[], description="Old"))
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_save_agent_template({
                 "name": "existing",
                 "agent_type": "claude",
@@ -104,7 +104,7 @@ class TestSaveAgentTemplate:
 
     async def test_invalid_agent_type(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_save_agent_template({
                 "name": "bad",
                 "agent_type": "gpt4",
@@ -116,7 +116,7 @@ class TestSaveAgentTemplate:
 
     async def test_invalid_role(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_save_agent_template({
                 "name": "bad",
                 "agent_type": "claude",
@@ -128,7 +128,7 @@ class TestSaveAgentTemplate:
 
     async def test_capabilities_from_string(self, pool_path, mock_pool_client):
         pool = AgentPool(pool_path)
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_save_agent_template({
                 "name": "str-caps",
                 "agent_type": "claude",
@@ -150,6 +150,6 @@ class TestListAgentTemplates:
         pool = AgentPool(pool_path)
         pool.add(AgentTemplate(name="t1", agent_type="claude", role="coder", capabilities=[], description="T1"))
         pool.add(AgentTemplate(name="t2", agent_type="codex", role="reviewer", capabilities=[], description="T2"))
-        with patch("operator.tool_handlers.pool.POOL", pool):
+        with patch("operator_mcp.tool_handlers.pool.POOL", pool):
             result = await tool_list_agent_templates(mock_pool_client)
             assert result["count"] == 2

@@ -21,7 +21,7 @@ def clean_logs():
 @pytest.fixture
 def log(tmp_path):
     """Create a RunLog writing to a temp directory."""
-    with patch("operator.run_log._RUNLOGS_DIR", str(tmp_path)):
+    with patch("operator_mcp.run_log._RUNLOGS_DIR", str(tmp_path)):
         return RunLog("test-agent-1", title="coder-test", agent_type="codex", cwd="/tmp/work")
 
 
@@ -161,7 +161,7 @@ class TestRunLogQueries:
         assert len(errors) == 1
 
     def test_get_full_log(self, log, tmp_path):
-        with patch("operator.run_log._RUNLOGS_DIR", str(tmp_path)):
+        with patch("operator_mcp.run_log._RUNLOGS_DIR", str(tmp_path)):
             log.record_prompt("test")
             entries = log.get_full_log(limit=100)
             assert len(entries) >= 2  # header + prompt
@@ -170,7 +170,7 @@ class TestRunLogQueries:
 
 class TestRunLogRegistry:
     def test_get_or_create(self, tmp_path):
-        with patch("operator.run_log._RUNLOGS_DIR", str(tmp_path)):
+        with patch("operator_mcp.run_log._RUNLOGS_DIR", str(tmp_path)):
             log = get_or_create_log("agent-1", title="test")
             assert log.agent_id == "agent-1"
             # Same id returns same instance
@@ -182,14 +182,14 @@ class TestRunLogRegistry:
 
 class TestCleanupLogs:
     def test_no_cleanup_below_limit(self, tmp_path):
-        with patch("operator.run_log._RUNLOGS_DIR", str(tmp_path)):
+        with patch("operator_mcp.run_log._RUNLOGS_DIR", str(tmp_path)):
             for i in range(5):
                 get_or_create_log(f"a-{i}", title=f"test-{i}")
             removed = cleanup_logs(max_in_memory=10)
             assert removed == 0
 
     def test_cleanup_evicts_completed(self, tmp_path):
-        with patch("operator.run_log._RUNLOGS_DIR", str(tmp_path)):
+        with patch("operator_mcp.run_log._RUNLOGS_DIR", str(tmp_path)):
             for i in range(15):
                 get_or_create_log(f"a-{i}", title=f"test-{i}")
             removed = cleanup_logs(max_in_memory=5)

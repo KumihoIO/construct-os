@@ -48,7 +48,7 @@ def permissive_policy():
         allowed_roots=[],
         block_high_risk_commands=False,
     )
-    with patch("operator.policy.load_policy", return_value=permissive):
+    with patch("operator_mcp.policy.load_policy", return_value=permissive):
         yield
 
 
@@ -407,7 +407,7 @@ class TestMonitorAgentResilience:
 
         with patch.object(journal, "record", side_effect=JournalWriteError("disk full")):
             # Should NOT raise — monitor catches the journal error
-            await _monitor_agent(agent, journal)
+            await _monitor_agent(agent, journal, ["claude", "--print"])
 
         # Agent status should still be set correctly
         assert agent.status == "idle"
@@ -428,7 +428,7 @@ class TestMonitorAgentResilience:
         mock_proc.returncode = None  # Process vanished
         agent.process = mock_proc
 
-        await _monitor_agent(agent, journal)
+        await _monitor_agent(agent, journal, ["claude", "--print"])
 
         # Agent should be marked as error (no return code)
         assert agent.status == "error"
@@ -454,7 +454,7 @@ def _make_outcome(agent_id: str, status: str = "completed", **kw) -> AgentOutcom
 def checkpoint_dir(tmp_path, monkeypatch):
     """Redirect checkpoint dir to tmp for isolation."""
     d = str(tmp_path / "checkpoints")
-    monkeypatch.setattr("operator.tool_handlers.teams._CHECKPOINT_DIR", d)
+    monkeypatch.setattr("operator_mcp.tool_handlers.teams._CHECKPOINT_DIR", d)
     return d
 
 

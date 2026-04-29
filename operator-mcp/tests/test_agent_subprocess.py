@@ -1,10 +1,19 @@
-"""Tests for operator.agent_subprocess — _build_command, compose_agent_prompt, stderr filtering."""
+"""Tests for operator_mcp.agent_subprocess — _build_command, compose_agent_prompt, stderr filtering."""
 from __future__ import annotations
 
-from operator_mcp.agent_subprocess import _build_command, _is_stderr_noise, compose_agent_prompt
+from operator_mcp.agent_subprocess import (
+    _build_command,
+    _codex_mcp_overrides,
+    _is_stderr_noise,
+    compose_agent_prompt,
+)
 
 
 class TestBuildCommand:
+    # Prompt is piped via stdin (not passed as a CLI arg) to dodge ARG_MAX
+    # and shell-encoding bugs with Korean/Unicode text — so _build_command
+    # only emits flags, not the prompt body.
+
     def test_codex_command(self):
         cmd = _build_command("codex")
         assert cmd[0] == "codex"
@@ -13,24 +22,88 @@ class TestBuildCommand:
         assert "--skip-git-repo-check" in cmd
 
     def test_claude_command(self):
-        cmd = _build_command("claude", "write tests")
+        cmd = _build_command("claude")
         assert cmd[0] == "claude"
         assert "--print" in cmd
-        assert "-p" in cmd
-        assert "write tests" in cmd
+        assert "--dangerously-skip-permissions" in cmd
 
     def test_unknown_defaults_to_claude(self):
-        cmd = _build_command("unknown-type", "hello")
+        cmd = _build_command("unknown-type")
         assert cmd[0] == "claude"
 
-    def test_prompt_preserved(self):
-        prompt = "This is a long prompt with special chars: $HOME && echo 'hello'"
-        cmd = _build_command("claude", prompt)
-        assert prompt in cmd
+    def test_claude_with_model(self):
+        cmd = _build_command("claude", model="claude-opus-4-7")
+        assert "--model" in cmd
+        assert "claude-opus-4-7" in cmd
 
-    def test_codex_prompt_is_last_arg(self):
-        cmd = _build_command("codex", "task")
-        assert cmd[-1] == "task"
+    def test_claude_with_mcp_config(self):
+        cmd = _build_command("claude", mcp_config_path="/tmp/mcp.json")
+        assert "--mcp-config" in cmd
+        assert "/tmp/mcp.json" in cmd
+
+    def test_codex_with_mcp_servers(self):
+        servers = {
+            "operator-tools": {
+                "command": "/path/python3",
+                "args": ["/path/script.py"],
+                "env": {"FOO": "bar"},
+            }
+        }
+        cmd = _build_command("codex", mcp_servers=servers)
+        # Each leaf becomes its own -c flag
+        assert cmd.count("-c") == 3
+        assert any('mcp_servers.operator-tools.command="/path/python3"' in a for a in cmd)
+
+
+class TestCodexMcpOverrides:
+    def test_empty_dict(self):
+        assert _codex_mcp_overrides({}) == []
+
+    def test_single_server_no_env(self):
+        flags = _codex_mcp_overrides({
+            "srv": {"command": "/bin/x", "args": ["-y"]},
+        })
+        assert flags == [
+            "-c", 'mcp_servers.srv.command="/bin/x"',
+            "-c", 'mcp_servers.srv.args=["-y"]',
+        ]
+
+    def test_env_leaves_emit_individually(self):
+        # Each env key becomes its own -c so codex's TOML parser doesn't
+        # have to handle nested inline tables with edge-case escaping.
+        flags = _codex_mcp_overrides({
+            "srv": {
+                "command": "/bin/x",
+                "args": [],
+                "env": {"A": "1", "B": "2"},
+            },
+        })
+        assert '-c' in flags
+        assert any('env.A="1"' in f for f in flags)
+        assert any('env.B="2"' in f for f in flags)
+
+    def test_special_chars_in_env_value(self):
+        # json.dumps must escape quotes/backslashes so the value parses
+        # as a TOML basic string. Otherwise codex rejects the override.
+        flags = _codex_mcp_overrides({
+            "srv": {
+                "command": "/x",
+                "args": [],
+                "env": {"K": 'val with "quote" and \\back'},
+            },
+        })
+        env_flag = next(f for f in flags if "env.K=" in f)
+        assert '\\"quote\\"' in env_flag
+        assert '\\\\back' in env_flag
+
+    def test_hyphenated_server_name(self):
+        # Hyphens are valid TOML bare keys; codex normalizes them to
+        # underscores in its tool prefix but the config key keeps the
+        # original.
+        flags = _codex_mcp_overrides({
+            "kumiho-memory": {"command": "/x", "args": []},
+        })
+        assert any("mcp_servers.kumiho-memory.command" in f for f in flags)
 
 
 class TestComposeAgentPrompt:

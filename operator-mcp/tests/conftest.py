@@ -9,6 +9,53 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
+# Test isolation: prevent user's ~/.construct/config.toml from leaking into
+# tests that hardcode the default project names. The harness/memory project
+# helpers cache their first read, so a developer machine with a non-default
+# `[kumiho].harness_project` (e.g. legacy "FoxClaw") would otherwise make
+# tests assert against a value the test author never anticipated.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _isolate_construct_config(monkeypatch):
+    from operator_mcp import construct_config, policy
+
+    monkeypatch.setattr(construct_config, "_CONFIG_PATH", "/nonexistent/config.toml")
+    monkeypatch.setattr(construct_config, "_cached_harness", None)
+    monkeypatch.setattr(construct_config, "_cached_memory", None)
+    monkeypatch.delenv("KUMIHO_MEMORY_PROJECT", raising=False)
+
+    # Same isolation for the autonomy policy. The user's local
+    # ~/.construct/config.toml typically contains workspace_only roots
+    # like ~/construct-os and forbidden_paths like /private/var — the
+    # latter blocks pytest's macOS tmp_path. Pointing at a nonexistent
+    # config file makes load_policy() return a default Policy() with
+    # empty lists, which allows every cwd.
+    monkeypatch.setattr(policy, "_CONFIG_PATH", "/nonexistent/config.toml")
+    monkeypatch.setattr(policy, "_cached_policy", None)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _clear_global_agent_state():
+    """Reset module-global agent state between tests.
+
+    AGENTS and _terminal_result_cache live at module scope so a test that
+    registers agent_id 'a1' leaks into the next test that uses the same
+    id — surfacing as bizarre `cached terminal result` returns when the
+    test author expected a fresh state machine.
+    """
+    from operator_mcp.agent_state import AGENTS
+    from operator_mcp.tool_handlers import agents as _agents_handler
+
+    AGENTS.clear()
+    _agents_handler._terminal_result_cache.clear()
+    yield
+    AGENTS.clear()
+    _agents_handler._terminal_result_cache.clear()
+
+
+# ---------------------------------------------------------------------------
 # tmp_path-based fixtures for file I/O tests
 # ---------------------------------------------------------------------------
 

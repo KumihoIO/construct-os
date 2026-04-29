@@ -178,7 +178,7 @@ def _make_mock_sdk():
 def team_client():
     """Create a KumihoTeamClient with SDK/HTTP disabled."""
     with patch.dict("os.environ", {"KUMIHO_API_URL": "", "KUMIHO_AUTH_TOKEN": ""}):
-        with patch("operator.kumiho_clients._get_sdk", return_value=None):
+        with patch("operator_mcp.kumiho_clients._get_sdk", return_value=None):
             client = KumihoTeamClient()
             client._available = True
             return client
@@ -345,7 +345,7 @@ class TestGetTeamHTTPParity:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=_mock_get)
 
-        with patch("operator.kumiho_clients.httpx.AsyncClient") as MockHttpx:
+        with patch("operator_mcp.kumiho_clients.httpx.AsyncClient") as MockHttpx:
             MockHttpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockHttpx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -393,7 +393,7 @@ class TestGetTeamHTTPParity:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=_mock_get)
 
-        with patch("operator.kumiho_clients.httpx.AsyncClient") as MockHttpx:
+        with patch("operator_mcp.kumiho_clients.httpx.AsyncClient") as MockHttpx:
             MockHttpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockHttpx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -440,7 +440,7 @@ class TestGetTeamHTTPParity:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=_mock_get)
 
-        with patch("operator.kumiho_clients.httpx.AsyncClient") as MockHttpx:
+        with patch("operator_mcp.kumiho_clients.httpx.AsyncClient") as MockHttpx:
             MockHttpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockHttpx.return_value.__aexit__ = AsyncMock(return_value=False)
 

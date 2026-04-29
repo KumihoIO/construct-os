@@ -16,20 +16,20 @@ class TestGatewayClientInit:
 
     def test_disabled_without_httpx(self):
         with patch.dict("os.environ", {"CONSTRUCT_GATEWAY_URL": "http://localhost:8080"}), \
-             patch("operator.gateway_client._HAS_HTTPX", False):
+             patch("operator_mcp.gateway_client._HAS_HTTPX", False):
             gw = ConstructGatewayClient()
             assert not gw._available
 
     def test_enabled(self):
         with patch.dict("os.environ", {"CONSTRUCT_GATEWAY_URL": "http://localhost:8080"}), \
-             patch("operator.gateway_client._HAS_HTTPX", True):
+             patch("operator_mcp.gateway_client._HAS_HTTPX", True):
             gw = ConstructGatewayClient()
             assert gw._available
             assert gw.gateway_url == "http://localhost:8080"
 
     def test_strips_trailing_slash(self):
         with patch.dict("os.environ", {"CONSTRUCT_GATEWAY_URL": "http://localhost:8080/"}), \
-             patch("operator.gateway_client._HAS_HTTPX", True):
+             patch("operator_mcp.gateway_client._HAS_HTTPX", True):
             gw = ConstructGatewayClient()
             assert gw.gateway_url == "http://localhost:8080"
 
@@ -37,7 +37,7 @@ class TestGatewayClientInit:
         with patch.dict("os.environ", {
             "CONSTRUCT_GATEWAY_URL": "http://localhost:8080",
             "CONSTRUCT_GATEWAY_TOKEN": "my-token",
-        }), patch("operator.gateway_client._HAS_HTTPX", True):
+        }), patch("operator_mcp.gateway_client._HAS_HTTPX", True):
             gw = ConstructGatewayClient()
             headers = gw._headers()
             assert headers["Authorization"] == "Bearer my-token"
@@ -45,7 +45,7 @@ class TestGatewayClientInit:
 
     def test_headers_without_token(self):
         with patch.dict("os.environ", {"CONSTRUCT_GATEWAY_URL": "http://localhost:8080"}, clear=True), \
-             patch("operator.gateway_client._HAS_HTTPX", True):
+             patch("operator_mcp.gateway_client._HAS_HTTPX", True):
             gw = ConstructGatewayClient()
             headers = gw._headers()
             assert "Authorization" not in headers
