@@ -226,26 +226,47 @@ async def tool_memory_engage_op(args: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw, dict) and "error" in raw:
         return raw
 
-    # tool_memory_retrieve may key results under "items" or "results"
-    items = []
+    # tool_memory_retrieve returns {item_krefs, revision_krefs, scores,
+    # spaces_used} — score-ranked parallel lists. Walk them, fetch each item
+    # for content, and build the engage-shape response the caller expects.
+    item_krefs: list[str] = []
+    revision_krefs: list[str] = []
     if isinstance(raw, dict):
-        items = raw.get("items") or raw.get("results") or []
-    elif isinstance(raw, list):
-        items = raw
+        item_krefs = list(raw.get("item_krefs") or [])
+        revision_krefs = list(raw.get("revision_krefs") or [])
 
     source_krefs: list[str] = []
     seen: set[str] = set()
-    for it in items:
-        kref = _extract_kref(it) if isinstance(it, dict) else None
-        if kref and kref not in seen:
-            seen.add(kref)
-            source_krefs.append(kref)
+    items: list[dict[str, Any]] = []
+
+    for i, item_kref in enumerate(item_krefs):
+        rev_kref = revision_krefs[i] if i < len(revision_krefs) else None
+        # Prefer revision_kref for provenance so DERIVED_FROM edges link to
+        # the exact revision retrieve found, not just the item.
+        provenance_kref = rev_kref or item_kref
+        if provenance_kref in seen:
+            continue
+        seen.add(provenance_kref)
+        source_krefs.append(provenance_kref)
+
+        try:
+            item_data = await asyncio.to_thread(tool_get_item, kref=item_kref)
+        except Exception as exc:
+            _log(f"memory_engage: get_item failed for {item_kref!r}: {exc}")
+            item_data = {"error": str(exc)}
+
+        if not isinstance(item_data, dict):
+            item_data = {}
+        item_data.setdefault("item_kref", item_kref)
+        if rev_kref:
+            item_data.setdefault("revision_kref", rev_kref)
+        items.append(item_data)
 
     return {
-        "context": _summarize_for_context(items if isinstance(items, list) else []),
+        "context": _summarize_for_context(items),
         "results": items,
         "source_krefs": source_krefs,
-        "count": len(items) if isinstance(items, list) else 0,
+        "count": len(items),
     }
 
 
