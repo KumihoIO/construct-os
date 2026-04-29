@@ -81,41 +81,41 @@ class TestBuildMcpServers:
 
 class TestBuildSystemPrompt:
     def test_top_level_with_operator(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(is_top_level=True, include_operator=True, include_memory=True)
             assert "sub-agent managed by the Construct Operator" in prompt
             assert "kumiho-memory MCP" in prompt
 
     def test_sub_agent(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(is_top_level=False)
             assert "worker agent spawned by a parent" in prompt
 
     def test_role_identity(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(role_identity="Expert Rust developer")
             assert "## Your Role" in prompt
             assert "Expert Rust developer" in prompt
 
     def test_template_hint(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(template_hint="Focus on performance")
             assert "## Context" in prompt
             assert "Focus on performance" in prompt
 
     def test_skill_pattern_injection(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value="SKILL CONTENT HERE"):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value="SKILL CONTENT HERE"):
             prompt = build_system_prompt(skill_pattern="team")
             assert "## Orchestration Skills" in prompt
             assert "SKILL CONTENT HERE" in prompt
 
     def test_no_memory(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(is_top_level=True, include_memory=False)
             assert "kumiho-memory" not in prompt
 
     def test_no_operator(self):
-        with patch("operator.skill_loader.load_skills_for_pattern", return_value=""):
+        with patch("operator_mcp.skill_loader.load_skills_for_pattern", return_value=""):
             prompt = build_system_prompt(is_top_level=True, include_operator=False, include_memory=False)
             # sub-agent preamble not present, operator prompt not present
             assert "sub-agent managed by" not in prompt
