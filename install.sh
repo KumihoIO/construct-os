@@ -1678,7 +1678,11 @@ if [[ "$SKIP_BUILD" == false ]]; then
   fi
 
   step_dot "Building release binary"
-  cargo build --release --locked "${CARGO_FEATURE_ARGS[@]}"
+  # macOS ships bash 3.2 where, under `set -u`, expanding an empty array
+  # as `"${arr[@]}"` raises "unbound variable".  The `${arr[@]+"${arr[@]}"}`
+  # idiom expands to nothing when the array is empty (or unset) and to
+  # the array elements otherwise — works on bash 3.2 through 5.x.
+  cargo build --release --locked ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
   step_ok "Release binary built"
 else
   step_dot "Skipping build"
@@ -1687,7 +1691,8 @@ fi
 if [[ "$SKIP_INSTALL" == false ]]; then
   step_dot "Installing construct to cargo bin"
 
-  cargo install --path "$WORK_DIR" --force --locked "${CARGO_FEATURE_ARGS[@]}"
+  # Same bash 3.2 + set -u + empty-array guard as the build call above.
+  cargo install --path "$WORK_DIR" --force --locked ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
   step_ok "Construct installed"
 
   # Sync binary to ~/.local/bin so PATH lookups find the fresh version
