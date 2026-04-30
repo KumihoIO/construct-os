@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """URL-safe encode/decode of Kumiho krefs for embedding in trackable links.
 
-Used by the cold-outreach + click-tracking workflows: the email step
-wraps every link with a redirect to `/track/c/<encoded_kref>?u=<dest>`,
-and the click handler at the gateway decodes the kref to look up
-which contact / campaign / send actually produced the click.
+Used by the cold-outreach + click-tracking workflows: when a workflow
+needs to mint a tracked URL outside the email step's auto-rewrite
+(e.g. for a button in a separate transactional message), it can
+explicitly encode a kref with this script and interpolate the result
+into wherever it needs to land.
 
 Protocol: this is a Python step (see PythonStepConfig in
-operator_mcp/workflow/schema.py). It reads a JSON object on stdin and
+operator_mcp/workflow/schema.py). Reads a JSON object on stdin and
 writes a JSON object on stdout.
+
+This script is intentionally **standalone** — no imports beyond the
+stdlib — so it runs from any Python interpreter the workflow picks,
+without requiring operator_mcp to be on its sys.path. The same codec
+lives in ``operator_mcp.tracking`` for code paths that import directly
+(the email step's link rewriter, future gateway click handler). If
+you change the encoding, change both copies — they have to round-trip
+with each other.
 
 Input shape::
 
@@ -17,7 +26,7 @@ Input shape::
         "op": "encode" | "decode",
         "kref": "<full kref>",            # required for op=encode
         "encoded": "<urlsafe-b64 token>", # required for op=decode
-        "secret": "<optional HMAC secret to make tampering detectable>"
+        "secret": "<optional HMAC secret>"
       },
       "context": { ... }   # ignored
     }
@@ -26,12 +35,6 @@ Output shape::
 
     encode → {"encoded": "<urlsafe-b64 string>", "kref": "<input kref>"}
     decode → {"kref": "<decoded kref>",         "verified": true|false}
-
-The `verified` flag on decode is true only when the input includes a
-secret AND the embedded HMAC matches. Without a secret the encoded form
-is just URL-safe base64 (no integrity guarantee) — fine for non-
-sensitive ref codes, but use a secret if a forged click could cost
-something.
 """
 from __future__ import annotations
 
@@ -43,27 +46,15 @@ import sys
 
 
 def _urlsafe_b64encode(raw: bytes) -> str:
-    """Base64-url encode without padding (= chars are illegal in URL paths)."""
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
 def _urlsafe_b64decode(token: str) -> bytes:
-    """Base64-url decode, restoring the padding stripped during encode."""
     pad = (-len(token)) % 4
     return base64.urlsafe_b64decode(token + ("=" * pad))
 
 
 def encode(kref: str, secret: str | None) -> str:
-    """Encode a kref into a URL-safe token.
-
-    Without ``secret``: the token is just b64url(kref). Anyone who knows
-    the scheme can mint clicks that look real, but for analytics that's
-    usually fine.
-
-    With ``secret``: the token is b64url(kref || ":" || hmac_sha256[:8]).
-    The 8-byte truncated HMAC is enough to catch tampering without
-    bloating the URL.
-    """
     body = kref.encode("utf-8")
     if not secret:
         return _urlsafe_b64encode(body)
@@ -72,12 +63,9 @@ def encode(kref: str, secret: str | None) -> str:
 
 
 def decode(token: str, secret: str | None) -> tuple[str, bool]:
-    """Decode a token back into a kref and a verification flag."""
     raw = _urlsafe_b64decode(token)
     if not secret:
         return raw.decode("utf-8"), False
-    # Body and 8-byte signature joined by a colon — the kref itself can
-    # contain colons (kref://...) so we split on the LAST occurrence.
     if b":" not in raw:
         return raw.decode("utf-8"), False
     body, sig = raw.rsplit(b":", 1)

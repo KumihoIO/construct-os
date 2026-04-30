@@ -29,6 +29,7 @@ class StepType(str, Enum):
     AGENT = "agent"
     SHELL = "shell"
     PYTHON = "python"
+    EMAIL = "email"
     CONDITIONAL = "conditional"
     PARALLEL = "parallel"
     GOTO = "goto"
@@ -96,6 +97,58 @@ class ShellStepConfig(BaseModel):
     command: str
     timeout: float = 60.0
     allow_failure: bool = False  # If True, non-zero exit doesn't fail the workflow
+
+
+class EmailStepConfig(BaseModel):
+    """Config for 'email' step type — send an outbound email via SMTP.
+
+    Reads SMTP credentials from ``[channels_config.email]`` in
+    ``~/.construct/config.toml`` by default (the same section the email
+    channel uses for its inbox/SMTP). Per-step overrides are supported
+    for fan-out workflows that send through multiple senders.
+
+    Click tracking: when ``track_clicks`` is true and ``track_kref`` is
+    provided, every plain ``http(s)`` URL in ``body`` (and ``body_html``
+    if present) is rewritten to::
+
+        <track_base_url>/track/c/<encoded_kref>?u=<urlquoted-original>
+
+    The same encoded kref is shared by all links in this email — one
+    click event per send. The kref is encoded with the optional secret
+    in ``track_secret_env`` (env var name) for tamper detection. Workflow
+    authors who want per-link granularity should encode multiple krefs
+    upstream and write the URLs by hand instead.
+
+    Dry run: when ``dry_run: true`` the step renders the message and
+    stores the rendered output in ``output_data`` but does NOT connect
+    to SMTP. Critical for outreach previews — let the operator review
+    50 personalized emails before sending one.
+    """
+    to: str | list[str]
+    subject: str
+    body: str
+    body_html: str | None = None
+    from_address: str | None = None
+    cc: list[str] = Field(default_factory=list)
+    bcc: list[str] = Field(default_factory=list)
+    reply_to: str | None = None
+
+    # Click tracking
+    track_clicks: bool = False
+    track_kref: str | None = None  # Required when track_clicks=true
+    track_secret_env: str = "CLICK_TRACKING_SECRET"  # env var name for HMAC secret
+    track_base_url: str | None = None  # Default: from config / env GATEWAY_URL
+
+    # SMTP overrides — by default we read from
+    # ~/.construct/config.toml [channels_config.email].
+    smtp_host: str | None = None
+    smtp_port: int | None = None  # default: 465 if smtp_tls, else 587
+    smtp_tls: bool | None = None  # default: true
+    smtp_username: str | None = None
+    smtp_password_env: str | None = None  # env var name; default uses config password
+
+    timeout: float = 30.0
+    dry_run: bool = False  # Render & return without sending — for previews
 
 
 class PythonStepConfig(BaseModel):
@@ -386,6 +439,7 @@ class StepDef(BaseModel):
     agent: AgentStepConfig | None = None
     shell: ShellStepConfig | None = None
     python: PythonStepConfig | None = None
+    email: EmailStepConfig | None = None
     conditional: ConditionalStepConfig | None = None
     parallel: ParallelStepConfig | None = None
     goto: GotoStepConfig | None = None
@@ -425,6 +479,8 @@ class StepDef(BaseModel):
             self.shell.timeout = t
         if self.python is not None:
             self.python.timeout = t
+        if self.email is not None:
+            self.email.timeout = t
         if self.a2a is not None:
             self.a2a.timeout = t
         if self.group_chat is not None:

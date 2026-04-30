@@ -35,6 +35,7 @@ from .schema import (
     QualityCheckConfig,
     ShellStepConfig,
     PythonStepConfig,
+    EmailStepConfig,
     A2AStepConfig,
     GotoStepConfig,
     OutputStepConfig,
@@ -677,6 +678,256 @@ async def _exec_python(step: StepDef, state: WorkflowState, cwd: str) -> StepRes
             status="failed",
             error=str(exc)[:2000],
         )
+
+
+# ---------------------------------------------------------------------------
+# Email step — outbound SMTP send with optional click-tracking link rewrite
+# ---------------------------------------------------------------------------
+
+
+def _load_email_config_from_toml() -> dict[str, Any]:
+    """Read [channels_config.email] from ~/.construct/config.toml.
+
+    Returns an empty dict on any read error so callers fall back to
+    explicit per-step config or surface a clear "no SMTP host" error.
+    """
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return {}
+    path = os.path.expanduser("~/.construct/config.toml")
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (FileNotFoundError, Exception):
+        return {}
+    channels = data.get("channels_config") or data.get("channels") or {}
+    if isinstance(channels, dict):
+        email_cfg = channels.get("email") or {}
+        if isinstance(email_cfg, dict):
+            return email_cfg
+    return {}
+
+
+def _build_mime(
+    *,
+    to: list[str],
+    subject: str,
+    body: str,
+    body_html: str | None,
+    from_address: str,
+    cc: list[str],
+    bcc: list[str],
+    reply_to: str | None,
+):
+    """Compose a MIME message. multipart/alternative when HTML is present.
+
+    Forces quoted-printable encoding for the text bodies — the default
+    for utf-8 is base64, which is correct on the wire but unreadable in
+    raw form. Quoted-printable keeps ASCII URLs etc. legible so click
+    handlers, log inspectors, and dry-run previews can scan the rendered
+    content without decoding it first.
+    """
+    from email.charset import QP, Charset
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    qp_charset = Charset("utf-8")
+    qp_charset.body_encoding = QP
+
+    if body_html:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(body, "plain", qp_charset))
+        msg.attach(MIMEText(body_html, "html", qp_charset))
+    else:
+        msg = MIMEText(body, "plain", qp_charset)
+
+    msg["Subject"] = subject
+    msg["From"] = from_address
+    msg["To"] = ", ".join(to)
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    return msg
+
+
+async def _exec_email(step: StepDef, state: WorkflowState) -> StepResult:
+    """Execute an email send step.
+
+    Resolves SMTP creds from per-step overrides → ~/.construct/config.toml
+    [channels_config.email] section. Optionally rewrites links for click
+    tracking. Honors ``dry_run`` for preview workflows.
+    """
+    cfg: EmailStepConfig = step.email  # type: ignore
+
+    # Interpolate every user-provided string field. We can't run the whole
+    # config through interpolate at once (it has list/bool fields), so each
+    # template-bearing string is interpolated individually.
+    subject = interpolate(cfg.subject, state)
+    body = interpolate(cfg.body, state)
+    body_html = interpolate(cfg.body_html, state) if cfg.body_html else None
+    track_kref = interpolate(cfg.track_kref, state) if cfg.track_kref else None
+    track_base_url = (
+        interpolate(cfg.track_base_url, state) if cfg.track_base_url else None
+    )
+
+    # Recipients can be a single string or a list — normalize to a list.
+    raw_to = cfg.to
+    if isinstance(raw_to, str):
+        to_list = [interpolate(raw_to, state)]
+    else:
+        to_list = [interpolate(addr, state) for addr in raw_to]
+    cc_list = [interpolate(addr, state) for addr in cfg.cc]
+    bcc_list = [interpolate(addr, state) for addr in cfg.bcc]
+
+    # Click-tracking link rewrite — same encoded kref shared across body
+    # and body_html. Avoids double-rewrites by gating on track_clicks +
+    # track_kref both being present.
+    if cfg.track_clicks:
+        if not track_kref:
+            return StepResult(
+                step_id=step.id,
+                status="failed",
+                error="track_clicks=true requires track_kref",
+            )
+        try:
+            from ..tracking import encode_kref, rewrite_links_with_tracker
+        except Exception as exc:  # noqa: BLE001
+            return StepResult(
+                step_id=step.id,
+                status="failed",
+                error=f"tracking module not available: {exc}",
+            )
+        secret = os.environ.get(cfg.track_secret_env, "") or None
+        encoded = encode_kref(track_kref, secret)
+        base = track_base_url or os.environ.get("GATEWAY_URL", "")
+        if not base:
+            return StepResult(
+                step_id=step.id,
+                status="failed",
+                error=(
+                    "track_clicks=true requires track_base_url or "
+                    "GATEWAY_URL env var"
+                ),
+            )
+        body = rewrite_links_with_tracker(body, encoded_kref=encoded, base_url=base)
+        if body_html:
+            body_html = rewrite_links_with_tracker(
+                body_html, encoded_kref=encoded, base_url=base
+            )
+        tracking_info = {"encoded_kref": encoded, "tracked_kref": track_kref}
+    else:
+        tracking_info = {}
+
+    # Resolve SMTP config: per-step overrides win, then config.toml.
+    file_cfg = _load_email_config_from_toml()
+    smtp_host = cfg.smtp_host or file_cfg.get("smtp_host", "")
+    smtp_tls = (
+        cfg.smtp_tls if cfg.smtp_tls is not None else file_cfg.get("smtp_tls", True)
+    )
+    default_port = 465 if smtp_tls else 587
+    smtp_port = cfg.smtp_port or int(file_cfg.get("smtp_port", default_port) or default_port)
+    smtp_username = cfg.smtp_username or file_cfg.get("username", "")
+    from_address = cfg.from_address or file_cfg.get("from_address", smtp_username)
+
+    # Password resolution: env override (per-step) → config.toml. Stored
+    # password leaves config.toml; env override is the more secure path.
+    if cfg.smtp_password_env:
+        smtp_password = os.environ.get(cfg.smtp_password_env, "")
+    else:
+        smtp_password = file_cfg.get("password", "")
+
+    # Build the rendered message regardless of dry_run — useful for preview.
+    msg = _build_mime(
+        to=to_list,
+        subject=subject,
+        body=body,
+        body_html=body_html,
+        from_address=from_address,
+        cc=cc_list,
+        bcc=bcc_list,
+        reply_to=interpolate(cfg.reply_to, state) if cfg.reply_to else None,
+    )
+    rendered = msg.as_string()
+
+    output_data: dict[str, Any] = {
+        "to": to_list,
+        "cc": cc_list,
+        "bcc": bcc_list,
+        "subject": subject,
+        "from": from_address,
+        "rendered_size": len(rendered),
+        **tracking_info,
+    }
+
+    if cfg.dry_run:
+        # Preview mode: render but don't send. Outreach campaigns run dry
+        # first so the operator can review every personalized email
+        # before any actually leave the building.
+        output_data["dry_run"] = True
+        output_data["rendered"] = rendered
+        return StepResult(
+            step_id=step.id,
+            status="completed",
+            output=f"DRY RUN: would send '{subject}' to {to_list}",
+            output_data=output_data,
+        )
+
+    if not smtp_host:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=(
+                "no SMTP host configured — set [channels_config.email].smtp_host "
+                "in ~/.construct/config.toml or pass smtp_host on the step"
+            ),
+        )
+
+    # Send via stdlib smtplib in a thread (it's blocking). asyncio.to_thread
+    # plus asyncio.wait_for gives us the timeout enforcement the contract
+    # promises without rewriting smtplib.
+    import smtplib
+
+    def _send_blocking() -> None:
+        all_recipients = list(to_list) + list(cc_list) + list(bcc_list)
+        if smtp_tls:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=cfg.timeout) as smtp:
+                if smtp_username:
+                    smtp.login(smtp_username, smtp_password)
+                smtp.sendmail(from_address, all_recipients, rendered)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=cfg.timeout) as smtp:
+                smtp.starttls()
+                if smtp_username:
+                    smtp.login(smtp_username, smtp_password)
+                smtp.sendmail(from_address, all_recipients, rendered)
+
+    try:
+        await asyncio.wait_for(asyncio.to_thread(_send_blocking), timeout=cfg.timeout)
+    except asyncio.TimeoutError:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=f"Email send timed out after {cfg.timeout}s",
+        )
+    except Exception as exc:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=f"SMTP send failed: {exc}"[:2000],
+        )
+
+    output_data["sent"] = True
+    return StepResult(
+        step_id=step.id,
+        status="completed",
+        output=f"Sent '{subject}' to {to_list}",
+        output_data=output_data,
+    )
 
 
 async def _exec_output(step: StepDef, state: WorkflowState) -> StepResult:
@@ -1449,6 +1700,14 @@ def dry_run_workflow(wf: WorkflowDef, inputs: dict[str, Any]) -> dict[str, Any]:
                     entry["code_preview"] = (cfg.code or "")[:100]
                 entry["timeout"] = cfg.timeout
 
+        elif step.type == StepType.EMAIL:
+            cfg = step.email
+            if cfg:
+                entry["to_preview"] = cfg.to if isinstance(cfg.to, str) else f"{len(cfg.to)} recipients"
+                entry["subject_preview"] = cfg.subject[:80]
+                entry["track_clicks"] = cfg.track_clicks
+                entry["dry_run"] = cfg.dry_run
+
         elif step.type == StepType.PARALLEL:
             cfg = step.parallel
             if cfg:
@@ -2039,6 +2298,8 @@ async def _dispatch_step(
             return await _exec_shell(step, state, cwd)
         elif step.type == StepType.PYTHON:
             return await _exec_python(step, state, cwd)
+        elif step.type == StepType.EMAIL:
+            return await _exec_email(step, state)
         elif step.type == StepType.OUTPUT:
             return await _exec_output(step, state)
         elif step.type == StepType.A2A:
