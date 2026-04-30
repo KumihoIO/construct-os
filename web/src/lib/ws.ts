@@ -135,13 +135,20 @@ export class WebSocketClient {
     this.ws.send(JSON.stringify({ type: 'connect' }));
   }
 
-  /** Send a chat message to the agent. */
-  sendMessage(content: string, pageContext?: string): void {
+  /** Send a chat message to the agent.
+   *
+   *  `attachments` is an optional list of `file_id`s previously returned
+   *  from `POST /api/sessions/{id}/attachments`. The gateway resolves
+   *  each id against the session's storage dir and inlines the content
+   *  (as `[IMAGE:...]` markers for images, text body for documents)
+   *  before the agent turn. See `src/gateway/api_attachments.rs`. */
+  sendMessage(content: string, pageContext?: string, attachments?: string[]): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
     }
-    const payload: Record<string, string> = { type: 'message', content };
+    const payload: Record<string, unknown> = { type: 'message', content };
     if (pageContext) payload.page_context = pageContext;
+    if (attachments && attachments.length > 0) payload.attachments = attachments;
     this.ws.send(JSON.stringify(payload));
   }
 

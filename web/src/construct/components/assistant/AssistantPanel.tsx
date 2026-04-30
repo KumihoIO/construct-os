@@ -6,7 +6,9 @@ import {
   ChevronUp,
   Code2,
   Copy,
+  Loader2,
   MessageSquare,
+  Paperclip,
   Plus,
   Send,
   Settings,
@@ -28,6 +30,7 @@ import {
 import XTerminal from './XTerminal';
 import CodeTab, { basename, type CodeSession, toolLabel } from './CodeTab';
 import ActivityCard from './ActivityCard';
+import AttachmentChip from './AttachmentChip';
 import { copyToClipboard } from '@/construct/lib/clipboard';
 
 /* ── types ─────────────────────────────────────────── */
@@ -166,6 +169,8 @@ function ChatPane({
   const { open } = useV2Assistant();
   const {
     activities,
+    addAttachment,
+    attachments,
     connected,
     error,
     handleSend,
@@ -173,13 +178,73 @@ function ChatPane({
     input,
     inputRef,
     messages,
+    removeAttachment,
     streamingContent,
     streamingThinking,
     typing,
+    uploadingCount,
   } = useAgentChatSession({ sessionId, draftKey: `construct-assistant:${pageContext}`, pageContext });
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [dragHover, setDragHover] = useState(false);
+
+  // Concurrently upload a list of files (e.g. multi-select from the
+  // file picker, or multiple drag-drop items). Errors on individual
+  // uploads surface via the hook's `error` banner; one failure
+  // doesn't cancel the rest.
+  const handleFileList = useCallback(
+    async (files: FileList | File[]) => {
+      const arr = Array.from(files);
+      await Promise.all(arr.map((f) => addAttachment(f)));
+    },
+    [addAttachment],
+  );
+
+  const onPickFiles = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const onPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // Capture image blobs from the clipboard (e.g. screenshots). Text
+      // pastes flow through normally — we only intercept when there's
+      // actual file content.
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const files: File[] = items
+        .filter((it) => it.kind === 'file')
+        .map((it) => it.getAsFile())
+        .filter((f): f is File => f !== null);
+      if (files.length > 0) {
+        e.preventDefault();
+        void handleFileList(files);
+      }
+    },
+    [handleFileList],
+  );
+
+  const onDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer?.types?.includes('Files')) setDragHover(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we've actually left the composer (not just bubbled
+    // through a child) — relatedTarget on `null` means leaving the
+    // window; our containment check filters that out too.
+    if (e.currentTarget === e.target) setDragHover(false);
+  }, []);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragHover(false);
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) void handleFileList(files);
+    },
+    [handleFileList],
+  );
 
   const copyMessage = useCallback(async (id: string, text: string) => {
     if (!(await copyToClipboard(text))) return;
@@ -357,18 +422,84 @@ function ChatPane({
       {/* Composer — :focus-within ring on the container instead of suppressing
           textarea outline globally, so keyboard nav still has an accessible
           focus indicator. The Send button beside the textarea makes the
-          action discoverable on touch devices that lack an Enter key. */}
+          action discoverable on touch devices that lack an Enter key.
+          Drag-drop and paste handlers on the wrapper accept file uploads;
+          the dotted-border overlay shows up while a drag is in flight. */}
       <div
-        className="border-t px-4 py-3 transition-colors focus-within:bg-white/[0.015]"
+        className="relative border-t px-4 py-3 transition-colors focus-within:bg-white/[0.015]"
         style={{ borderColor: 'var(--construct-border-soft)' }}
+        onDragEnter={onDragEnter}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (e.dataTransfer?.types?.includes('Files')) setDragHover(true);
+        }}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
       >
+        {/* Hidden file input — opened by the paperclip button. Multiple +
+            no `accept` filter; the server validates size, and the image vs.
+            document handling is decided by the response MIME, not the
+            picker filter. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) void handleFileList(files);
+            // Reset value so picking the same file twice in a row still fires onChange.
+            e.target.value = '';
+          }}
+        />
+
+        {/* Chip strip — staged attachments waiting to ship with the next
+            send. Empty = strip is hidden. */}
+        {(attachments.length > 0 || uploadingCount > 0) && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((att) => (
+              <AttachmentChip
+                key={att.file_id}
+                attachment={att}
+                onRemove={removeAttachment}
+                accent={colors.secondary}
+              />
+            ))}
+            {uploadingCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px]"
+                style={{
+                  borderColor: 'var(--construct-border-soft)',
+                  background: 'var(--construct-bg-surface)',
+                  color: 'var(--construct-text-faint)',
+                }}
+              >
+                <Loader2 className="h-3 w-3 animate-spin" />
+                uploading {uploadingCount}…
+              </span>
+            )}
+          </div>
+        )}
+
         <div
           className="flex items-end gap-2 rounded-md border px-2 py-1.5 transition-colors focus-within:border-current"
           style={{
-            borderColor: 'var(--construct-border-soft)',
+            borderColor: dragHover ? colors.primary : 'var(--construct-border-soft)',
+            background: dragHover ? 'color-mix(in srgb, var(--construct-bg-surface) 85%, transparent)' : 'transparent',
             color: colors.primary,
           }}
         >
+          <button
+            type="button"
+            onClick={onPickFiles}
+            disabled={!connected}
+            aria-label="Attach files"
+            title="Attach files"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-current disabled:cursor-not-allowed disabled:opacity-30"
+            style={{ color: 'var(--construct-text-muted)' }}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </button>
           <span
             className="shrink-0 pb-[3px] font-mono text-sm font-semibold"
             style={{ color: colors.primary, textShadow: colors.glow }}
@@ -383,6 +514,7 @@ function ChatPane({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
+            onPaste={onPaste}
             placeholder={connected ? 'message…' : 'connecting…'}
             disabled={!connected}
             className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none disabled:opacity-50"
@@ -396,18 +528,41 @@ function ChatPane({
           <button
             type="button"
             onClick={() => handleSend()}
-            disabled={!connected || !input.trim()}
+            disabled={!connected || (!input.trim() && attachments.length === 0) || uploadingCount > 0}
             aria-label="Send message"
             title={connected ? 'Send (Enter)' : 'Disconnected'}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-current disabled:cursor-not-allowed disabled:opacity-30"
             style={{
-              color: input.trim() && connected ? colors.primary : 'var(--construct-text-faint)',
-              textShadow: input.trim() && connected ? colors.glow : 'none',
+              color:
+                (input.trim() || attachments.length > 0) && connected && uploadingCount === 0
+                  ? colors.primary
+                  : 'var(--construct-text-faint)',
+              textShadow:
+                (input.trim() || attachments.length > 0) && connected && uploadingCount === 0
+                  ? colors.glow
+                  : 'none',
             }}
           >
             <Send className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Drag-hover overlay — only visible while a file drag is over
+            the composer. Click-through pointer-events-none so it doesn't
+            steal focus from the textarea underneath. */}
+        {dragHover && (
+          <div
+            className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-md border-2 border-dashed text-xs"
+            style={{
+              borderColor: colors.primary,
+              background: 'color-mix(in srgb, var(--construct-bg-base) 70%, transparent)',
+              color: colors.primary,
+              textShadow: colors.glow,
+            }}
+          >
+            drop files to attach
+          </div>
+        )}
         <div className="mt-2 flex items-center gap-3">
           <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>
             <span
