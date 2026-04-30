@@ -3607,7 +3607,7 @@ pub(crate) fn build_tool_instructions(
 
     for tool in tools_registry {
         let desc = tool_descriptions
-            .and_then(|td| td.get(tool.name()))
+            .and_then(|td: &ToolDescriptions| td.get(tool.name()))
             .unwrap_or_else(|| tool.description());
         let _ = writeln!(
             instructions,

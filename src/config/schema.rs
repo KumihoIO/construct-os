@@ -95,6 +95,19 @@ pub struct Config {
     )]
     pub default_temperature: f64,
 
+    /// UI/CLI display language for interactive surfaces (`construct onboard`,
+    /// future wizards). Default: `"en"`.
+    ///
+    /// Resolution priority at runtime: `--lang` CLI flag → `CONSTRUCT_LANG`
+    /// env var → this config field → POSIX `LC_ALL`/`LANG` → English.
+    /// Supported values: `"en"`, `"ko"`. Unrecognized values fall back to English.
+    ///
+    /// This field is independent of `CONSTRUCT_LOCALE` / `tool_descriptions/`,
+    /// which control LLM-facing tool description translations and accept a
+    /// wider locale set (e.g. `"zh-CN"`, `"ja-JP"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+
     /// HTTP request timeout in seconds for LLM provider API calls. Default: `120`.
     ///
     /// Increase for slower backends (e.g., llama.cpp on constrained hardware)
@@ -8233,6 +8246,7 @@ impl Default for Config {
             default_model: Some("anthropic/claude-sonnet-4.6".to_string()),
             model_providers: HashMap::new(),
             default_temperature: default_temperature(),
+            language: None,
             provider_timeout_secs: default_provider_timeout_secs(),
             provider_max_tokens: None,
             extra_headers: HashMap::new(),
@@ -11238,6 +11252,7 @@ default_temperature = 0.7
             default_model: Some("gpt-4o".into()),
             model_providers: HashMap::new(),
             default_temperature: 0.5,
+            language: None,
             provider_timeout_secs: 120,
             provider_max_tokens: None,
             extra_headers: HashMap::new(),
@@ -11847,6 +11862,7 @@ default_temperature = 0.7
             default_model: Some("test-model".into()),
             model_providers: HashMap::new(),
             default_temperature: 0.9,
+            language: None,
             provider_timeout_secs: 120,
             provider_max_tokens: None,
             extra_headers: HashMap::new(),

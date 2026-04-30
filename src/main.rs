@@ -82,8 +82,11 @@ fn parse_temperature(s: &str) -> std::result::Result<f64, String> {
 }
 
 fn print_no_command_help() -> Result<()> {
-    println!("No command provided.");
-    println!("Try `construct onboard` to initialize your workspace.");
+    // No config has been loaded yet, but $LANG / CONSTRUCT_LANG should still
+    // localize this hint. Default to English if none of those are set.
+    construct::i18n::init(construct::i18n::detect_lang(None, None));
+    println!("{}", construct::t!("err-no-command"));
+    println!("{}", construct::t!("err-try-onboard"));
     println!();
 
     let mut cmd = Cli::command();
@@ -236,6 +239,15 @@ enum Commands {
         /// Skip interactive prompts and use quick setup with defaults
         #[arg(long)]
         quick: bool,
+
+        /// UI language for the wizard. Overrides `CONSTRUCT_LANG`, `$LANG`,
+        /// and the `language` field in config.toml. Supported: `en`, `ko`.
+        ///
+        /// Examples:
+        ///   construct onboard --lang ko
+        ///   CONSTRUCT_LANG=ko construct onboard
+        #[arg(long, value_name = "LANG")]
+        lang: Option<String>,
     },
 
     /// Start the AI agent loop
@@ -977,6 +989,7 @@ async fn main() -> Result<()> {
         model,
         memory,
         quick,
+        lang,
     } = &cli.command
     {
         let force = *force;
@@ -987,6 +1000,16 @@ async fn main() -> Result<()> {
         let model = model.clone();
         let memory = memory.clone();
         let quick = *quick;
+        let lang_flag = lang.clone();
+
+        // Initialize the wizard's UI language. No config.toml is loaded yet at
+        // this point — that's deliberate, the user might be onboarding for the
+        // first time. Detection priority: --lang flag → CONSTRUCT_LANG env →
+        // $LC_ALL/$LANG → English. The Step 0 picker can override this once
+        // the wizard runs interactively.
+        let initial_lang =
+            construct::i18n::detect_lang(lang_flag.as_deref(), None);
+        construct::i18n::init(initial_lang);
 
         if reinit && channels_only {
             bail!("--reinit and --channels-only cannot be used together");
@@ -1012,14 +1035,17 @@ async fn main() -> Result<()> {
                 let timestamp = chrono::Local::now().format("%Y%m%d%H%M%S");
                 let backup_dir = format!("{}.backup.{}", construct_dir.display(), timestamp);
 
-                println!("⚠️  Reinitializing Construct configuration...");
-                println!("   Current config directory: {}", construct_dir.display());
+                println!("{}", construct::t!("reinit-banner"));
                 println!(
-                    "   This will back up your existing config to: {}",
-                    backup_dir
+                    "   {}",
+                    construct::t!("reinit-current-dir", path = construct_dir.display().to_string())
+                );
+                println!(
+                    "   {}",
+                    construct::t!("reinit-backup-target", path = backup_dir.clone())
                 );
                 println!();
-                print!("Continue? [y/N] ");
+                print!("{} ", construct::t!("reinit-confirm"));
                 std::io::stdout()
                     .flush()
                     .context("Failed to flush stdout")?;
@@ -1027,7 +1053,7 @@ async fn main() -> Result<()> {
                 let mut answer = String::new();
                 std::io::stdin().read_line(&mut answer)?;
                 if !answer.trim().eq_ignore_ascii_case("y") {
-                    println!("Aborted.");
+                    println!("{}", construct::t!("reinit-aborted"));
                     return Ok(());
                 }
                 println!();
@@ -1039,8 +1065,8 @@ async fn main() -> Result<()> {
                         format!("Failed to backup existing config to {}", backup_dir)
                     })?;
 
-                println!("   Backup created successfully.");
-                println!("   Starting fresh initialization...\n");
+                println!("   {}", construct::t!("reinit-backup-ok"));
+                println!("   {}\n", construct::t!("reinit-fresh-start"));
             }
         }
 
@@ -1077,9 +1103,11 @@ async fn main() -> Result<()> {
 
         if config.gateway.require_pairing {
             println!();
-            println!("  Pairing is enabled. A one-time pairing code will be");
-            println!("  displayed when the gateway starts.");
-            println!("  Dashboard: http://127.0.0.1:{}", config.gateway.port);
+            println!("  {}", construct::t!("next-step-pairing-enabled"));
+            println!(
+                "  {}",
+                construct::t!("next-step-dashboard", port = config.gateway.port as i64)
+            );
             println!();
         }
 

@@ -19,6 +19,8 @@ use crate::providers::{
     is_moonshot_alias, is_qianfan_alias, is_qwen_alias, is_qwen_oauth_alias, is_zai_alias,
     is_zai_cn_alias,
 };
+use crate::i18n::{self, Lang};
+use crate::t;
 use anyhow::{Context, Result, bail};
 use console::style;
 use dialoguer::{Confirm, Select};
@@ -68,6 +70,32 @@ fn has_launchable_channels(channels: &ChannelsConfig) -> bool {
     channels.channels_except_webhook().iter().any(|(_, ok)| *ok)
 }
 
+// ── Step 0: language picker ──────────────────────────────────────
+
+/// Bilingual language selection shown before the banner. Pre-selects whatever
+/// language was already active (from `--lang`, `CONSTRUCT_LANG`, or `$LANG`),
+/// so users who set the flag can just press Enter; users who didn't see a
+/// "Select your language / 언어를 선택하세요" prompt that's readable either way.
+fn setup_language() -> Result<()> {
+    let options: Vec<&str> = Lang::all().iter().map(|l| l.display_name()).collect();
+    let initial = Lang::all()
+        .iter()
+        .position(|l| *l == i18n::lang())
+        .unwrap_or(0);
+    let pick = Select::new()
+        .with_prompt(t!("step-language-prompt"))
+        .items(&options)
+        .default(initial)
+        .interact()?;
+    let chosen = Lang::all()[pick];
+    i18n::set_lang(chosen);
+    println!(
+        "  {}",
+        style(t!("step-language-saved", lang = chosen.display_name())).green()
+    );
+    Ok(())
+}
+
 // ── Main wizard entry point ──────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,16 +105,18 @@ enum InteractiveOnboardingMode {
 }
 
 pub async fn run_wizard(force: bool) -> Result<Config> {
+    // Step 0: language picker. Shown bilingually so a user who arrived without
+    // --lang or $LANG can still read it. After this point all wizard surfaces
+    // render in the selected language.
+    setup_language()?;
+
     println!("{}", style(BANNER).green().bold());
 
-    println!("  {}", style("Welcome to the Construct.").green().bold());
-    println!(
-        "  {}",
-        style("This wizard will configure your agent in under 60 seconds.").dim()
-    );
+    println!("  {}", style(t!("welcome-title")).green().bold());
+    println!("  {}", style(t!("welcome-subtitle")).dim());
     println!();
 
-    print_step(1, 9, "Workspace Setup");
+    print_step(1, 9, &t!("step-1-title"));
     let (workspace_dir, config_path) = setup_workspace().await?;
     match resolve_interactive_onboarding_mode(&config_path, force)? {
         InteractiveOnboardingMode::FullOnboarding => {}
@@ -95,30 +125,30 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
         }
     }
 
-    print_step(2, 9, "AI Provider & API Key");
+    print_step(2, 9, &t!("step-2-title"));
     let (provider, api_key, model, provider_api_url) = setup_provider(&workspace_dir).await?;
 
-    print_step(3, 9, "Channels (How You Talk to Construct)");
+    print_step(3, 9, &t!("step-3-title"));
     let channels_config = setup_channels()?;
 
-    print_step(4, 9, "Tunnel (Expose to Internet)");
+    print_step(4, 9, &t!("step-4-title"));
     let tunnel_config = setup_tunnel()?;
 
-    print_step(5, 9, "Tool Mode & Security");
+    print_step(5, 9, &t!("step-5-title"));
     let (composio_config, secrets_config) = setup_tool_mode()?;
 
-    print_step(6, 9, "Hardware (Physical World)");
+    print_step(6, 9, &t!("step-6-title"));
     let hardware_config = setup_hardware()?;
 
-    print_step(7, 9, "Memory Configuration");
+    print_step(7, 9, &t!("step-7-title"));
     let memory_result = setup_memory()?;
     let is_kumiho_backend = memory_result.memory_config.backend == "kumiho";
     let memory_config = memory_result.memory_config;
 
-    print_step(8, 9, "Project Context (Personalize Your Agent)");
+    print_step(8, 9, &t!("step-8-title"));
     let project_ctx = setup_project_context()?;
 
-    print_step(9, 9, "Workspace Files");
+    print_step(9, 9, &t!("step-9-title"));
     scaffold_workspace(&workspace_dir, &project_ctx, &memory_config.backend).await?;
 
     // ── Build config ──
@@ -137,6 +167,9 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
         default_model: Some(model),
         model_providers: std::collections::HashMap::new(),
         default_temperature: 0.7,
+        // Persist the wizard's UI language so subsequent runs default to it
+        // without requiring --lang / CONSTRUCT_LANG / $LANG every time.
+        language: Some(i18n::lang().code().to_string()),
         provider_timeout_secs: 120,
         provider_max_tokens: None,
         extra_headers: std::collections::HashMap::new(),
@@ -245,8 +278,9 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
     if is_kumiho_backend {
         let setup_dream_state: bool = Confirm::new()
             .with_prompt(format!(
-                "  {} Set up nightly DreamState memory consolidation? (recommended)",
-                style("\u{1f319}").cyan()
+                "  {} {}",
+                style("\u{1f319}").cyan(),
+                t!("dreamstate-prompt")
             ))
             .default(true)
             .interact()?;
@@ -269,8 +303,9 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
 
             let time_idx = Select::new()
                 .with_prompt(format!(
-                    "  {} What time should DreamState run?",
-                    style("\u{23f0}").cyan()
+                    "  {} {}",
+                    style("\u{23f0}").cyan(),
+                    t!("dreamstate-time-prompt")
                 ))
                 .items(&time_options)
                 .default(1) // 3 AM
@@ -670,6 +705,9 @@ async fn run_quick_setup_with_home(
         default_model: Some(model.clone()),
         model_providers: std::collections::HashMap::new(),
         default_temperature: 0.7,
+        // Persist the wizard's UI language so subsequent runs default to it
+        // without requiring --lang / CONSTRUCT_LANG / $LANG every time.
+        language: Some(i18n::lang().code().to_string()),
         provider_timeout_secs: 120,
         provider_max_tokens: None,
         extra_headers: std::collections::HashMap::new(),
@@ -837,7 +875,7 @@ async fn run_quick_setup_with_home(
         }
     }
     println!();
-    println!("  {}", style("Next steps:").white().bold());
+    println!("  {}", style(t!("next-steps-header")).white().bold());
     if credential_override.is_none() {
         if provider_supports_keyless_local_usage(&provider_name) {
             println!("    1. Chat:     construct agent -m \"Hello!\"");
@@ -2262,9 +2300,12 @@ fn resolve_interactive_onboarding_mode(
 
     if force {
         println!(
-            "  {} Existing config detected at {}. Proceeding with full onboarding because --force was provided.",
-            style("!").yellow().bold(),
-            style(config_path.display()).yellow()
+            "  {}",
+            style(t!(
+                "existing-config-detected-force",
+                path = config_path.display().to_string()
+            ))
+            .yellow()
         );
         return Ok(InteractiveOnboardingMode::FullOnboarding);
     }
@@ -2276,18 +2317,20 @@ fn resolve_interactive_onboarding_mode(
         );
     }
 
-    let options = [
-        "Full onboarding (overwrite config.toml)",
-        "Update AI provider/model/API key only (preserve existing configuration)",
-        "Cancel",
-    ];
+    let opt_full = t!("setup-mode-full");
+    let opt_update = t!("setup-mode-update-provider");
+    let opt_cancel = t!("setup-mode-cancel");
+    let options = [opt_full.as_str(), opt_update.as_str(), opt_cancel.as_str()];
 
     let mode = Select::new()
         .with_prompt(format!(
-            "  Existing config found at {}. Select setup mode",
-            config_path.display()
+            "  {}",
+            t!(
+                "existing-config-found",
+                path = config_path.display().to_string()
+            )
         ))
-        .items(options)
+        .items(&options)
         .default(1)
         .interact()?;
 
@@ -2305,9 +2348,12 @@ fn ensure_onboard_overwrite_allowed(config_path: &Path, force: bool) -> Result<(
 
     if force {
         println!(
-            "  {} Existing config detected at {}. Proceeding because --force was provided.",
-            style("!").yellow().bold(),
-            style(config_path.display()).yellow()
+            "  {}",
+            style(t!(
+                "existing-config-detected-force",
+                path = config_path.display().to_string()
+            ))
+            .yellow()
         );
         return Ok(());
     }
@@ -2331,8 +2377,11 @@ fn ensure_onboard_overwrite_allowed(config_path: &Path, force: bool) -> Result<(
 
         let confirmed = Confirm::new()
             .with_prompt(format!(
-                "  Existing config found at {}. Re-running onboarding will overwrite config.toml and may create missing workspace files (including BOOTSTRAP.md). Continue?",
-                config_path.display()
+                "  {}",
+                t!(
+                    "existing-config-overwrite-prompt",
+                    path = config_path.display().to_string()
+                )
             ))
             .default(false)
             .interact()?;
@@ -2365,13 +2414,13 @@ async fn setup_workspace() -> Result<(PathBuf, PathBuf)> {
     let (default_config_dir, default_workspace_dir) =
         crate::config::schema::resolve_runtime_dirs_for_onboarding().await?;
 
-    print_bullet(&format!(
-        "Default location: {}",
-        style(default_workspace_dir.display()).green()
+    print_bullet(&t!(
+        "workspace-default-location",
+        path = style(default_workspace_dir.display()).green().to_string()
     ));
 
     let use_default = Confirm::new()
-        .with_prompt("  Use default workspace location?")
+        .with_prompt(format!("  {}", t!("workspace-use-default")))
         .default(true)
         .interact()?;
 
@@ -2379,7 +2428,7 @@ async fn setup_workspace() -> Result<(PathBuf, PathBuf)> {
         (default_config_dir, default_workspace_dir)
     } else {
         let custom: String = Input::new()
-            .with_prompt("  Enter workspace path")
+            .with_prompt(format!("  {}", t!("workspace-enter-path")))
             .interact_text()?;
         let expanded = shellexpand::tilde(&custom).to_string();
         crate::config::schema::resolve_config_dir_for_workspace(&PathBuf::from(expanded))
@@ -2392,9 +2441,12 @@ async fn setup_workspace() -> Result<(PathBuf, PathBuf)> {
         .context("Failed to create workspace directory")?;
 
     println!(
-        "  {} Workspace: {}",
-        style("✓").green().bold(),
-        style(workspace_dir.display()).green()
+        "  {}",
+        style(t!(
+            "workspace-confirmed",
+            path = workspace_dir.display().to_string()
+        ))
+        .green()
     );
 
     Ok((workspace_dir, config_path))
@@ -2405,17 +2457,41 @@ async fn setup_workspace() -> Result<(PathBuf, PathBuf)> {
 #[allow(clippy::too_many_lines)]
 async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String, Option<String>)> {
     // ── Tier selection ──
+    // Tier labels are translated; the parenthetical provider lists stay in
+    // English because they're proper nouns and the registry IDs the user
+    // sees throughout the rest of the wizard.
+    let tier_recommended = format!(
+        "⭐ {}  (OpenRouter, Venice, Anthropic, OpenAI, Gemini)",
+        t!("provider-tier-recommended")
+    );
+    let tier_fast = format!(
+        "⚡ {}  (Groq, Fireworks, Together AI, NVIDIA NIM)",
+        t!("provider-tier-fast")
+    );
+    let tier_gateway = format!(
+        "🌐 {}  (Vercel AI, Cloudflare AI, Amazon Bedrock)",
+        t!("provider-tier-gateway")
+    );
+    let tier_specialized = format!(
+        "🔬 {}  (Moonshot/Kimi, GLM/Zhipu, MiniMax, Qwen/DashScope, Qianfan, Z.AI, Synthetic, OpenCode Zen, Cohere)",
+        t!("provider-tier-specialized")
+    );
+    let tier_local = format!(
+        "🏠 {}  (Ollama, llama.cpp server, vLLM — no API key needed)",
+        t!("provider-tier-local")
+    );
+    let tier_custom = format!("🔧 {}", t!("provider-tier-custom"));
     let tiers = vec![
-        "⭐ Recommended (OpenRouter, Venice, Anthropic, OpenAI, Gemini)",
-        "⚡ Fast inference (Groq, Fireworks, Together AI, NVIDIA NIM)",
-        "🌐 Gateway / proxy (Vercel AI, Cloudflare AI, Amazon Bedrock)",
-        "🔬 Specialized (Moonshot/Kimi, GLM/Zhipu, MiniMax, Qwen/DashScope, Qianfan, Z.AI, Synthetic, OpenCode Zen, Cohere)",
-        "🏠 Local / private (Ollama, llama.cpp server, vLLM — no API key needed)",
-        "🔧 Custom — bring your own OpenAI-compatible API",
+        tier_recommended.as_str(),
+        tier_fast.as_str(),
+        tier_gateway.as_str(),
+        tier_specialized.as_str(),
+        tier_local.as_str(),
+        tier_custom.as_str(),
     ];
 
     let tier_idx = Select::new()
-        .with_prompt("  Select provider category")
+        .with_prompt(format!("  {}", t!("provider-select-tier")))
         .items(&tiers)
         .default(0)
         .interact()?;
@@ -2546,7 +2622,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
     let provider_labels: Vec<&str> = providers.iter().map(|(_, label)| *label).collect();
 
     let provider_idx = Select::new()
-        .with_prompt("  Select your AI provider")
+        .with_prompt(format!("  {}", t!("provider-select")))
         .items(&provider_labels)
         .default(0)
         .interact()?;
@@ -3604,7 +3680,7 @@ fn setup_memory() -> Result<MemorySetupResult> {
         .collect();
 
     let choice = Select::new()
-        .with_prompt("  Select memory backend")
+        .with_prompt(format!("  {}", t!("memory-select")))
         .items(&options)
         .default(0)
         .interact()?;
@@ -3622,13 +3698,13 @@ fn setup_memory() -> Result<MemorySetupResult> {
         println!();
 
         let api_url = Input::new()
-            .with_prompt("  Kumiho API URL")
-            .default("https://api.kumiho.cloud")
+            .with_prompt(format!("  {}", t!("memory-kumiho-api-url")))
+            .default("https://api.kumiho.cloud".to_string())
             .interact_text()?;
         kumiho_api_url = Some(api_url);
 
         let token = Input::new()
-            .with_prompt("  Kumiho service token (KUMIHO_SERVICE_TOKEN)")
+            .with_prompt(format!("  {}", t!("memory-kumiho-token")))
             .interact_text()?;
         kumiho_service_token = Some(token.trim().to_string());
 
@@ -6121,7 +6197,7 @@ fn print_summary(config: &Config) {
     );
 
     println!();
-    println!("  {}", style("Next steps:").white().bold());
+    println!("  {}", style(t!("next-steps-header")).white().bold());
     println!();
 
     let mut step = 1u8;
