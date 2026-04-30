@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class StepType(str, Enum):
     AGENT = "agent"
     SHELL = "shell"
+    PYTHON = "python"
     CONDITIONAL = "conditional"
     PARALLEL = "parallel"
     GOTO = "goto"
@@ -95,6 +96,58 @@ class ShellStepConfig(BaseModel):
     command: str
     timeout: float = 60.0
     allow_failure: bool = False  # If True, non-zero exit doesn't fail the workflow
+
+
+class PythonStepConfig(BaseModel):
+    """Config for 'python' step type — invoke a Python script with JSON I/O.
+
+    Designed as a generic, reusable primitive: any custom transform / utility
+    a workflow needs (kref encoding, lead-source parsers, scoring math, etc.)
+    becomes a Python file that workflows reference by name. Avoids extending
+    the workflow schema every time a one-off operation is needed.
+
+    Specify exactly one of:
+      - script: <path> — relative to workflow's cwd, an absolute path, OR the
+        name of a builtin under operator_mcp/workflow/builtins/python_steps/
+      - code: <inline source> — for one-offs where a separate file is overkill
+
+    The script receives a JSON object on stdin:
+      {
+        "args": <step.args, with ${...} already interpolated>,
+        "context": {
+            "inputs": <workflow inputs>,
+            "step_results": {<step_id>: <output_data dict>, ...},
+            "run_id": <workflow run id>,
+            "session_id": <session id, may be empty>,
+        }
+      }
+
+    The script's stdout SHOULD be a JSON object — that becomes the step's
+    output_data, interpolatable downstream as ${<step_id>.output_data.<key>}.
+    Non-JSON stdout is captured as raw output but produces empty output_data.
+
+    Sandbox: subprocess of the operator-mcp venv interpreter (so kumiho /
+    httpx / etc. are importable from scripts). Inherits workflow cwd.
+    Timeout enforced. Same policy gates as `shell:` apply.
+    """
+    script: str | None = None
+    code: str | None = None
+    args: dict[str, Any] = Field(default_factory=dict)
+    timeout: float = 60.0
+    allow_failure: bool = False
+    # Override the interpreter (default: operator-mcp's own venv python).
+    # Useful if a script needs deps the operator-mcp venv lacks — point it
+    # at a project-local venv instead.
+    python: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "PythonStepConfig":
+        if bool(self.script) == bool(self.code):
+            raise ValueError(
+                "python step requires exactly one of `script` (path/name) or "
+                "`code` (inline source)"
+            )
+        return self
 
 
 class ConditionalBranch(BaseModel):
@@ -332,6 +385,7 @@ class StepDef(BaseModel):
     # Type-specific configs — only one populated based on `type`
     agent: AgentStepConfig | None = None
     shell: ShellStepConfig | None = None
+    python: PythonStepConfig | None = None
     conditional: ConditionalStepConfig | None = None
     parallel: ParallelStepConfig | None = None
     goto: GotoStepConfig | None = None
@@ -369,6 +423,8 @@ class StepDef(BaseModel):
             self.agent.timeout = t
         if self.shell is not None:
             self.shell.timeout = t
+        if self.python is not None:
+            self.python.timeout = t
         if self.a2a is not None:
             self.a2a.timeout = t
         if self.group_chat is not None:

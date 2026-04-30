@@ -34,6 +34,7 @@ from .schema import (
     AgentStepConfig,
     QualityCheckConfig,
     ShellStepConfig,
+    PythonStepConfig,
     A2AStepConfig,
     GotoStepConfig,
     OutputStepConfig,
@@ -505,6 +506,170 @@ async def _exec_shell(step: StepDef, state: WorkflowState, cwd: str) -> StepResu
             step_id=step.id,
             status="failed",
             error=f"Shell command timed out after {cfg.timeout}s",
+        )
+    except Exception as exc:
+        return StepResult(
+            step_id=step.id,
+            status="failed",
+            error=str(exc)[:2000],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Python step — generic JSON-IO subprocess for reusable scripts
+# ---------------------------------------------------------------------------
+
+# Where builtin python step scripts live. Workflows can reference these by
+# bare filename (e.g. `script: kref_encode.py`) and the executor will resolve
+# from this dir if the path doesn't exist relative to the workflow's cwd.
+_BUILTIN_PYTHON_STEPS_DIR = os.path.join(
+    os.path.dirname(__file__), "builtins", "python_steps"
+)
+
+
+def _operator_mcp_venv_python() -> str:
+    """Default interpreter for python steps — operator-mcp's own venv.
+
+    Falls back to the current interpreter if the venv hasn't been
+    materialized (e.g. running tests outside `construct install`).
+    """
+    from ..mcp_injection import _venv_python  # type: ignore[attr-defined]
+    home = os.path.expanduser("~")
+    venv_root = os.path.join(home, ".construct", "operator_mcp", "venv")
+    return _venv_python(venv_root)
+
+
+def _interpolate_args(value: Any, state: WorkflowState) -> Any:
+    """Recursively interpolate ${...} references in dict/list args.
+
+    Strings get the same interpolate() pass shell/agent steps use; lists
+    and dicts are walked. Anything else (numbers, bools, None) passes
+    through unchanged.
+    """
+    if isinstance(value, str):
+        return interpolate(value, state)
+    if isinstance(value, dict):
+        return {k: _interpolate_args(v, state) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_interpolate_args(v, state) for v in value]
+    return value
+
+
+async def _exec_python(step: StepDef, state: WorkflowState, cwd: str) -> StepResult:
+    """Execute a Python script step with JSON I/O contract.
+
+    See PythonStepConfig docstring for the protocol. Briefly: payload on
+    stdin (args + workflow context), JSON object on stdout becomes the
+    step's output_data. Stderr is captured for diagnostics but doesn't
+    appear in interpolation.
+    """
+    cfg: PythonStepConfig = step.python  # type: ignore
+
+    # Resolve script path. Order: explicit absolute → relative to workflow cwd
+    # → bare name in builtins dir. Inline `code:` skips this entirely.
+    script_path: str | None = None
+    if cfg.script:
+        candidate = cfg.script
+        if os.path.isabs(candidate) and os.path.exists(candidate):
+            script_path = candidate
+        else:
+            cwd_path = os.path.join(cwd, candidate)
+            builtin_path = os.path.join(_BUILTIN_PYTHON_STEPS_DIR, candidate)
+            if os.path.exists(cwd_path):
+                script_path = cwd_path
+            elif os.path.exists(builtin_path):
+                script_path = builtin_path
+            else:
+                return StepResult(
+                    step_id=step.id,
+                    status="failed",
+                    error=(
+                        f"python step script not found: '{cfg.script}' "
+                        f"(tried cwd={cwd_path}, builtins={builtin_path})"
+                    ),
+                )
+
+    # Build the JSON payload the script reads from stdin.
+    payload = {
+        "args": _interpolate_args(cfg.args, state),
+        "context": {
+            "inputs": state.inputs,
+            "step_results": {
+                sid: dict(r.output_data or {})
+                for sid, r in state.step_results.items()
+            },
+            "run_id": state.run_id,
+            "session_id": getattr(state, "session_id", "") or "",
+        },
+    }
+
+    python_exe = cfg.python or _operator_mcp_venv_python()
+    if script_path:
+        cmd = [python_exe, script_path]
+    else:
+        cmd = [python_exe, "-c", cfg.code or ""]
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=cwd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(input=json.dumps(payload).encode("utf-8")),
+                timeout=cfg.timeout,
+            )
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            return StepResult(
+                step_id=step.id,
+                status="failed",
+                error=f"Python step timed out after {cfg.timeout}s",
+            )
+
+        stdout_text = stdout.decode("utf-8", errors="replace")
+        stderr_text = stderr.decode("utf-8", errors="replace")
+        rc = proc.returncode or 0
+
+        success = rc == 0 or cfg.allow_failure
+        if not success:
+            return StepResult(
+                step_id=step.id,
+                status="failed",
+                output=stdout_text[:4000],
+                error=(stderr_text[:2000] or f"exited with code {rc}"),
+                output_data={"exit_code": rc},
+            )
+
+        # Parse stdout as JSON for output_data. A non-JSON stdout is allowed
+        # (the script just printed something) — we keep it as raw output but
+        # leave output_data minimal so downstream interpolation sees nothing
+        # surprising.
+        output_data: dict[str, Any] = {"exit_code": rc}
+        stdout_stripped = stdout_text.strip()
+        if stdout_stripped:
+            try:
+                parsed = json.loads(stdout_stripped)
+                if isinstance(parsed, dict):
+                    output_data.update(parsed)
+                else:
+                    output_data["result"] = parsed
+            except json.JSONDecodeError:
+                # Non-JSON stdout — fine, just don't merge into output_data.
+                pass
+
+        return StepResult(
+            step_id=step.id,
+            status="completed",
+            output=stdout_text[:4000],
+            error=stderr_text[:1000] if stderr_text else "",
+            output_data=output_data,
         )
     except Exception as exc:
         return StepResult(
@@ -1275,6 +1440,15 @@ def dry_run_workflow(wf: WorkflowDef, inputs: dict[str, Any]) -> dict[str, Any]:
                 entry["timeout"] = cfg.timeout
             shell_count += 1
 
+        elif step.type == StepType.PYTHON:
+            cfg = step.python
+            if cfg:
+                if cfg.script:
+                    entry["script"] = cfg.script
+                else:
+                    entry["code_preview"] = (cfg.code or "")[:100]
+                entry["timeout"] = cfg.timeout
+
         elif step.type == StepType.PARALLEL:
             cfg = step.parallel
             if cfg:
@@ -1863,6 +2037,8 @@ async def _dispatch_step(
             return await _exec_agent(step, state, cwd)
         elif step.type == StepType.SHELL:
             return await _exec_shell(step, state, cwd)
+        elif step.type == StepType.PYTHON:
+            return await _exec_python(step, state, cwd)
         elif step.type == StepType.OUTPUT:
             return await _exec_output(step, state)
         elif step.type == StepType.A2A:
