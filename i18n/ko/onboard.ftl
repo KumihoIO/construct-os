@@ -355,3 +355,274 @@ workflows-wrote = 새 파일 {$count}개 작성됨
 workflows-overwrote = 파일 {$count}개 덮어쓰기됨
 workflows-skipped = 기존 파일 {$count}개 건너뜀 (덮어쓰려면 --force 사용)
 workflows-summary = 내장 워크플로 {$count}개
+
+# ════════════════════════════════════════════════════════════════════
+# PHASE 3 — 채널 설정 워크스루 (16개 채널 전체)
+# ════════════════════════════════════════════════════════════════════
+
+## ── 채널: 공통 문자열 ─────────────────────────────────────────────
+
+channels-info-1 = 채널을 통해 어디서든 Construct와 대화할 수 있습니다.
+channels-info-2 = CLI는 항상 사용 가능합니다. 추가 채널을 지금 연결해보세요.
+channels-summary = 채널: {$active}
+
+# 거의 모든 채널 분기에서 재사용되는 임시/에러 메시지.
+channel-skipped = 건너뜀
+channel-testing = 연결 테스트 중...
+channel-conn-failed-token = 연결 실패 — 토큰을 확인하고 다시 시도하세요
+channel-conn-failed-creds = 연결 실패 — 자격증명을 확인하세요
+
+## ── Telegram ──────────────────────────────────────────────────────
+
+telegram-title = Telegram 설정
+telegram-subtitle = Telegram에서 Construct와 대화하기
+telegram-step-1 = 1. Telegram을 열고 @BotFather에게 메시지를 보내세요
+telegram-step-2 = 2. /newbot을 보내고 안내를 따르세요
+telegram-step-3 = 3. 봇 토큰을 복사해서 아래에 붙여넣으세요
+telegram-token-prompt = 봇 토큰 (@BotFather에서 발급)
+telegram-connected = @{$bot_name}으로 연결됨
+telegram-allowlist-info-1 = 본인 Telegram ID를 먼저 허용 목록에 추가하세요 (안전하고 빠른 설정 권장).
+telegram-allowlist-info-2 = '@'를 뺀 사용자명(예: yourname)이나 숫자 사용자 ID를 사용하세요.
+telegram-allowlist-info-3 = 임시 공개 테스트가 아니면 '*'는 사용하지 마세요.
+telegram-allowlist-prompt = 허용 Telegram ID (쉼표 구분: '@'를 뺀 사용자명 또는 숫자 사용자 ID, 모두 허용은 '*')
+telegram-allowlist-warn = 허용 목록이 비어 있어 Telegram 수신 메시지가 거부됩니다. 사용자명/사용자 ID를 추가하거나 '*'를 입력하세요.
+
+## ── Discord ───────────────────────────────────────────────────────
+
+discord-title = Discord 설정
+discord-subtitle = Discord에서 Construct와 대화하기
+discord-step-1 = 1. https://discord.com/developers/applications 로 이동
+discord-step-2 = 2. New Application → Bot → 토큰 복사
+discord-step-3 = 3. Bot 설정에서 MESSAGE CONTENT intent 활성화
+discord-step-4 = 4. 메시지 권한과 함께 봇을 서버에 초대
+discord-token-prompt = 봇 토큰
+discord-connected = {$bot_name}으로 연결됨
+discord-guild-prompt = 서버(guild) ID (선택, 없으면 Enter로 건너뛰기)
+discord-allowlist-info-1 = 본인 Discord 사용자 ID를 먼저 허용 목록에 추가하세요 (권장).
+discord-allowlist-info-2 = Discord에서: 설정 → 고급 → 개발자 모드 ON, 그 다음 본인 프로필 우클릭 → 사용자 ID 복사.
+discord-allowlist-info-3 = 임시 공개 테스트가 아니면 '*'는 사용하지 마세요.
+discord-allowlist-prompt = 허용 Discord 사용자 ID (쉼표 구분, 본인 ID 권장, 모두 허용은 '*')
+discord-allowlist-warn = 허용 목록이 비어 있어 Discord 수신 메시지가 거부됩니다. ID를 추가하거나 '*'를 입력하세요.
+
+## ── Slack ─────────────────────────────────────────────────────────
+
+slack-title = Slack 설정
+slack-subtitle = Slack에서 Construct와 대화하기
+slack-step-1 = 1. https://api.slack.com/apps → Create New App
+slack-step-2 = 2. Bot Token Scopes 추가: chat:write, channels:history
+slack-step-3 = 3. 워크스페이스에 설치하고 Bot Token 복사
+slack-token-prompt = Bot 토큰 (xoxb-...)
+slack-connected = 워크스페이스에 연결됨: {$team}
+slack-error = Slack 오류: {$err}
+slack-conn-failed = 연결 실패 — 토큰을 확인하세요
+slack-app-token-prompt = App 토큰 (xapp-..., 선택, 없으면 Enter)
+slack-channel-prompt = 기본 채널 ID (선택, 모든 접근 가능 채널을 쓰려면 Enter; '*'도 모두 허용)
+slack-allowlist-info-1 = 본인 Slack 멤버 ID를 먼저 허용 목록에 추가하세요 (권장).
+slack-allowlist-info-2 = 멤버 ID는 보통 'U'로 시작합니다 (Slack 프로필 → 더보기 → 멤버 ID 복사).
+slack-allowlist-info-3 = 임시 공개 테스트가 아니면 '*'는 사용하지 마세요.
+slack-allowlist-prompt = 허용 Slack 사용자 ID (쉼표 구분, 본인 멤버 ID 권장, 모두 허용은 '*')
+slack-allowlist-warn = 허용 목록이 비어 있어 Slack 수신 메시지가 거부됩니다. ID를 추가하거나 '*'를 입력하세요.
+
+## ── iMessage ──────────────────────────────────────────────────────
+
+imessage-title = iMessage 설정
+imessage-subtitle = macOS 전용, Messages.app에서 읽기
+imessage-macos-only = iMessage는 macOS에서만 사용 가능합니다.
+imessage-info-1 = Construct는 iMessage 데이터베이스를 읽고 AppleScript로 답장합니다.
+imessage-info-2 = 시스템 설정에서 터미널에 Full Disk Access 권한을 부여해야 합니다.
+imessage-contacts-prompt = 허용 연락처 (쉼표 구분 전화번호/이메일, 모두 허용은 *)
+imessage-configured = iMessage 설정 완료 (연락처: {$contacts})
+
+## ── Matrix ────────────────────────────────────────────────────────
+
+matrix-title = Matrix 설정
+matrix-subtitle = 셀프호스팅 가능한 페더레이션 채팅
+matrix-info-1 = Matrix 계정과 액세스 토큰이 필요합니다.
+matrix-info-2 = Element → 설정 → Help & About → Access Token에서 토큰을 받을 수 있습니다.
+matrix-homeserver-prompt = Homeserver URL (예: https://matrix.org)
+matrix-token-prompt = 액세스 토큰
+matrix-conn-verified = 연결 확인됨
+matrix-device-id-warn = Homeserver의 whoami 응답에 device_id가 없습니다. E2EE 복호화에 실패하면 config.toml의 channels.matrix.device_id를 수동 설정하세요.
+matrix-conn-failed = 연결 실패 — Homeserver URL과 토큰을 확인하세요
+matrix-room-prompt = 방 ID (예: !abc123:matrix.org)
+matrix-allowlist-prompt = 허용 사용자 (쉼표 구분 @user:server, 모두 허용은 *)
+matrix-recovery-prompt = E2EE 복구 키 (없으면 Enter — 자세한 내용은 docs/security/matrix-e2ee-guide.md 4G 절 참조)
+
+## ── Signal ────────────────────────────────────────────────────────
+
+signal-title = Signal 설정
+signal-subtitle = signal-cli 데몬 브리지
+signal-step-1 = 1. signal-cli 데몬을 HTTP 활성 상태로 실행하세요 (기본 포트 8686).
+signal-step-2 = 2. signal-cli에 Signal 계정이 등록되어 있어야 합니다.
+signal-step-3 = 3. 선택적으로 DM 전용 또는 특정 그룹으로 범위를 제한할 수 있습니다.
+signal-url-prompt = signal-cli HTTP URL
+signal-url-required = 건너뜀 — HTTP URL이 필요합니다
+signal-account-prompt = 계정 번호 (E.164 형식, 예: +1234567890)
+signal-account-required = 건너뜀 — 계정 번호가 필요합니다
+signal-scope-all = 모든 메시지 (DM + 그룹)
+signal-scope-dm = DM만
+signal-scope-group = 특정 그룹 ID
+signal-scope-prompt = 메시지 범위
+signal-group-prompt = 그룹 ID
+signal-group-required = 건너뜀 — 그룹 ID가 필요합니다
+signal-allowlist-prompt = 허용 발신 번호 (쉼표 구분 +1234567890, 모두 허용은 *)
+signal-ignore-attachments = 첨부 전용 메시지를 무시할까요?
+signal-ignore-stories = 수신 스토리를 무시할까요?
+signal-configured = Signal 설정 완료
+
+## ── WhatsApp (Web + Cloud API) ───────────────────────────────────
+
+whatsapp-title = WhatsApp 설정
+whatsapp-mode-web = WhatsApp Web (QR / 페어 코드, Meta Business API 미사용)
+whatsapp-mode-cloud = WhatsApp Business Cloud API (웹훅)
+whatsapp-mode-prompt = WhatsApp 모드를 선택하세요
+
+# WhatsApp Web 모드
+whatsapp-web-feature-warn = 'whatsapp-web' 기능이 컴파일되어 있지 않아 런타임에서 동작하지 않습니다.
+whatsapp-web-rebuild-info = 다시 빌드하려면: cargo build --features whatsapp-web
+whatsapp-web-mode-label = 모드: WhatsApp Web
+whatsapp-web-step-1 = 1. --features whatsapp-web로 빌드하세요
+whatsapp-web-step-2 = 2. 채널/데몬을 시작하고 WhatsApp → 연결된 기기에서 QR 스캔
+whatsapp-web-step-3 = 3. 재로그인을 피하려면 session_path를 영속적으로 유지하세요
+whatsapp-web-session-prompt = 세션 데이터베이스 경로
+whatsapp-web-session-required = 건너뜀 — 세션 경로가 필요합니다
+whatsapp-web-pair-phone-prompt = 페어링 전화번호 (선택, 숫자만; 비우면 QR 플로우 사용)
+whatsapp-web-pair-code-prompt = 커스텀 페어 코드 (선택, 비우면 자동 생성)
+whatsapp-web-allowlist-prompt = 허용 전화번호 (쉼표 구분 +1234567890, 모두 허용은 *)
+whatsapp-web-configured = WhatsApp Web 설정이 저장되었습니다.
+
+# WhatsApp Cloud API 모드
+whatsapp-cloud-mode-label = 모드: Business Cloud API
+whatsapp-cloud-step-1 = 1. developers.facebook.com에서 WhatsApp 앱 생성
+whatsapp-cloud-step-2 = 2. WhatsApp 제품 추가 및 phone number ID 확인
+whatsapp-cloud-step-3 = 3. 임시 액세스 토큰 발급 (System User)
+whatsapp-cloud-step-4 = 4. 웹훅 URL을 https://your-domain/whatsapp 으로 설정
+whatsapp-cloud-token-prompt = 액세스 토큰 (Meta Developers에서 발급)
+whatsapp-cloud-phone-id-prompt = Phone number ID (WhatsApp 앱 설정에서)
+whatsapp-cloud-phone-id-required = 건너뜀 — phone number ID가 필요합니다
+whatsapp-cloud-verify-token-prompt = 웹훅 verify 토큰 (직접 만들어 입력)
+whatsapp-cloud-connected = WhatsApp API에 연결됨
+whatsapp-cloud-conn-failed = 연결 실패 — 액세스 토큰과 phone number ID를 확인하세요
+whatsapp-cloud-allowlist-prompt = 허용 전화번호 (쉼표 구분 +1234567890, 모두 허용은 *)
+
+## ── Linq ──────────────────────────────────────────────────────────
+
+linq-title = Linq 설정
+linq-subtitle = Linq API를 통한 iMessage/RCS/SMS
+linq-step-1 = 1. linqapp.com에 가입하고 Partner API 토큰 발급
+linq-step-2 = 2. Linq 전화번호(E.164 형식) 확인
+linq-step-3 = 3. 웹훅 URL을 https://your-domain/linq 으로 설정
+linq-token-prompt = API 토큰 (Linq Partner API 토큰)
+linq-phone-prompt = 발신 전화번호 (E.164 형식, 예: +12223334444)
+linq-phone-required = 건너뜀 — 전화번호가 필요합니다
+linq-connected = Linq API에 연결됨
+linq-conn-failed = 연결 실패 — API 토큰을 확인하세요
+linq-allowlist-prompt = 허용 발신 번호 (쉼표 구분 +1234567890, 모두 허용은 *)
+linq-secret-prompt = 웹훅 서명 시크릿 (선택, 없으면 Enter)
+
+## ── IRC ───────────────────────────────────────────────────────────
+
+irc-title = IRC 설정
+irc-subtitle = TLS를 통한 IRC
+irc-info-1 = IRC는 모든 IRC 서버에 TLS로 연결합니다
+irc-info-2 = SASL PLAIN과 NickServ 인증을 지원합니다
+irc-server-prompt = IRC 서버 (호스트명)
+irc-port-prompt = 포트
+irc-port-invalid = 유효하지 않은 포트, 6697 사용
+irc-nick-prompt = 봇 닉네임
+irc-nick-required = 건너뜀 — 닉네임이 필요합니다
+irc-channels-prompt = 참여할 채널 (쉼표 구분: #channel1,#channel2)
+irc-allowlist-info-1 = 봇과 상호작용할 닉네임을 허용 목록에 추가하세요 (대소문자 구분 안 함).
+irc-allowlist-info-2 = '*'는 모두 허용 (운영 환경에는 권장하지 않음).
+irc-allowlist-prompt = 허용 닉네임 (쉼표 구분, 모두 허용은 *)
+irc-allowlist-empty = ⚠️  허용 목록이 비어 있습니다 — 본인만 상호작용 가능. 위에 닉네임을 추가하세요.
+irc-auth-info = 선택적 인증 (각 항목은 Enter로 건너뛸 수 있습니다):
+irc-server-pass-prompt = 서버 비밀번호 (ZNC 같은 바운서용, 없으면 비워두기)
+irc-nickserv-pass-prompt = NickServ 비밀번호 (없으면 비워두기)
+irc-sasl-pass-prompt = SASL PLAIN 비밀번호 (없으면 비워두기)
+irc-tls-verify-prompt = TLS 인증서를 검증할까요?
+irc-configured = IRC 설정 완료: {$nick}@{$server}:{$port}
+
+## ── Webhook ───────────────────────────────────────────────────────
+
+webhook-title = Webhook 설정
+webhook-subtitle = 커스텀 통합용 HTTP 엔드포인트
+webhook-port-prompt = 포트
+webhook-secret-prompt = 시크릿 (선택, 없으면 Enter)
+webhook-configured = 포트 {$port}에서 Webhook 동작
+
+## ── Nextcloud Talk ───────────────────────────────────────────────
+
+nctalk-title = Nextcloud Talk 설정
+nctalk-subtitle = Talk 웹훅 수신 + OCS API 송신
+nctalk-step-1 = 1. Nextcloud Talk 봇 앱과 앱 토큰을 설정하세요.
+nctalk-step-2 = 2. 웹훅 URL을 https://<your-public-url>/nextcloud-talk 으로 설정
+nctalk-step-3 = 3. 활성화한 경우 webhook_secret을 Nextcloud 서명 헤더와 일치시키세요.
+nctalk-base-url-prompt = Nextcloud 베이스 URL (예: https://cloud.example.com)
+nctalk-base-url-required = 건너뜀 — 베이스 URL이 필요합니다
+nctalk-token-prompt = 앱 토큰 (Talk 봇 토큰)
+nctalk-token-required = 건너뜀 — 앱 토큰이 필요합니다
+nctalk-secret-prompt = 웹훅 시크릿 (선택, 없으면 Enter)
+nctalk-allowlist-prompt = 허용 Nextcloud 액터 ID (쉼표 구분, 모두 허용은 *)
+nctalk-configured = Nextcloud Talk 설정 완료
+
+## ── DingTalk ──────────────────────────────────────────────────────
+
+dingtalk-title = DingTalk 설정
+dingtalk-subtitle = DingTalk Stream Mode
+dingtalk-step-1 = 1. DingTalk 개발자 콘솔(open.dingtalk.com)로 이동
+dingtalk-step-2 = 2. 앱을 만들고 Stream Mode 봇 활성화
+dingtalk-step-3 = 3. Client ID(AppKey)와 Client Secret(AppSecret) 복사
+dingtalk-client-id-prompt = Client ID (AppKey)
+dingtalk-client-secret-prompt = Client Secret (AppSecret)
+dingtalk-verified = DingTalk 자격증명 확인됨
+dingtalk-allowlist-prompt = 허용 직원 ID (쉼표 구분, 모두 허용은 '*')
+
+## ── QQ Official ───────────────────────────────────────────────────
+
+qq-title = QQ Official 설정
+qq-subtitle = Tencent QQ Bot SDK
+qq-step-1 = 1. QQ Bot 개발자 콘솔(q.qq.com)로 이동
+qq-step-2 = 2. 봇 애플리케이션 생성
+qq-step-3 = 3. App ID와 App Secret 복사
+qq-app-id-prompt = App ID
+qq-app-secret-prompt = App Secret
+qq-verified = QQ Bot 자격증명 확인됨
+qq-auth-failed = 인증 오류 — 자격증명을 확인하세요
+qq-allowlist-prompt = 허용 사용자 ID (쉼표 구분, 모두 허용은 '*')
+
+## ── Lark / Feishu ────────────────────────────────────────────────
+
+lark-title = {$provider} 설정
+lark-subtitle = {$provider}에서 Construct와 대화하기
+lark-step-1 = 1. {$provider} Open Platform({$host})로 이동
+lark-step-2 = 2. 앱을 만들고 'Bot' 기능 활성화
+lark-step-3 = 3. App ID와 App Secret 복사
+lark-app-id-prompt = App ID
+lark-app-secret-prompt = App Secret
+lark-app-secret-required = App Secret이 필요합니다
+lark-verified = {$provider} 자격증명 확인됨
+lark-receive-mode-prompt = 수신 모드
+lark-receive-mode-ws = WebSocket (권장, 공인 IP 불필요)
+lark-receive-mode-webhook = Webhook (공개 HTTPS 엔드포인트 필요)
+lark-verify-token-prompt = Verification 토큰 (선택, Webhook 모드용)
+lark-verify-token-empty = Verification 토큰이 비어 있어 웹훅 인증 검사가 약화됩니다.
+lark-webhook-port-prompt = Webhook 포트
+lark-allowlist-prompt = 허용 Open ID (쉼표 구분, 모두 허용은 '*')
+lark-allowlist-warn = 허용 목록이 비어 있어 {$provider} 수신 메시지가 거부됩니다. Open ID를 추가하거나 '*'를 입력하세요.
+
+## ── Nostr ─────────────────────────────────────────────────────────
+
+nostr-title = Nostr 설정
+nostr-subtitle = NIP-04 및 NIP-17을 통한 비공개 메시지
+nostr-info-1 = Construct가 Nostr 릴레이에서 암호화된 DM을 수신합니다.
+nostr-info-2 = Nostr 개인키(hex 또는 nsec)와 최소 한 개의 릴레이가 필요합니다.
+nostr-key-prompt = 개인키 (hex 또는 nsec1...)
+nostr-key-valid = 키 유효 — 공개키: {$pubkey}
+nostr-key-invalid = 유효하지 않은 개인키 — 형식을 확인하고 다시 시도하세요
+nostr-relays-prompt = 릴레이 URL (쉼표 구분, 기본값을 쓰려면 Enter)
+nostr-allowlist-info-1 = 봇에 메시지를 보낼 수 있는 pubkey를 허용 목록에 추가하세요 (hex 또는 npub).
+nostr-allowlist-info-2 = '*'는 모두 허용 (운영 환경에는 권장하지 않음).
+nostr-allowlist-prompt = 허용 pubkey (쉼표 구분, 모두 허용은 *)
+nostr-allowlist-warn = 허용 목록이 비어 있어 수신 메시지가 거부됩니다. pubkey를 추가하거나 '*'를 입력하세요.
+nostr-configured = Nostr 설정 완료 ({$relay_count}개 릴레이)
