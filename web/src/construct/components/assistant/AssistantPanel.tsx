@@ -8,6 +8,7 @@ import {
   Copy,
   MessageSquare,
   Plus,
+  Send,
   Settings,
   Terminal,
   X,
@@ -26,6 +27,7 @@ import {
 } from './assistantConfig';
 import XTerminal from './XTerminal';
 import CodeTab, { basename, type CodeSession, toolLabel } from './CodeTab';
+import ActivityCard from './ActivityCard';
 import { copyToClipboard } from '@/construct/lib/clipboard';
 
 /* ── types ─────────────────────────────────────────── */
@@ -247,7 +249,7 @@ function ChatPane({
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto p-4 font-mono leading-6"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 font-mono leading-6"
         style={{ fontSize: `${config.fontSize}px` }}
       >
         {messages.length === 0 && !typing ? (
@@ -262,36 +264,72 @@ function ChatPane({
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {messages.map((msg) => {
               const prefix = msg.role === 'user' ? 'you' : msg.role === 'operator' ? 'sys' : 'op';
               const color = roleColor(msg.role);
               const glow = roleGlow(msg.role);
               const copied = copiedId === msg.id;
               return (
-                <div key={msg.id} className="group relative whitespace-pre-wrap break-words pr-7">
-                  <span style={{ color, textShadow: glow, fontWeight: 600 }}>{prefix} {'>'} </span>
-                  <span style={{ color: msg.role === 'user' ? 'var(--construct-text-secondary)' : color, textShadow: glow }}>
-                    {msg.content}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => copyMessage(msg.id, msg.content)}
-                    aria-label={copied ? 'Copied' : 'Copy message'}
-                    title={copied ? 'Copied' : 'Copy'}
-                    className="absolute right-0 top-0 inline-flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 focus:outline-none group-hover:opacity-60"
-                    style={{ color: 'var(--construct-text-muted)' }}
-                  >
-                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  </button>
+                <div key={msg.id} className="group">
+                  {/* Persisted activity log (collapsed by default) — shown ABOVE the
+                      finalized agent reply so the user sees "what was done" before
+                      "what was said". Empty for plain messages. */}
+                  {msg.activityLog && msg.activityLog.length > 0 && (
+                    <div className="mb-1 space-y-0.5">
+                      {msg.activityLog.map((evt) => (
+                        <ActivityCard
+                          key={evt.id}
+                          event={evt}
+                          accent={evt.kind === 'tool_result' ? 'var(--construct-status-success)' : colors.secondary}
+                          fontSize={config.fontSize}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words">
+                    <span style={{ color, textShadow: glow, fontWeight: 600 }}>{prefix} {'>'} </span>
+                    <span style={{ color: msg.role === 'user' ? 'var(--construct-text-secondary)' : color, textShadow: glow }}>
+                      {msg.content}
+                    </span>
+                  </div>
+                  {/* Footer row: timestamp on the left, copy-to-clipboard on the right.
+                      Lives BELOW the message text per design — easier to reach with
+                      thumb on mobile and doesn't overlap content on long messages. */}
+                  <div className="mt-0.5 flex items-center justify-end gap-2 text-[10px]" style={{ color: 'var(--construct-text-faint)' }}>
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(msg.id, msg.content)}
+                      aria-label={copied ? 'Copied' : 'Copy message'}
+                      title={copied ? 'Copied' : 'Copy'}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 opacity-50 transition-all hover:bg-white/5 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-current group-hover:opacity-80"
+                      style={{ color: 'var(--construct-text-muted)' }}
+                    >
+                      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>{copied ? 'copied' : 'copy'}</span>
+                    </button>
+                  </div>
                 </div>
               );
             })}
 
+            {/* In-flight activities — render as collapsible cards so users can drill
+                into each tool call's input/output. Replaces the truncate-3 strip. */}
             {typing && activities.length > 0 && (
-              <div style={{ color: 'var(--construct-text-faint)' }}>
-                {activities.slice(-3).map((evt) => (
-                  <div key={evt.id} className="truncate">sys {'>'} {evt.label}</div>
+              <div className="space-y-0.5">
+                {activities.map((evt) => (
+                  <ActivityCard
+                    key={evt.id}
+                    event={evt}
+                    accent={
+                      evt.kind === 'tool_result'
+                        ? 'var(--construct-status-success)'
+                        : evt.kind === 'thinking'
+                          ? 'var(--construct-text-faint)'
+                          : colors.secondary
+                    }
+                    fontSize={config.fontSize}
+                  />
                 ))}
               </div>
             )}
@@ -316,10 +354,23 @@ function ChatPane({
         )}
       </div>
 
-      <div className="border-t px-4 py-3" style={{ borderColor: 'var(--construct-border-soft)' }}>
-        <div className="flex items-end gap-2">
+      {/* Composer — :focus-within ring on the container instead of suppressing
+          textarea outline globally, so keyboard nav still has an accessible
+          focus indicator. The Send button beside the textarea makes the
+          action discoverable on touch devices that lack an Enter key. */}
+      <div
+        className="border-t px-4 py-3 transition-colors focus-within:bg-white/[0.015]"
+        style={{ borderColor: 'var(--construct-border-soft)' }}
+      >
+        <div
+          className="flex items-end gap-2 rounded-md border px-2 py-1.5 transition-colors focus-within:border-current"
+          style={{
+            borderColor: 'var(--construct-border-soft)',
+            color: colors.primary,
+          }}
+        >
           <span
-            className="shrink-0 pb-[7px] font-mono text-sm font-semibold"
+            className="shrink-0 pb-[3px] font-mono text-sm font-semibold"
             style={{ color: colors.primary, textShadow: colors.glow }}
           >
             {'>'}<span className={config.cursorBlink ? 'construct-cursor-blink' : ''}>_</span>
@@ -334,7 +385,7 @@ function ChatPane({
             }}
             placeholder={connected ? 'message…' : 'connecting…'}
             disabled={!connected}
-            className="min-h-[2rem] flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
+            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none disabled:opacity-50"
             style={{
               color: 'var(--construct-text-primary)',
               caretColor: colors.cursorColor,
@@ -342,16 +393,36 @@ function ChatPane({
               fontSize: `${config.fontSize}px`,
             }}
           />
+          <button
+            type="button"
+            onClick={() => handleSend()}
+            disabled={!connected || !input.trim()}
+            aria-label="Send message"
+            title={connected ? 'Send (Enter)' : 'Disconnected'}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-current disabled:cursor-not-allowed disabled:opacity-30"
+            style={{
+              color: input.trim() && connected ? colors.primary : 'var(--construct-text-faint)',
+              textShadow: input.trim() && connected ? colors.glow : 'none',
+            }}
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
         </div>
         <div className="mt-2 flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>
+          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>
             <span
               className="inline-block h-1.5 w-1.5 rounded-full"
               style={{ background: connected ? 'var(--construct-status-success)' : 'var(--construct-status-danger)' }}
             />
             {connected ? 'live' : 'offline'}
           </span>
-          <span className="text-[10px]" style={{ color: 'var(--construct-text-faint)' }}>{pageContext}</span>
+          <span
+            className="min-w-0 flex-1 truncate text-[10px]"
+            style={{ color: 'var(--construct-text-faint)' }}
+            title={pageContext}
+          >
+            {pageContext}
+          </span>
         </div>
       </div>
     </div>
@@ -531,7 +602,7 @@ export default function AssistantPanel() {
       )}
 
       <div
-        className="absolute inset-x-0 top-0 z-[60] flex flex-col overflow-hidden border-b border-l border-r"
+        className="absolute inset-x-0 top-0 z-[60] flex min-w-0 flex-col overflow-hidden border-b border-l border-r"
         style={{
           height: open ? panelHeight : '0px',
           maxHeight: open ? '90vh' : '0px',
@@ -554,88 +625,97 @@ export default function AssistantPanel() {
           }}
         />
 
-        {/* tab bar */}
+        {/* tab bar — split into a horizontally-scrollable tab strip + a fixed
+            right-side action cluster (settings/close) so the actions never get
+            pushed off-screen on narrow viewports. The tab strip itself scrolls
+            via overflow-x-auto with hidden scrollbar styling, and the new-tab
+            "+" button stays inline with the tabs (it's part of the tab cluster
+            conceptually, not a global action). */}
         <div
-          className="relative z-20 flex items-center gap-0.5 border-b px-2 py-1"
+          className="relative z-20 flex items-center border-b"
           style={{ borderColor: 'var(--construct-border-soft)', background: 'var(--construct-bg-surface)' }}
         >
-          {tabs.map((tab) => {
-            const isActive = activeTabId === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className="group flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] transition-colors"
-                onClick={() => setActiveTabId(tab.id)}
-                style={{
-                  background: isActive ? colors.primary + '18' : 'transparent',
-                  color: isActive ? colors.primary : 'var(--construct-text-muted)',
-                  textShadow: isActive ? colors.glow : 'none',
-                  borderBottom: isActive ? `2px solid ${colors.primary}` : '2px solid transparent',
-                }}
-              >
-                {tab.type === 'terminal' ? (
-                  <Terminal className="h-3 w-3" />
-                ) : tab.type === 'code' ? (
-                  <Code2 className="h-3 w-3" />
-                ) : (
-                  <MessageSquare className="h-3 w-3" />
-                )}
-                {tab.title}
-                {tabs.length > 1 && (
-                  <span
-                    className="ml-0.5 p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
-                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                    role="button"
-                    tabIndex={-1}
-                  >
-                    <X className="h-2.5 w-2.5" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          <div
+            className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-2 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTabId === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className="group flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] transition-colors"
+                  onClick={() => setActiveTabId(tab.id)}
+                  style={{
+                    background: isActive ? colors.primary + '18' : 'transparent',
+                    color: isActive ? colors.primary : 'var(--construct-text-muted)',
+                    textShadow: isActive ? colors.glow : 'none',
+                    borderBottom: isActive ? `2px solid ${colors.primary}` : '2px solid transparent',
+                  }}
+                >
+                  {tab.type === 'terminal' ? (
+                    <Terminal className="h-3 w-3" />
+                  ) : tab.type === 'code' ? (
+                    <Code2 className="h-3 w-3" />
+                  ) : (
+                    <MessageSquare className="h-3 w-3" />
+                  )}
+                  {tab.title}
+                  {tabs.length > 1 && (
+                    <span
+                      className="ml-0.5 p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+                      onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                      role="button"
+                      tabIndex={-1}
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
-          <div className="relative">
-            <button
-              type="button"
-              className="flex items-center gap-0.5 p-1.5 transition-colors hover:bg-white/5"
-              onClick={() => setShowNewTabMenu((prev) => !prev)}
-              style={{ color: 'var(--construct-text-faint)' }}
-              title="New tab"
-            >
-              <Plus className="h-3 w-3" />
-              <ChevronDown className="h-2.5 w-2.5" />
-            </button>
-            {showNewTabMenu && (
-              <NewTabMenu
-                onSelect={addTab}
-                onClose={() => setShowNewTabMenu(false)}
-              />
-            )}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                className="flex items-center gap-0.5 p-1.5 transition-colors hover:bg-white/5"
+                onClick={() => setShowNewTabMenu((prev) => !prev)}
+                style={{ color: 'var(--construct-text-faint)' }}
+                title="New tab"
+              >
+                <Plus className="h-3 w-3" />
+                <ChevronDown className="h-2.5 w-2.5" />
+              </button>
+              {showNewTabMenu && (
+                <NewTabMenu
+                  onSelect={addTab}
+                  onClose={() => setShowNewTabMenu(false)}
+                />
+              )}
+            </div>
           </div>
 
-          <div className="flex-1" />
+          <div className="flex shrink-0 items-center px-1">
+            <button
+              type="button"
+              className="p-1.5 transition-colors hover:bg-white/5"
+              onClick={() => setShowConfig((prev) => !prev)}
+              style={{ color: showConfig ? colors.primary : 'var(--construct-text-faint)' }}
+              title="Settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
 
-          <button
-            type="button"
-            className="p-1.5 transition-colors hover:bg-white/5"
-            onClick={() => setShowConfig((prev) => !prev)}
-            style={{ color: showConfig ? colors.primary : 'var(--construct-text-faint)' }}
-            title="Settings"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            className="p-1.5 transition-colors hover:bg-white/5"
-            onClick={closeAssistant}
-            style={{ color: 'var(--construct-text-faint)' }}
-            title="Dismiss (Esc)"
-          >
-            <ChevronUp className="h-3.5 w-3.5" />
-          </button>
+            <button
+              type="button"
+              className="p-1.5 transition-colors hover:bg-white/5"
+              onClick={closeAssistant}
+              style={{ color: 'var(--construct-text-faint)' }}
+              title="Dismiss (Esc)"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* config panel (inline) */}
