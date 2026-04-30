@@ -4,7 +4,7 @@ import { WebSocketClient } from '@/lib/ws';
 import { generateUUID } from '@/lib/uuid';
 import { DraftContext } from '@/construct/hooks/useDraft';
 import { t } from '@/lib/i18n';
-import { getSessionMessages } from '@/lib/api';
+import { getSessionMessages, uploadAttachment, type AttachmentUploadResponse } from '@/lib/api';
 import {
   loadChatHistory,
   mapServerMessagesToPersisted,
@@ -21,6 +21,14 @@ interface UseAgentChatSessionOptions {
   draftKey: string;
   pageContext?: string;
   onUserMessage?: (content: string) => void;
+}
+
+/** Server-issued attachment metadata plus an optional data-URL thumbnail
+ *  used only by the chip strip. The data URL is generated client-side at
+ *  add time (FileReader.readAsDataURL) so we never re-fetch the file. */
+export interface StagedAttachment extends AttachmentUploadResponse {
+  /** Client-only data URL preview for image attachments. Undefined for docs. */
+  previewUrl?: string;
 }
 
 export function useAgentChatSession({
@@ -41,6 +49,15 @@ export function useAgentChatSession({
   const [streamingThinking, setStreamingThinking] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentChannelEvent[]>([]);
+  // Staged attachments waiting to ship with the next user message. Each
+  // entry has the server-issued metadata plus an optional client-only
+  // `previewUrl` (data URL for image thumbnails) so the chip strip can
+  // render without re-downloading. Cleared after a successful send.
+  const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
+  // Number of in-flight `uploadAttachment` requests. The send button
+  // stays disabled while > 0 so a user can't fire a turn that drops
+  // half the files they tried to attach.
+  const [uploadingCount, setUploadingCount] = useState(0);
 
   const wsRef = useRef<WebSocketClient | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -344,20 +361,36 @@ export function useAgentChatSession({
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
-    if (!trimmed || !wsRef.current?.connected) return false;
+    // A turn can be (a) text only, (b) attachments only with no text, or
+    // (c) text + attachments. Reject empty-empty.
+    if ((!trimmed && attachments.length === 0) || !wsRef.current?.connected) return false;
+    if (uploadingCount > 0) return false; // wait for in-flight uploads
+
+    const attachmentIds = attachments.map((a) => a.file_id);
+    // Render the user bubble with attachment chips inlined into the
+    // message content so they appear in the scrollback. Plain text
+    // (`content`) keeps the user's actual prompt; the trailing
+    // `[Attached: name (size)]` lines are cosmetic so the user can
+    // see what they shared without expanding the message bubble. The
+    // server-side resolver handles real inlining for the LLM.
+    const cosmeticAttach =
+      attachments.length > 0
+        ? '\n' + attachments.map((a) => `[Attached: ${a.filename} (${a.size}b)]`).join('\n')
+        : '';
+    const userContent = trimmed + cosmeticAttach;
 
     setMessages((prev) => [
       ...prev,
       {
         id: generateUUID(),
         role: 'user',
-        content: trimmed,
+        content: userContent,
         timestamp: new Date(),
       },
     ]);
 
     try {
-      wsRef.current.sendMessage(trimmed, pageContext);
+      wsRef.current.sendMessage(trimmed, pageContext, attachmentIds);
       onUserMessageRef.current?.(trimmed);
       setTyping(true);
       pendingContentRef.current = '';
@@ -371,13 +404,58 @@ export function useAgentChatSession({
     }
 
     setInput('');
+    setAttachments([]);
     clearDraftStore(draftKeyRef.current);
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       inputRef.current.focus();
     }
     return true;
-  }, [clearDraftStore, input, pageContext]);
+  }, [attachments, clearDraftStore, input, pageContext, uploadingCount]);
+
+  /** Upload a file to the session's attachment store and stage it for
+   *  the next send. For images we also generate a client-side data URL
+   *  preview so the chip strip can show a thumbnail. */
+  const addAttachment = useCallback(
+    async (file: File): Promise<StagedAttachment | null> => {
+      setUploadingCount((c) => c + 1);
+      try {
+        const meta = await uploadAttachment(sessionId, file);
+        let previewUrl: string | undefined;
+        if (meta.mime.startsWith('image/')) {
+          previewUrl = await new Promise<string | undefined>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : undefined);
+            reader.onerror = () => resolve(undefined);
+            reader.readAsDataURL(file);
+          });
+        }
+        const staged: StagedAttachment = { ...meta, previewUrl };
+        setAttachments((prev) => [...prev, staged]);
+        return staged;
+      } catch (err) {
+        // Surface the upload error on the same banner the connection
+        // errors use so users see *some* feedback. Don't drop already-
+        // staged attachments on a single failure.
+        const msg = err instanceof Error ? err.message : 'upload failed';
+        setError(`Attachment upload failed: ${msg}`);
+        return null;
+      } finally {
+        setUploadingCount((c) => Math.max(0, c - 1));
+      }
+    },
+    [sessionId],
+  );
+
+  /** Remove a staged attachment by file_id (the × on a chip). */
+  const removeAttachment = useCallback((fileId: string) => {
+    setAttachments((prev) => prev.filter((a) => a.file_id !== fileId));
+  }, []);
+
+  /** Clear all staged attachments without sending. */
+  const clearAttachments = useCallback(() => {
+    setAttachments([]);
+  }, []);
 
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -393,7 +471,10 @@ export function useAgentChatSession({
 
   return {
     activities,
+    addAttachment,
     agentEvents,
+    attachments,
+    clearAttachments,
     connected,
     copiedId,
     copyMessage,
@@ -403,9 +484,11 @@ export function useAgentChatSession({
     input,
     inputRef,
     messages,
+    removeAttachment,
     setInput,
     streamingContent,
     streamingThinking,
     typing,
+    uploadingCount,
   };
 }

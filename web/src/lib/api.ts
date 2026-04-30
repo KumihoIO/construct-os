@@ -420,6 +420,37 @@ export function getSessionMessages(id: string): Promise<SessionMessagesResponse>
   );
 }
 
+/** Server response from `POST /api/sessions/{id}/attachments`. */
+export interface AttachmentUploadResponse {
+  file_id: string;
+  filename: string;
+  size: number;
+  mime: string;
+  session_id: string;
+  created_at: string;
+}
+
+/**
+ * Upload a single file to the session's attachment store. Returns the
+ * server-issued metadata; the `file_id` field is what gets passed back
+ * via the WS `message` payload's `attachments: [...]` array.
+ *
+ * The gateway caps individual files at 25 MiB. Errors surface as
+ * standard `apiFetch` rejections (4xx/5xx → thrown).
+ */
+export function uploadAttachment(
+  sessionId: string,
+  file: File,
+): Promise<AttachmentUploadResponse> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  // Don't set Content-Type — the browser provides the multipart boundary.
+  return apiFetch<AttachmentUploadResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/attachments`,
+    { method: 'POST', body: form },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Channels (detailed)
 // ---------------------------------------------------------------------------
