@@ -1,0 +1,211 @@
+name: cold-outreach
+version: "1.0"
+description: |
+  Cold-outreach demo workflow.
+
+  Iterates a list of leads, has a Codex agent personalize a single
+  paragraph per lead, and sends with click-tracking enabled. Default
+  is **dry_run** — every email is rendered and stored as a workflow
+  artifact for review before any actual SMTP send. Flip the
+  `dry_run` field on the `send_email` step to `false` only after
+  you've reviewed the previewed output.
+
+  ## Quick start
+  Provide `leads_json` as a JSON-encoded array. Example::
+
+      [
+        {
+          "business_name": "Acme Co",
+          "contact_email": "alice@acme.example",
+          "first_name": "Alice",
+          "industry": "industrial coatings",
+          "keywords": ["B2B", "regulated", "QA-heavy"]
+        }
+      ]
+
+  Required workflow-level config:
+    * SMTP credentials in `~/.construct/config.toml` under
+      `[channels_config.email]` (uses the same section the email
+      channel reads).
+    * `GATEWAY_URL` env var (or pass `track_base_url`) so click-tracker
+      links resolve to your live `/track/c/{encoded}?u=<dest>` handler.
+    * `CLICK_TRACKING_SECRET` env var if you want signed (tamper-proof)
+      ref codes — optional for the demo.
+
+  ## Click tracking
+  Each send mints a kref under `Construct/Outreach/Sends/{run_id}-{idx}`
+  and embeds it in every URL via the gateway redirect. When a recipient
+  clicks, the gateway logs the click and 302s through. The same kref
+  is the join key for downstream "warm lead" queries (sweeper workflow
+  — separate file).
+
+tags: [outreach, demo, email, click-tracking, dry-run-default]
+
+inputs:
+  - name: leads_json
+    type: string
+    required: true
+    description: |
+      JSON array of lead objects. Each lead must have:
+      `business_name`, `contact_email`, `first_name`, `industry`. The
+      optional `keywords` (list of strings) feeds personalization
+      context to the agent.
+  - name: campaign_name
+    type: string
+    default: cold-outreach-demo
+    description: |
+      Used as the agent's `template_name` for trust scoring (so
+      record_agent_outcome can roll up performance across runs).
+  - name: track_base_url
+    type: string
+    default: ""
+    description: |
+      Gateway URL used to wrap email links for click tracking
+      (e.g. `https://gateway.example.com`). Leave empty to fall back
+      to the operator's `GATEWAY_URL` env var.
+
+steps:
+  - id: parse_leads
+    type: python
+    description: |
+      Validate `leads_json` + emit `count` for the for_each loop. Loud
+      failure here is the right call — sending 0 emails is fine, but
+      sending into a malformed list silently is not.
+    python:
+      code: |
+        import json, sys
+        payload = json.load(sys.stdin)
+        raw = payload['context']['inputs'].get('leads_json') or '[]'
+        try:
+            leads = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            json.dump(
+                {'error': f'leads_json is not valid JSON: {exc}'},
+                sys.stdout,
+            )
+            sys.exit(1)
+        if not isinstance(leads, list):
+            json.dump(
+                {'error': 'leads_json must be a JSON array'},
+                sys.stdout,
+            )
+            sys.exit(1)
+        # for_each `range: "0..N"` iterates 0..N inclusive (N+1 items).
+        # For N leads we need 0..N-1, so emit count_minus_one.
+        json.dump({
+            'count': len(leads),
+            'count_minus_one': max(0, len(leads) - 1),
+        }, sys.stdout)
+
+  - id: outreach_loop
+    type: for_each
+    description: One iteration per lead — extract → personalize → send.
+    depends_on: [parse_leads]
+    for_each:
+      range: "0..${parse_leads.output_data.count_minus_one}"
+      variable: idx
+      steps: [extract_lead, personalize, send_email]
+      fail_fast: false
+      # Schema caps max_iterations at 50 — for larger campaigns split
+      # the lead list across multiple workflow runs.
+      max_iterations: 50
+
+  - id: extract_lead
+    type: python
+    description: |
+      Pluck the current lead's fields out of `leads_json` by index.
+      The for_each variable `idx` arrives as a stringified integer —
+      we coerce it back here. Output keys become
+      `${extract_lead.output_data.<key>}` for downstream interpolation.
+    python:
+      code: |
+        import json, sys
+        payload = json.load(sys.stdin)
+        leads = json.loads(payload['context']['inputs']['leads_json'])
+        idx = int(payload['args']['idx'])
+        lead = leads[idx]
+        keywords = lead.get('keywords') or []
+        if isinstance(keywords, list):
+            keywords = ', '.join(keywords)
+        json.dump({
+            'business_name': lead.get('business_name', ''),
+            'contact_email': lead.get('contact_email', ''),
+            'first_name': lead.get('first_name', 'there'),
+            'industry': lead.get('industry', ''),
+            'keywords': keywords,
+        }, sys.stdout)
+      args:
+        idx: ${for_each.idx}
+
+  - id: personalize
+    type: agent
+    description: |
+      Codex writes a one-paragraph personalized cold email. The
+      prompt is deliberately constrained — short, plain text, no
+      AI-tells. Codex over Claude here because it's faster + cheaper
+      for short generation under tight token budgets.
+    depends_on: [extract_lead]
+    agent:
+      agent_type: codex
+      role: writer
+      timeout: 120
+      max_turns: 1
+      tools: none
+      output_fields: [subject, body]
+      prompt: |
+        You are writing a single cold-outreach email — short,
+        specific, and visibly hand-written (NOT an AI template).
+
+        ## Lead
+        - Business: ${extract_lead.output_data.business_name}
+        - First name: ${extract_lead.output_data.first_name}
+        - Industry: ${extract_lead.output_data.industry}
+        - Keywords / context: ${extract_lead.output_data.keywords}
+
+        ## Constraints
+        - Subject line: under 60 chars; NO emoji; NO "Quick question"
+          / "Re:" tricks.
+        - Body: under 90 words, plain text, ONE specific observation
+          tied to their business or industry, ONE concrete value
+          prop, ONE call to action.
+        - Address recipient by first name only.
+        - Include exactly ONE link: https://construct.example.com/demo
+        - Do NOT use the words "AI", "automation", "personalize",
+          "outreach", "synergy", or "reach out". The reader should
+          NOT be able to tell this was machine-written.
+
+        Output as a ```json``` block with fields:
+        - subject: string
+        - body: string
+
+  - id: send_email
+    type: email
+    description: |
+      Render and (optionally) send the personalized email.
+
+      **Default is dry_run=true** — the rendered message is captured
+      in the step's `output_data["rendered"]` and visible in the
+      run's artifact viewer, but no SMTP connection is opened. Review
+      the previews, then EDIT THIS WORKFLOW to set `dry_run: false`
+      before re-running for real.
+
+      Click-tracking is on by default — every link in the body is
+      rewritten to a `<gateway>/track/c/<encoded>?u=<dest>` redirect
+      so we can join clicks back to this specific send revision.
+    depends_on: [personalize]
+    email:
+      to: ${extract_lead.output_data.contact_email}
+      subject: ${personalize.output_data.subject}
+      body: ${personalize.output_data.body}
+      track_clicks: true
+      track_kref: "kref://Construct/Outreach/Sends/${run_id}-${for_each.idx}.send"
+      track_base_url: ${inputs.track_base_url}
+      dry_run: true
+
+outputs:
+  - name: total_leads
+    source: parse_leads.output_data.count
+    description: How many leads were processed.
+  - name: outreach_status
+    source: outreach_loop.status
+    description: Overall loop status — 'completed' or 'failed'.
