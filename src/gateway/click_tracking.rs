@@ -83,7 +83,7 @@ const SIG_LEN: usize = 8;
 /// they always do — `kref://...`). A naive `rposition` on `:` would
 /// truncate every kref at its `kref:` scheme separator. Bounded suffix
 /// match avoids that.
-fn split_signed<'a>(raw: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+fn split_signed(raw: &[u8]) -> Option<(&[u8], &[u8])> {
     if raw.len() < SIG_LEN + 1 {
         return None;
     }
