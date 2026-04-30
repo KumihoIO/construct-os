@@ -145,6 +145,27 @@ export interface TaskDefinition {
   // --- Notify: first-class message/title ---
   notify_message?: string;
   notify_title?: string;
+  // --- Python step (see operator_mcp/workflow/schema.py::PythonStepConfig) ---
+  python_script?: string;
+  python_code?: string;
+  python_args?: string;
+  python_timeout?: number;
+  python_allow_failure?: boolean;
+  // --- Email step (see operator_mcp/workflow/schema.py::EmailStepConfig) ---
+  email_to?: string;
+  email_subject?: string;
+  email_body?: string;
+  email_body_html?: string;
+  email_from?: string;
+  email_cc?: string;
+  email_bcc?: string;
+  email_reply_to?: string;
+  email_track_clicks?: boolean;
+  email_track_kref?: string;
+  email_track_base_url?: string;
+  email_smtp_host?: string;
+  email_dry_run?: boolean;
+  email_timeout?: number;
 }
 
 /** Step result from a workflow run — overlaid on nodes when viewing runs */
@@ -297,6 +318,27 @@ export interface TaskNodeData {
   // Notify — first-class message/title
   notifyMessage: string;
   notifyTitle: string;
+  // Python step
+  pythonScript: string;
+  pythonCode: string;
+  pythonArgs: string;
+  pythonTimeout: number;
+  pythonAllowFailure: boolean;
+  // Email step
+  emailTo: string;
+  emailSubject: string;
+  emailBody: string;
+  emailBodyHtml: string;
+  emailFrom: string;
+  emailCc: string;
+  emailBcc: string;
+  emailReplyTo: string;
+  emailTrackClicks: boolean;
+  emailTrackKref: string;
+  emailTrackBaseUrl: string;
+  emailSmtpHost: string;
+  emailDryRun: boolean;
+  emailTimeout: number;
   /** Run-mode overlay — populated when viewing a workflow run */
   runInfo?: StepRunInfo;
   [key: string]: unknown;
@@ -806,6 +848,64 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       if (allowFail) data.shell_allow_failure = allowFail[1]!.toLowerCase() === 'true';
     }
 
+    // Python block — script XOR code; args is a JSON object string
+    if (block.match(/type:\s*python/)) {
+      const script = block.match(/script:\s*(.+)/);
+      if (script) data.python_script = script[1]!.trim().replace(/^["']|["']$/g, '');
+      const codeBlock = block.match(/code:\s*\|\s*\n([\s\S]*?)(?=\n\s{6}\w|\n\s{4}\w|\n\s{2}-|\n\w|$)/);
+      if (codeBlock) {
+        data.python_code = codeBlock[1]!.split('\n').map(l => l.replace(/^\s{8}/, '')).join('\n').trim();
+      } else {
+        const inlineCode = block.match(/code:\s*["'](.+?)["']\s*$/m);
+        if (inlineCode) data.python_code = inlineCode[1]!;
+      }
+      const args = block.match(/args:\s*(\{[^\n]*\})/);
+      if (args) data.python_args = args[1]!;
+      const pyTimeout = block.match(/timeout:\s*(\d+(?:\.\d+)?)/);
+      if (pyTimeout) data.python_timeout = parseFloat(pyTimeout[1]!);
+      const pyAllowFail = block.match(/allow_failure:\s*(true|false)/i);
+      if (pyAllowFail) data.python_allow_failure = pyAllowFail[1]!.toLowerCase() === 'true';
+    }
+
+    // Email block
+    if (block.match(/type:\s*email/)) {
+      const to = block.match(/\bto:\s*(.+)/);
+      if (to) data.email_to = to[1]!.trim().replace(/^["']|["']$/g, '');
+      const subject = block.match(/subject:\s*(.+)/);
+      if (subject) data.email_subject = subject[1]!.trim().replace(/^["']|["']$/g, '');
+      const bodyBlock = block.match(/\bbody:\s*\|\s*\n([\s\S]*?)(?=\n\s{6}\w|\n\s{4}\w|\n\s{2}-|\n\w|$)/);
+      if (bodyBlock) {
+        data.email_body = bodyBlock[1]!.split('\n').map(l => l.replace(/^\s{8}/, '')).join('\n').trim();
+      } else {
+        const inlineBody = block.match(/\bbody:\s*["'](.+?)["']\s*$/m);
+        if (inlineBody) data.email_body = inlineBody[1]!;
+      }
+      const htmlBlock = block.match(/body_html:\s*\|\s*\n([\s\S]*?)(?=\n\s{6}\w|\n\s{4}\w|\n\s{2}-|\n\w|$)/);
+      if (htmlBlock) {
+        data.email_body_html = htmlBlock[1]!.split('\n').map(l => l.replace(/^\s{8}/, '')).join('\n').trim();
+      }
+      const fromAddr = block.match(/from_address:\s*(.+)/);
+      if (fromAddr) data.email_from = fromAddr[1]!.trim().replace(/^["']|["']$/g, '');
+      const cc = block.match(/cc:\s*\[([^\]]*)\]/);
+      if (cc) data.email_cc = cc[1]!.split(',').map(s => s.trim().replace(/["']/g, '')).filter(Boolean).join(', ');
+      const bcc = block.match(/bcc:\s*\[([^\]]*)\]/);
+      if (bcc) data.email_bcc = bcc[1]!.split(',').map(s => s.trim().replace(/["']/g, '')).filter(Boolean).join(', ');
+      const replyTo = block.match(/reply_to:\s*(.+)/);
+      if (replyTo) data.email_reply_to = replyTo[1]!.trim().replace(/^["']|["']$/g, '');
+      const trackClicks = block.match(/track_clicks:\s*(true|false)/i);
+      if (trackClicks) data.email_track_clicks = trackClicks[1]!.toLowerCase() === 'true';
+      const trackKref = block.match(/track_kref:\s*(.+)/);
+      if (trackKref) data.email_track_kref = trackKref[1]!.trim().replace(/^["']|["']$/g, '');
+      const trackBase = block.match(/track_base_url:\s*(.+)/);
+      if (trackBase) data.email_track_base_url = trackBase[1]!.trim().replace(/^["']|["']$/g, '');
+      const smtpHost = block.match(/smtp_host:\s*(.+)/);
+      if (smtpHost) data.email_smtp_host = smtpHost[1]!.trim().replace(/^["']|["']$/g, '');
+      const dryRun = block.match(/dry_run:\s*(true|false)/i);
+      if (dryRun) data.email_dry_run = dryRun[1]!.toLowerCase() === 'true';
+      const emailTimeout = block.match(/timeout:\s*(\d+(?:\.\d+)?)/);
+      if (emailTimeout) data.email_timeout = parseFloat(emailTimeout[1]!);
+    }
+
     // Output block
     if (block.match(/type:\s*output/)) {
       const fmt = block.match(/format:\s*(\S+)/);
@@ -1164,6 +1264,25 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
       forEachMaxIterations: task.for_each_max_iterations || 20,
       notifyMessage: task.notify_message || '',
       notifyTitle: task.notify_title || '',
+      pythonScript: task.python_script || '',
+      pythonCode: task.python_code || '',
+      pythonArgs: task.python_args || '',
+      pythonTimeout: task.python_timeout || 60,
+      pythonAllowFailure: task.python_allow_failure || false,
+      emailTo: task.email_to || '',
+      emailSubject: task.email_subject || '',
+      emailBody: task.email_body || '',
+      emailBodyHtml: task.email_body_html || '',
+      emailFrom: task.email_from || '',
+      emailCc: task.email_cc || '',
+      emailBcc: task.email_bcc || '',
+      emailReplyTo: task.email_reply_to || '',
+      emailTrackClicks: task.email_track_clicks || false,
+      emailTrackKref: task.email_track_kref || '',
+      emailTrackBaseUrl: task.email_track_base_url || '',
+      emailSmtpHost: task.email_smtp_host || '',
+      emailDryRun: task.email_dry_run || false,
+      emailTimeout: task.email_timeout || 30,
     },
   }));
 
@@ -1483,6 +1602,29 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.shellTimeout && d.shellTimeout !== 60) base.shell_timeout = d.shellTimeout;
       if (d.shellAllowFailure) base.shell_allow_failure = true;
     }
+    if (action === 'python') {
+      if (d.pythonScript) base.python_script = d.pythonScript;
+      if (d.pythonCode) base.python_code = d.pythonCode;
+      if (d.pythonArgs) base.python_args = d.pythonArgs;
+      if (d.pythonTimeout && d.pythonTimeout !== 60) base.python_timeout = d.pythonTimeout;
+      if (d.pythonAllowFailure) base.python_allow_failure = true;
+    }
+    if (action === 'email') {
+      if (d.emailTo) base.email_to = d.emailTo;
+      if (d.emailSubject) base.email_subject = d.emailSubject;
+      if (d.emailBody) base.email_body = d.emailBody;
+      if (d.emailBodyHtml) base.email_body_html = d.emailBodyHtml;
+      if (d.emailFrom) base.email_from = d.emailFrom;
+      if (d.emailCc) base.email_cc = d.emailCc;
+      if (d.emailBcc) base.email_bcc = d.emailBcc;
+      if (d.emailReplyTo) base.email_reply_to = d.emailReplyTo;
+      if (d.emailTrackClicks) base.email_track_clicks = true;
+      if (d.emailTrackKref) base.email_track_kref = d.emailTrackKref;
+      if (d.emailTrackBaseUrl) base.email_track_base_url = d.emailTrackBaseUrl;
+      if (d.emailSmtpHost) base.email_smtp_host = d.emailSmtpHost;
+      if (d.emailDryRun) base.email_dry_run = true;
+      if (d.emailTimeout && d.emailTimeout !== 30) base.email_timeout = d.emailTimeout;
+    }
     if (action === 'output') {
       if (d.outputFormat) base.output_format = d.outputFormat;
       if (d.outputTemplate) base.output_template = d.outputTemplate;
@@ -1557,6 +1699,8 @@ export const ACTION_TO_TYPE: Record<string, string> = {
   supervisor: 'supervisor', map_reduce: 'map_reduce', handoff: 'handoff',
   a2a: 'a2a', resolve: 'resolve', for_each: 'for_each',
   human_approval: 'human_approval',
+  // New step types — see operator_mcp/workflow/schema.py
+  python: 'python', email: 'email',
 };
 
 export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta>): string {
@@ -1716,6 +1860,54 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.shell_command) lines.push(`      command: ${yamlEscape(task.shell_command)}`);
       if (task.shell_timeout && task.shell_timeout !== 60) lines.push(`      timeout: ${task.shell_timeout}`);
       if (task.shell_allow_failure) lines.push(`      allow_failure: true`);
+    }
+    if (stepType === 'python') {
+      lines.push(`    python:`);
+      if (task.python_script) lines.push(`      script: ${yamlEscape(task.python_script)}`);
+      if (task.python_code) {
+        if (task.python_code.includes('\n')) {
+          lines.push(`      code: |`);
+          for (const cl of task.python_code.split('\n')) lines.push(`        ${cl}`);
+        } else {
+          lines.push(`      code: ${yamlEscape(task.python_code)}`);
+        }
+      }
+      if (task.python_args) lines.push(`      args: ${task.python_args}`);
+      if (task.python_timeout && task.python_timeout !== 60) lines.push(`      timeout: ${task.python_timeout}`);
+      if (task.python_allow_failure) lines.push(`      allow_failure: true`);
+    }
+    if (stepType === 'email') {
+      lines.push(`    email:`);
+      if (task.email_to) lines.push(`      to: ${yamlEscape(task.email_to)}`);
+      if (task.email_subject) lines.push(`      subject: ${yamlEscape(task.email_subject)}`);
+      if (task.email_body) {
+        if (task.email_body.includes('\n')) {
+          lines.push(`      body: |`);
+          for (const bl of task.email_body.split('\n')) lines.push(`        ${bl}`);
+        } else {
+          lines.push(`      body: ${yamlEscape(task.email_body)}`);
+        }
+      }
+      if (task.email_body_html) {
+        lines.push(`      body_html: |`);
+        for (const hl of task.email_body_html.split('\n')) lines.push(`        ${hl}`);
+      }
+      if (task.email_from) lines.push(`      from_address: ${yamlEscape(task.email_from)}`);
+      if (task.email_cc) {
+        const ccs = task.email_cc.split(',').map(s => s.trim()).filter(Boolean);
+        if (ccs.length > 0) lines.push(`      cc: [${ccs.map(yamlEscape).join(', ')}]`);
+      }
+      if (task.email_bcc) {
+        const bccs = task.email_bcc.split(',').map(s => s.trim()).filter(Boolean);
+        if (bccs.length > 0) lines.push(`      bcc: [${bccs.map(yamlEscape).join(', ')}]`);
+      }
+      if (task.email_reply_to) lines.push(`      reply_to: ${yamlEscape(task.email_reply_to)}`);
+      if (task.email_track_clicks) lines.push(`      track_clicks: true`);
+      if (task.email_track_kref) lines.push(`      track_kref: ${yamlEscape(task.email_track_kref)}`);
+      if (task.email_track_base_url) lines.push(`      track_base_url: ${yamlEscape(task.email_track_base_url)}`);
+      if (task.email_smtp_host) lines.push(`      smtp_host: ${yamlEscape(task.email_smtp_host)}`);
+      if (task.email_dry_run) lines.push(`      dry_run: true`);
+      if (task.email_timeout && task.email_timeout !== 30) lines.push(`      timeout: ${task.email_timeout}`);
     }
     if (stepType === 'output') {
       lines.push(`    output:`);

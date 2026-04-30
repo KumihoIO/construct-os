@@ -334,7 +334,13 @@ export function useAgentChatSession({
       if (ws) ws.disconnect();
       wsRef.current = null;
     };
-  }, [pageContext, sessionId]);
+    // pageContext intentionally NOT in the dependency array. The context is
+    // sent per-message via wsRef.current.sendMessage(text, pageContext) using
+    // handleSend's closure, so the WS itself only needs to reconnect when the
+    // session changes. Re-connecting on every route change drops the in-flight
+    // Operator request and clears the activity feed mid-tool-call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();

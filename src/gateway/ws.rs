@@ -297,6 +297,7 @@ async fn handle_socket(
                 let content = parsed["content"].as_str().unwrap_or("").to_string();
                 if !content.is_empty() {
                     let page_ctx = parsed["page_context"].as_str();
+                    let attachments = parse_attachments(&parsed);
                     // Persist user message
                     if let Some(ref backend) = state.session_backend {
                         let user_msg = crate::providers::ChatMessage::user(&content);
@@ -309,6 +310,7 @@ async fn handle_socket(
                         &content,
                         &session_key,
                         page_ctx,
+                        &attachments,
                         &mut broadcast_rx,
                     )
                     .await;
@@ -394,6 +396,7 @@ async fn handle_socket(
                 };
 
                 let page_ctx = parsed["page_context"].as_str();
+                let attachments = parse_attachments(&parsed);
 
                 // Persist user message
                 if let Some(ref backend) = state.session_backend {
@@ -401,7 +404,7 @@ async fn handle_socket(
                     let _ = backend.append(&session_key, &user_msg);
                 }
 
-                process_chat_message(&state, &mut agent, &mut sender, &content, &session_key, page_ctx, &mut broadcast_rx).await;
+                process_chat_message(&state, &mut agent, &mut sender, &content, &session_key, page_ctx, &attachments, &mut broadcast_rx).await;
             }
 
             // ── Branch 2: broadcast channel event from operator ──
@@ -567,6 +570,103 @@ fn page_context_hint(page: &str) -> Option<&'static str> {
 ///
 /// Uses [`Agent::turn_streamed`] so that intermediate text chunks, tool calls,
 /// and tool results are forwarded to the WebSocket client in real time.
+/// Maximum characters of inlined document text we'll embed per attachment.
+/// 200 KB ≈ 50K tokens depending on the tokenizer — generous enough for
+/// typical source files / specs, small enough to not blow the context
+/// window when the user attaches several at once. Files larger than this
+/// are truncated with a `[…truncated]` marker so the LLM sees what's
+/// missing rather than silently losing data.
+const MAX_INLINED_DOC_CHARS: usize = 200_000;
+
+/// Build a leading text block describing the user's attachments for the
+/// current turn. Returns an empty string when there are none. Image
+/// attachments emit `[IMAGE:/path]` markers (picked up by
+/// `multimodal::prepare_messages_for_provider` and converted to content
+/// blocks for vision-capable providers). Non-image attachments are read
+/// as UTF-8 and wrapped in named delimiters; binary files we can't
+/// decode get a one-line description so the LLM at least knows they were
+/// shared.
+async fn build_attachment_prefix(metas: &[super::api_attachments::AttachmentMeta]) -> String {
+    use std::fmt::Write as _;
+
+    if metas.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::new();
+    for meta in metas {
+        if meta.is_image() {
+            // Existing image-marker pipeline handles base64 conversion +
+            // size/mime validation at provider-prepare time.
+            let _ = writeln!(out, "[IMAGE:{}]", meta.path.display());
+            continue;
+        }
+        match tokio::fs::read(&meta.path).await {
+            Ok(bytes) => match std::str::from_utf8(&bytes) {
+                Ok(text) => {
+                    let truncated;
+                    let body: &str = if text.chars().count() > MAX_INLINED_DOC_CHARS {
+                        truncated = format!(
+                            "{}…\n[…truncated at {} chars]",
+                            text.chars().take(MAX_INLINED_DOC_CHARS).collect::<String>(),
+                            MAX_INLINED_DOC_CHARS
+                        );
+                        truncated.as_str()
+                    } else {
+                        text
+                    };
+                    let _ = writeln!(
+                        out,
+                        "[Attached file: {} ({} bytes, {})]\n{}\n[End of file: {}]",
+                        meta.filename, meta.size, meta.mime, body, meta.filename
+                    );
+                }
+                Err(_) => {
+                    let _ = writeln!(
+                        out,
+                        "[Attached binary file: {} ({} bytes, {}) — content not inlined]",
+                        meta.filename, meta.size, meta.mime
+                    );
+                }
+            },
+            Err(err) => {
+                tracing::warn!(
+                    err = %err,
+                    file_id = %meta.file_id,
+                    "failed to read attachment for inlining"
+                );
+                let _ = writeln!(
+                    out,
+                    "[Attached file unavailable: {} ({})]",
+                    meta.filename, meta.mime
+                );
+            }
+        }
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// Extract the optional `attachments: ["file_id", ...]` array from a parsed
+/// WS message payload. Returns an empty Vec if the field is missing,
+/// malformed, or contains non-string entries — never panics or rejects
+/// the surrounding message.
+fn parse_attachments(parsed: &serde_json::Value) -> Vec<String> {
+    parsed["attachments"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn process_chat_message(
     state: &AppState,
     agent: &mut crate::agent::Agent,
@@ -574,6 +674,7 @@ async fn process_chat_message(
     content: &str,
     session_key: &str,
     page_context: Option<&str>,
+    attachments: &[String],
     broadcast_rx: &mut tokio::sync::broadcast::Receiver<serde_json::Value>,
 ) {
     use crate::agent::TurnEvent;
@@ -606,10 +707,37 @@ async fn process_chat_message(
     // `agent` into a spawned task (it is `&mut`), so we use a join
     // instead — `turn_streamed` writes to the channel and we drain it
     // from the other branch.
-    let content_owned = if let Some(hint) = page_context.and_then(page_context_hint) {
-        format!("{hint}{content}")
+    // Resolve any attachment file_ids the client included on this message.
+    // Images become `[IMAGE:/path]` markers — picked up by the existing
+    // multimodal pipeline so vision-capable providers see them as content
+    // blocks. Non-image files get inlined as text wrapped in delimiters
+    // when they're UTF-8 readable; binary blobs we can't decode produce a
+    // descriptive placeholder instead of failing the turn.
+    let attachment_prefix = if attachments.is_empty() {
+        String::new()
     } else {
+        let workspace_dir = state.config.lock().workspace_dir.clone();
+        let session_id = session_key
+            .rsplit(':')
+            .next()
+            .unwrap_or(session_key)
+            .to_string();
+        let resolved =
+            super::api_attachments::resolve_for_session(&workspace_dir, &session_id, attachments)
+                .await;
+        build_attachment_prefix(&resolved).await
+    };
+
+    let content_with_attachments = if attachment_prefix.is_empty() {
         content.to_string()
+    } else {
+        format!("{attachment_prefix}{content}")
+    };
+
+    let content_owned = if let Some(hint) = page_context.and_then(page_context_hint) {
+        format!("{hint}{content_with_attachments}")
+    } else {
+        content_with_attachments
     };
 
     // Scope the tool-loop cost tracker so token usage reported mid-stream
