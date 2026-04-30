@@ -62,16 +62,51 @@ def encode(kref: str, secret: str | None) -> str:
     return _urlsafe_b64encode(body + b":" + sig)
 
 
+# Length of the truncated HMAC suffix. Mirrors SIG_LEN in the Rust
+# decoder at src/gateway/click_tracking.rs — change both at once.
+_SIG_LEN = 8
+
+
+def _split_signed(raw: bytes) -> tuple[bytes, bytes] | None:
+    """Return ``(body, sig)`` if ``raw`` looks like a signed token.
+
+    Signed shape: ``<kref>:<8 sig bytes>``. Unsigned shape: just
+    ``<kref>``. We can't distinguish on "is there a colon" alone
+    because every kref contains at least one colon (``kref://...``).
+    Bounded suffix match — the LAST 9 bytes must be ``b":<8>"`` —
+    avoids mis-splitting unsigned krefs at their scheme separator.
+    """
+    if len(raw) < _SIG_LEN + 1:
+        return None
+    sep_idx = len(raw) - _SIG_LEN - 1
+    if raw[sep_idx] != ord(":"):
+        return None
+    return raw[:sep_idx], raw[sep_idx + 1:]
+
+
 def decode(token: str, secret: str | None) -> tuple[str, bool]:
+    """Decode a token back into a kref and a verification flag.
+
+    Robust to misconfiguration: a signed token decoded without a
+    secret falls back to lossy utf-8 (HMAC bytes become replacement
+    chars) so the kref prefix still extracts for click logging instead
+    of raising UnicodeDecodeError.
+    """
     raw = _urlsafe_b64decode(token)
+    signed = _split_signed(raw)
+
     if not secret:
-        return raw.decode("utf-8"), False
-    if b":" not in raw:
-        return raw.decode("utf-8"), False
-    body, sig = raw.rsplit(b":", 1)
+        return raw.decode("utf-8", errors="replace"), False
+
+    if signed is None:
+        # Secret present but token isn't shaped like a signed one —
+        # treat as unsigned (verified=False) rather than mis-split.
+        return raw.decode("utf-8", errors="replace"), False
+
+    body, sig = signed
     expected = hmac.new(
         secret.encode("utf-8"), body, hashlib.sha256
-    ).digest()[:8]
+    ).digest()[:_SIG_LEN]
     return body.decode("utf-8"), hmac.compare_digest(sig, expected)
 
 

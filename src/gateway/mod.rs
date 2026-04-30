@@ -26,6 +26,7 @@ pub mod api_workflows;
 pub mod approval_registry;
 pub mod auth_rate_limit;
 pub mod canvas;
+pub mod click_tracking;
 pub mod kumiho_client;
 pub mod mcp_discovery;
 pub mod nodes;
@@ -1455,6 +1456,13 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/wati", post(handle_wati_webhook))
         .route("/nextcloud-talk", post(handle_nextcloud_talk_webhook))
         .route("/webhook/gmail", post(handle_gmail_push_webhook))
+        // ── Click tracking — public, must be sub-200ms (email clients
+        //    abandon slow redirects). No auth gate by design: cold
+        //    leads receiving outreach emails have no bearer token. ──
+        .route(
+            "/track/c/{encoded}",
+            get(click_tracking::handle_click),
+        )
         // ── Claude Code runner hooks ──
         .route("/hooks/claude-code", post(api::handle_claude_code_hook))
         // ── Web Dashboard API routes ──
