@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -194,13 +195,19 @@ class TestKrefEncodeBuiltin:
     SCRIPT = os.path.join(_BUILTIN_PYTHON_STEPS_DIR, "kref_encode.py")
 
     def _run(self, args: dict) -> dict:
+        # Standalone script — runs from any Python interpreter without
+        # needing operator_mcp on sys.path.
         proc = subprocess.run(
-            ["python3", self.SCRIPT],
+            [sys.executable, self.SCRIPT],
             input=json.dumps({"args": args, "context": {}}),
             capture_output=True,
             text=True,
             timeout=10,
         )
+        if proc.returncode != 0 and not proc.stdout.strip():
+            raise AssertionError(
+                f"kref_encode.py exited {proc.returncode}: {proc.stderr}"
+            )
         return json.loads(proc.stdout)
 
     def test_encode_decode_roundtrip_no_secret(self):
