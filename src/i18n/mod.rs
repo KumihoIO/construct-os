@@ -331,6 +331,12 @@ impl IntoFluentValue for &String {
     }
 }
 
+impl IntoFluentValue for u16 {
+    fn into_fluent_value(self) -> FluentValue<'static> {
+        FluentValue::from(i64::from(self))
+    }
+}
+
 impl IntoFluentValue for u32 {
     fn into_fluent_value(self) -> FluentValue<'static> {
         FluentValue::from(i64::from(self))

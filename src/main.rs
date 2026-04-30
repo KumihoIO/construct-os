@@ -1108,7 +1108,7 @@ async fn main() -> Result<()> {
             println!("  {}", construct::t!("next-step-pairing-enabled"));
             println!(
                 "  {}",
-                construct::t!("next-step-dashboard", port = config.gateway.port as i64)
+                construct::t!("next-step-dashboard", port = config.gateway.port)
             );
             println!();
         }
