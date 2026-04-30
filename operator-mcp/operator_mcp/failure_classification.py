@@ -95,7 +95,8 @@ def bad_directory(path: str) -> dict[str, Any]:
 
 def missing_cwd() -> dict[str, Any]:
     return classified_error(
-        "cwd is required.",
+        "cwd is required. Pass an absolute path (e.g. ~/.construct/workspace) "
+        "or use a template whose default_cwd is set.",
         code="missing_cwd",
         category=RUNTIME_ENV_ERROR,
     )
