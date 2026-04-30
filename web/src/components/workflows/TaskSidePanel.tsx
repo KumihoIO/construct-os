@@ -13,7 +13,8 @@ const ACTION_OPTIONS = [
 ];
 
 const EXECUTOR_STEP_TYPES = [
-  'agent', 'parallel', 'for_each', 'shell', 'goto', 'output', 'conditional',
+  'agent', 'parallel', 'for_each', 'shell', 'python', 'email',
+  'goto', 'output', 'conditional',
   'human_approval', 'human_input', 'group_chat', 'supervisor', 'map_reduce',
   'handoff', 'a2a', 'resolve',
 ];
@@ -796,6 +797,209 @@ export default function TaskSidePanel({
                     className="h-4 w-4 rounded accent-[var(--pc-accent)]"
                   />
                   <span className="text-xs" style={{ color: 'var(--pc-text-muted)' }}>Allow failure</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Python properties ── */}
+        {stepType === 'python' && (
+          <div className="space-y-2 p-3 rounded-lg" style={{ background: 'var(--pc-bg-base)', border: '1px solid var(--pc-border)' }}>
+            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--pc-text-faint)' }}>
+              Python Config
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>
+                Script (path or builtin name) — XOR with Code
+              </label>
+              <input
+                type="text"
+                value={data.pythonScript || ''}
+                onChange={(e) => onUpdate(node.id, { pythonScript: e.target.value })}
+                placeholder="e.g. kref_encode.py"
+                className="input-electric w-full px-2 py-1 text-[11px] font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>
+                Code (inline) — XOR with Script
+              </label>
+              <textarea
+                value={data.pythonCode || ''}
+                onChange={(e) => onUpdate(node.id, { pythonCode: e.target.value })}
+                placeholder="import json, sys&#10;json.dump({'ok': True}, sys.stdout)"
+                rows={4}
+                className="input-electric w-full px-2 py-1 text-[11px] font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>
+                Args (JSON object — passed to script as args)
+              </label>
+              <input
+                type="text"
+                value={data.pythonArgs || ''}
+                onChange={(e) => onUpdate(node.id, { pythonArgs: e.target.value })}
+                placeholder='{"op": "encode", "kref": "${trigger.entity_kref}"}'
+                className="input-electric w-full px-2 py-1 text-[11px] font-mono"
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--pc-text-faint)' }}>
+                  Timeout (s)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={data.pythonTimeout || 60}
+                  onChange={(e) => onUpdate(node.id, { pythonTimeout: parseInt(e.target.value) || 60 })}
+                  className="input-electric w-full px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div className="flex-1 flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={data.pythonAllowFailure || false}
+                    onChange={(e) => onUpdate(node.id, { pythonAllowFailure: e.target.checked })}
+                    className="h-4 w-4 rounded accent-[var(--pc-accent)]"
+                  />
+                  <span className="text-xs" style={{ color: 'var(--pc-text-muted)' }}>Allow failure</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Email properties ── */}
+        {stepType === 'email' && (
+          <div className="space-y-2 p-3 rounded-lg" style={{ background: 'var(--pc-bg-base)', border: '1px solid var(--pc-border)' }}>
+            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--pc-text-faint)' }}>
+              Email Config
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>To</label>
+              <input
+                type="text"
+                value={data.emailTo || ''}
+                onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })}
+                placeholder="lead@example.com or ${steps.lead.output_data.email}"
+                className="input-electric w-full px-2 py-1 text-[11px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>Subject</label>
+              <input
+                type="text"
+                value={data.emailSubject || ''}
+                onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })}
+                placeholder="Hi ${steps.lead.output_data.first_name}"
+                className="input-electric w-full px-2 py-1 text-[11px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>Body (plain text)</label>
+              <textarea
+                value={data.emailBody || ''}
+                onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })}
+                placeholder="Hi there,&#10;&#10;Saw you're working on ${steps.lead.output_data.industry}..."
+                rows={5}
+                className="input-electric w-full px-2 py-1 text-[11px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>From (override)</label>
+              <input
+                type="text"
+                value={data.emailFrom || ''}
+                onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })}
+                placeholder="default: from config.toml"
+                className="input-electric w-full px-2 py-1 text-[11px]"
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>CC (comma-separated)</label>
+                <input
+                  type="text"
+                  value={data.emailCc || ''}
+                  onChange={(e) => onUpdate(node.id, { emailCc: e.target.value })}
+                  className="input-electric w-full px-2 py-1 text-[11px]"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>BCC (comma-separated)</label>
+                <input
+                  type="text"
+                  value={data.emailBcc || ''}
+                  onChange={(e) => onUpdate(node.id, { emailBcc: e.target.value })}
+                  className="input-electric w-full px-2 py-1 text-[11px]"
+                />
+              </div>
+            </div>
+            <div className="pt-2 border-t" style={{ borderColor: 'var(--pc-border)' }}>
+              <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
+                <input
+                  type="checkbox"
+                  checked={data.emailTrackClicks || false}
+                  onChange={(e) => onUpdate(node.id, { emailTrackClicks: e.target.checked })}
+                  className="h-4 w-4 rounded accent-[var(--pc-accent)]"
+                />
+                <span className="text-xs" style={{ color: 'var(--pc-text-muted)' }}>Track clicks (rewrite URLs)</span>
+              </label>
+              {data.emailTrackClicks && (
+                <div className="space-y-2 pl-6">
+                  <div>
+                    <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>
+                      Track kref (required)
+                    </label>
+                    <input
+                      type="text"
+                      value={data.emailTrackKref || ''}
+                      onChange={(e) => onUpdate(node.id, { emailTrackKref: e.target.value })}
+                      placeholder="${trigger.entity_kref}"
+                      className="input-electric w-full px-2 py-1 text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>
+                      Track base URL (default: GATEWAY_URL env)
+                    </label>
+                    <input
+                      type="text"
+                      value={data.emailTrackBaseUrl || ''}
+                      onChange={(e) => onUpdate(node.id, { emailTrackBaseUrl: e.target.value })}
+                      placeholder="https://gateway.example.com"
+                      className="input-electric w-full px-2 py-1 text-[11px] font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="pt-2 border-t flex gap-2" style={{ borderColor: 'var(--pc-border)' }}>
+              <div className="flex-1">
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--pc-text-faint)' }}>
+                  Timeout (s)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={data.emailTimeout || 30}
+                  onChange={(e) => onUpdate(node.id, { emailTimeout: parseInt(e.target.value) || 30 })}
+                  className="input-electric w-full px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div className="flex-1 flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={data.emailDryRun || false}
+                    onChange={(e) => onUpdate(node.id, { emailDryRun: e.target.checked })}
+                    className="h-4 w-4 rounded accent-[var(--pc-accent)]"
+                  />
+                  <span className="text-xs" style={{ color: 'var(--pc-text-muted)' }}>Dry run (preview only)</span>
                 </label>
               </div>
             </div>
