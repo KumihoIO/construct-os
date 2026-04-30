@@ -354,3 +354,274 @@ workflows-wrote = Wrote {$count} new files
 workflows-overwrote = Overwrote {$count} files
 workflows-skipped = Skipped {$count} existing files (run with --force to overwrite)
 workflows-summary = {$count} built-in workflows
+
+# ════════════════════════════════════════════════════════════════════
+# PHASE 3 — channel setup walkthroughs (all 16 channels)
+# ════════════════════════════════════════════════════════════════════
+
+## ── Channels: shared strings ──────────────────────────────────────
+
+channels-info-1 = Channels let you talk to Construct from anywhere.
+channels-info-2 = CLI is always available. Connect more channels now.
+channels-summary = Channels: {$active}
+
+# Shared transient/error states reused across most channel branches.
+channel-skipped = Skipped
+channel-testing = Testing connection...
+channel-conn-failed-token = Connection failed — check your token and try again
+channel-conn-failed-creds = Connection failed — check your credentials
+
+## ── Telegram ──────────────────────────────────────────────────────
+
+telegram-title = Telegram Setup
+telegram-subtitle = talk to Construct from Telegram
+telegram-step-1 = 1. Open Telegram and message @BotFather
+telegram-step-2 = 2. Send /newbot and follow the prompts
+telegram-step-3 = 3. Copy the bot token and paste it below
+telegram-token-prompt = Bot token (from @BotFather)
+telegram-connected = Connected as @{$bot_name}
+telegram-allowlist-info-1 = Allowlist your own Telegram identity first (recommended for secure + fast setup).
+telegram-allowlist-info-2 = Use your @username without '@' (example: yourname), or your numeric Telegram user ID.
+telegram-allowlist-info-3 = Use '*' only for temporary open testing.
+telegram-allowlist-prompt = Allowed Telegram identities (comma-separated: username without '@' and/or numeric user ID, '*' for all)
+telegram-allowlist-warn = No users allowlisted — Telegram inbound messages will be denied until you add your username/user ID or '*'.
+
+## ── Discord ───────────────────────────────────────────────────────
+
+discord-title = Discord Setup
+discord-subtitle = talk to Construct from Discord
+discord-step-1 = 1. Go to https://discord.com/developers/applications
+discord-step-2 = 2. Create a New Application → Bot → Copy token
+discord-step-3 = 3. Enable MESSAGE CONTENT intent under Bot settings
+discord-step-4 = 4. Invite bot to your server with messages permission
+discord-token-prompt = Bot token
+discord-connected = Connected as {$bot_name}
+discord-guild-prompt = Server (guild) ID (optional, Enter to skip)
+discord-allowlist-info-1 = Allowlist your own Discord user ID first (recommended).
+discord-allowlist-info-2 = Get it in Discord: Settings → Advanced → Developer Mode (ON), then right-click your profile → Copy User ID.
+discord-allowlist-info-3 = Use '*' only for temporary open testing.
+discord-allowlist-prompt = Allowed Discord user IDs (comma-separated, recommended: your own ID, '*' for all)
+discord-allowlist-warn = No users allowlisted — Discord inbound messages will be denied until you add IDs or '*'.
+
+## ── Slack ─────────────────────────────────────────────────────────
+
+slack-title = Slack Setup
+slack-subtitle = talk to Construct from Slack
+slack-step-1 = 1. Go to https://api.slack.com/apps → Create New App
+slack-step-2 = 2. Add Bot Token Scopes: chat:write, channels:history
+slack-step-3 = 3. Install to workspace and copy the Bot Token
+slack-token-prompt = Bot token (xoxb-...)
+slack-connected = Connected to workspace: {$team}
+slack-error = Slack error: {$err}
+slack-conn-failed = Connection failed — check your token
+slack-app-token-prompt = App token (xapp-..., optional, Enter to skip)
+slack-channel-prompt = Default channel ID (optional, Enter to skip for all accessible channels; '*' also means all)
+slack-allowlist-info-1 = Allowlist your own Slack member ID first (recommended).
+slack-allowlist-info-2 = Member IDs usually start with 'U' (open your Slack profile → More → Copy member ID).
+slack-allowlist-info-3 = Use '*' only for temporary open testing.
+slack-allowlist-prompt = Allowed Slack user IDs (comma-separated, recommended: your own member ID, '*' for all)
+slack-allowlist-warn = No users allowlisted — Slack inbound messages will be denied until you add IDs or '*'.
+
+## ── iMessage ──────────────────────────────────────────────────────
+
+imessage-title = iMessage Setup
+imessage-subtitle = macOS only, reads from Messages.app
+imessage-macos-only = iMessage is only available on macOS.
+imessage-info-1 = Construct reads your iMessage database and replies via AppleScript.
+imessage-info-2 = You need to grant Full Disk Access to your terminal in System Settings.
+imessage-contacts-prompt = Allowed contacts (comma-separated phone/email, or * for all)
+imessage-configured = iMessage configured (contacts: {$contacts})
+
+## ── Matrix ────────────────────────────────────────────────────────
+
+matrix-title = Matrix Setup
+matrix-subtitle = self-hosted, federated chat
+matrix-info-1 = You need a Matrix account and an access token.
+matrix-info-2 = Get a token via Element → Settings → Help & About → Access Token.
+matrix-homeserver-prompt = Homeserver URL (e.g. https://matrix.org)
+matrix-token-prompt = Access token
+matrix-conn-verified = Connection verified
+matrix-device-id-warn = Homeserver did not return device_id from whoami. If E2EE decryption fails, set channels.matrix.device_id manually in config.toml.
+matrix-conn-failed = Connection failed — check homeserver URL and token
+matrix-room-prompt = Room ID (e.g. !abc123:matrix.org)
+matrix-allowlist-prompt = Allowed users (comma-separated @user:server, or * for all)
+matrix-recovery-prompt = E2EE recovery key (or Enter to skip — see docs/security/matrix-e2ee-guide.md section 4G)
+
+## ── Signal ────────────────────────────────────────────────────────
+
+signal-title = Signal Setup
+signal-subtitle = signal-cli daemon bridge
+signal-step-1 = 1. Run signal-cli daemon with HTTP enabled (default port 8686).
+signal-step-2 = 2. Ensure your Signal account is registered in signal-cli.
+signal-step-3 = 3. Optionally scope to DMs only or to a specific group.
+signal-url-prompt = signal-cli HTTP URL
+signal-url-required = Skipped — HTTP URL required
+signal-account-prompt = Account number (E.164, e.g. +1234567890)
+signal-account-required = Skipped — account number required
+signal-scope-all = All messages (DMs + groups)
+signal-scope-dm = DM only
+signal-scope-group = Specific group ID
+signal-scope-prompt = Message scope
+signal-group-prompt = Group ID
+signal-group-required = Skipped — group ID required
+signal-allowlist-prompt = Allowed sender numbers (comma-separated +1234567890, or * for all)
+signal-ignore-attachments = Ignore attachment-only messages?
+signal-ignore-stories = Ignore incoming stories?
+signal-configured = Signal configured
+
+## ── WhatsApp (Web + Cloud API) ───────────────────────────────────
+
+whatsapp-title = WhatsApp Setup
+whatsapp-mode-web = WhatsApp Web (QR / pair-code, no Meta Business API)
+whatsapp-mode-cloud = WhatsApp Business Cloud API (webhook)
+whatsapp-mode-prompt = Choose WhatsApp mode
+
+# WhatsApp Web mode
+whatsapp-web-feature-warn = The 'whatsapp-web' feature is not compiled in. WhatsApp Web will not work at runtime.
+whatsapp-web-rebuild-info = Rebuild with: cargo build --features whatsapp-web
+whatsapp-web-mode-label = Mode: WhatsApp Web
+whatsapp-web-step-1 = 1. Build with --features whatsapp-web
+whatsapp-web-step-2 = 2. Start channel/daemon and scan QR in WhatsApp → Linked Devices
+whatsapp-web-step-3 = 3. Keep session_path persistent so relogin is not required
+whatsapp-web-session-prompt = Session database path
+whatsapp-web-session-required = Skipped — session path required
+whatsapp-web-pair-phone-prompt = Pair phone (optional, digits only; leave empty to use QR flow)
+whatsapp-web-pair-code-prompt = Custom pair code (optional, leave empty for auto-generated)
+whatsapp-web-allowlist-prompt = Allowed phone numbers (comma-separated +1234567890, or * for all)
+whatsapp-web-configured = WhatsApp Web configuration saved.
+
+# WhatsApp Cloud API mode
+whatsapp-cloud-mode-label = Mode: Business Cloud API
+whatsapp-cloud-step-1 = 1. Go to developers.facebook.com and create a WhatsApp app
+whatsapp-cloud-step-2 = 2. Add the WhatsApp product and get your phone number ID
+whatsapp-cloud-step-3 = 3. Generate a temporary access token (System User)
+whatsapp-cloud-step-4 = 4. Configure webhook URL to: https://your-domain/whatsapp
+whatsapp-cloud-token-prompt = Access token (from Meta Developers)
+whatsapp-cloud-phone-id-prompt = Phone number ID (from WhatsApp app settings)
+whatsapp-cloud-phone-id-required = Skipped — phone number ID required
+whatsapp-cloud-verify-token-prompt = Webhook verify token (create your own)
+whatsapp-cloud-connected = Connected to WhatsApp API
+whatsapp-cloud-conn-failed = Connection failed — check access token and phone number ID
+whatsapp-cloud-allowlist-prompt = Allowed phone numbers (comma-separated +1234567890, or * for all)
+
+## ── Linq ──────────────────────────────────────────────────────────
+
+linq-title = Linq Setup
+linq-subtitle = iMessage/RCS/SMS via Linq API
+linq-step-1 = 1. Sign up at linqapp.com and get your Partner API token
+linq-step-2 = 2. Note your Linq phone number (E.164 format)
+linq-step-3 = 3. Configure webhook URL to: https://your-domain/linq
+linq-token-prompt = API token (Linq Partner API token)
+linq-phone-prompt = From phone number (E.164 format, e.g. +12223334444)
+linq-phone-required = Skipped — phone number required
+linq-connected = Connected to Linq API
+linq-conn-failed = Connection failed — check API token
+linq-allowlist-prompt = Allowed sender numbers (comma-separated +1234567890, or * for all)
+linq-secret-prompt = Webhook signing secret (optional, press Enter to skip)
+
+## ── IRC ───────────────────────────────────────────────────────────
+
+irc-title = IRC Setup
+irc-subtitle = IRC over TLS
+irc-info-1 = IRC connects over TLS to any IRC server
+irc-info-2 = Supports SASL PLAIN and NickServ authentication
+irc-server-prompt = IRC server (hostname)
+irc-port-prompt = Port
+irc-port-invalid = Invalid port, using 6697
+irc-nick-prompt = Bot nickname
+irc-nick-required = Skipped — nickname required
+irc-channels-prompt = Channels to join (comma-separated: #channel1,#channel2)
+irc-allowlist-info-1 = Allowlist nicknames that can interact with the bot (case-insensitive).
+irc-allowlist-info-2 = Use '*' to allow anyone (not recommended for production).
+irc-allowlist-prompt = Allowed nicknames (comma-separated, or * for all)
+irc-allowlist-empty = ⚠️  Empty allowlist — only you can interact. Add nicknames above.
+irc-auth-info = Optional authentication (press Enter to skip each):
+irc-server-pass-prompt = Server password (for bouncers like ZNC, leave empty if none)
+irc-nickserv-pass-prompt = NickServ password (leave empty if none)
+irc-sasl-pass-prompt = SASL PLAIN password (leave empty if none)
+irc-tls-verify-prompt = Verify TLS certificate?
+irc-configured = IRC configured as {$nick}@{$server}:{$port}
+
+## ── Webhook ───────────────────────────────────────────────────────
+
+webhook-title = Webhook Setup
+webhook-subtitle = HTTP endpoint for custom integrations
+webhook-port-prompt = Port
+webhook-secret-prompt = Secret (optional, Enter to skip)
+webhook-configured = Webhook on port {$port}
+
+## ── Nextcloud Talk ───────────────────────────────────────────────
+
+nctalk-title = Nextcloud Talk Setup
+nctalk-subtitle = Talk webhook receive + OCS API send
+nctalk-step-1 = 1. Configure your Nextcloud Talk bot app and app token.
+nctalk-step-2 = 2. Set webhook URL to: https://<your-public-url>/nextcloud-talk
+nctalk-step-3 = 3. Keep webhook_secret aligned with Nextcloud signature headers if enabled.
+nctalk-base-url-prompt = Nextcloud base URL (e.g. https://cloud.example.com)
+nctalk-base-url-required = Skipped — base URL required
+nctalk-token-prompt = App token (Talk bot token)
+nctalk-token-required = Skipped — app token required
+nctalk-secret-prompt = Webhook secret (optional, Enter to skip)
+nctalk-allowlist-prompt = Allowed Nextcloud actor IDs (comma-separated, or * for all)
+nctalk-configured = Nextcloud Talk configured
+
+## ── DingTalk ──────────────────────────────────────────────────────
+
+dingtalk-title = DingTalk Setup
+dingtalk-subtitle = DingTalk Stream Mode
+dingtalk-step-1 = 1. Go to DingTalk developer console (open.dingtalk.com)
+dingtalk-step-2 = 2. Create an app and enable the Stream Mode bot
+dingtalk-step-3 = 3. Copy the Client ID (AppKey) and Client Secret (AppSecret)
+dingtalk-client-id-prompt = Client ID (AppKey)
+dingtalk-client-secret-prompt = Client Secret (AppSecret)
+dingtalk-verified = DingTalk credentials verified
+dingtalk-allowlist-prompt = Allowed staff IDs (comma-separated, '*' for all)
+
+## ── QQ Official ───────────────────────────────────────────────────
+
+qq-title = QQ Official Setup
+qq-subtitle = Tencent QQ Bot SDK
+qq-step-1 = 1. Go to QQ Bot developer console (q.qq.com)
+qq-step-2 = 2. Create a bot application
+qq-step-3 = 3. Copy the App ID and App Secret
+qq-app-id-prompt = App ID
+qq-app-secret-prompt = App Secret
+qq-verified = QQ Bot credentials verified
+qq-auth-failed = Auth error — check your credentials
+qq-allowlist-prompt = Allowed user IDs (comma-separated, '*' for all)
+
+## ── Lark / Feishu ────────────────────────────────────────────────
+
+lark-title = {$provider} Setup
+lark-subtitle = talk to Construct from {$provider}
+lark-step-1 = 1. Go to {$provider} Open Platform ({$host})
+lark-step-2 = 2. Create an app and enable 'Bot' capability
+lark-step-3 = 3. Copy the App ID and App Secret
+lark-app-id-prompt = App ID
+lark-app-secret-prompt = App Secret
+lark-app-secret-required = App Secret is required
+lark-verified = {$provider} credentials verified
+lark-receive-mode-prompt = Receive Mode
+lark-receive-mode-ws = WebSocket (recommended, no public IP needed)
+lark-receive-mode-webhook = Webhook (requires public HTTPS endpoint)
+lark-verify-token-prompt = Verification Token (optional, for Webhook mode)
+lark-verify-token-empty = Verification Token is empty — webhook authenticity checks are reduced.
+lark-webhook-port-prompt = Webhook Port
+lark-allowlist-prompt = Allowed user Open IDs (comma-separated, '*' for all)
+lark-allowlist-warn = No users allowlisted — {$provider} inbound messages will be denied until you add Open IDs or '*'.
+
+## ── Nostr ─────────────────────────────────────────────────────────
+
+nostr-title = Nostr Setup
+nostr-subtitle = private messages via NIP-04 & NIP-17
+nostr-info-1 = Construct will listen for encrypted DMs on Nostr relays.
+nostr-info-2 = You need a Nostr private key (hex or nsec) and at least one relay.
+nostr-key-prompt = Private key (hex or nsec1...)
+nostr-key-valid = Key valid — public key: {$pubkey}
+nostr-key-invalid = Invalid private key — check format and try again
+nostr-relays-prompt = Relay URLs (comma-separated, Enter for defaults)
+nostr-allowlist-info-1 = Allowlist pubkeys that can message the bot (hex or npub).
+nostr-allowlist-info-2 = Use '*' to allow anyone (not recommended for production).
+nostr-allowlist-prompt = Allowed pubkeys (comma-separated, or * for all)
+nostr-allowlist-warn = No pubkeys allowlisted — inbound messages will be denied until you add pubkeys or '*'.
+nostr-configured = Nostr configured with {$relay_count} relay(s)
