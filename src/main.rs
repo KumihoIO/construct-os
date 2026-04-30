@@ -1007,8 +1007,7 @@ async fn main() -> Result<()> {
         // first time. Detection priority: --lang flag → CONSTRUCT_LANG env →
         // $LC_ALL/$LANG → English. The Step 0 picker can override this once
         // the wizard runs interactively.
-        let initial_lang =
-            construct::i18n::detect_lang(lang_flag.as_deref(), None);
+        let initial_lang = construct::i18n::detect_lang(lang_flag.as_deref(), None);
         construct::i18n::init(initial_lang);
 
         if reinit && channels_only {
@@ -1038,7 +1037,10 @@ async fn main() -> Result<()> {
                 println!("{}", construct::t!("reinit-banner"));
                 println!(
                     "   {}",
-                    construct::t!("reinit-current-dir", path = construct_dir.display().to_string())
+                    construct::t!(
+                        "reinit-current-dir",
+                        path = construct_dir.display().to_string()
+                    )
                 );
                 println!(
                     "   {}",

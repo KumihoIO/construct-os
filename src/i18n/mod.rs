@@ -19,7 +19,7 @@
 //! 5. Default: English
 //!
 //! # Adding a new wizard language
-//! 1. Add a variant to [`Lang`] and update `from_str` / `id` / `code`.
+//! 1. Add a variant to [`Lang`] and update `parse` / `id` / `code`.
 //! 2. Create `i18n/<code>/onboard.ftl` and embed it in `bundles_for`.
 //! 3. Add an option to the language picker in `wizard::setup_language`.
 
@@ -40,17 +40,24 @@ use unic_langid::{LanguageIdentifier, langid};
 
 /// Languages supported by `construct onboard`.
 ///
-/// New variants must be added to `from_str`, `id`, `code`, `display_name`,
+/// New variants must be added to `parse`, `id`, `code`, `display_name`,
 /// and `bundles_for`. The `.ftl` file under `i18n/<code>/onboard.ftl` is
 /// embedded via `include_str!` and missing files are caught at compile time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
+    #[default]
     En,
     Ko,
 }
 
 impl Lang {
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse a language tag or alias into a [`Lang`]. Returns `None` for
+    /// unsupported codes — callers fall back to the next detection step.
+    ///
+    /// This is intentionally not `std::str::FromStr` because the standard
+    /// trait returns `Result<Self, Self::Err>` and we want a plain
+    /// `Option<Self>` for the priority chain in [`detect_lang`].
+    pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "en" | "en-us" | "en_us" | "english" => Some(Lang::En),
             "ko" | "ko-kr" | "ko_kr" | "korean" | "한국어" => Some(Lang::Ko),
@@ -97,12 +104,6 @@ impl Lang {
             1 => Lang::Ko,
             _ => Lang::En,
         }
-    }
-}
-
-impl Default for Lang {
-    fn default() -> Self {
-        Lang::En
     }
 }
 
@@ -210,17 +211,17 @@ fn format_message(
 /// in that priority order. Returns [`Lang::En`] if nothing matches.
 pub fn detect_lang(cli_flag: Option<&str>, config_lang: Option<&str>) -> Lang {
     if let Some(s) = cli_flag {
-        if let Some(l) = Lang::from_str(s) {
+        if let Some(l) = Lang::parse(s) {
             return l;
         }
     }
     if let Ok(s) = std::env::var("CONSTRUCT_LANG") {
-        if let Some(l) = Lang::from_str(&s) {
+        if let Some(l) = Lang::parse(&s) {
             return l;
         }
     }
     if let Some(s) = config_lang {
-        if let Some(l) = Lang::from_str(s) {
+        if let Some(l) = Lang::parse(s) {
             return l;
         }
     }
@@ -238,7 +239,7 @@ pub fn detect_lang(cli_flag: Option<&str>, config_lang: Option<&str>) -> Lang {
 /// two-letter code. Case-insensitive.
 fn lang_from_locale(s: &str) -> Option<Lang> {
     let head: String = s.chars().take(2).collect();
-    Lang::from_str(&head)
+    Lang::parse(&head)
 }
 
 // ── Global handle ────────────────────────────────────────────────
@@ -332,7 +333,7 @@ impl IntoFluentValue for &String {
 
 impl IntoFluentValue for u32 {
     fn into_fluent_value(self) -> FluentValue<'static> {
-        FluentValue::from(self as i64)
+        FluentValue::from(i64::from(self))
     }
 }
 
@@ -344,7 +345,7 @@ impl IntoFluentValue for u64 {
 
 impl IntoFluentValue for i32 {
     fn into_fluent_value(self) -> FluentValue<'static> {
-        FluentValue::from(self as i64)
+        FluentValue::from(i64::from(self))
     }
 }
 
@@ -368,17 +369,17 @@ mod tests {
 
     #[test]
     fn from_str_handles_common_aliases() {
-        assert_eq!(Lang::from_str("en"), Some(Lang::En));
-        assert_eq!(Lang::from_str("EN"), Some(Lang::En));
-        assert_eq!(Lang::from_str("en-US"), Some(Lang::En));
-        assert_eq!(Lang::from_str("english"), Some(Lang::En));
-        assert_eq!(Lang::from_str("ko"), Some(Lang::Ko));
-        assert_eq!(Lang::from_str("ko-KR"), Some(Lang::Ko));
-        assert_eq!(Lang::from_str("ko_KR"), Some(Lang::Ko));
-        assert_eq!(Lang::from_str("korean"), Some(Lang::Ko));
-        assert_eq!(Lang::from_str("한국어"), Some(Lang::Ko));
-        assert_eq!(Lang::from_str("ja"), None);
-        assert_eq!(Lang::from_str(""), None);
+        assert_eq!(Lang::parse("en"), Some(Lang::En));
+        assert_eq!(Lang::parse("EN"), Some(Lang::En));
+        assert_eq!(Lang::parse("en-US"), Some(Lang::En));
+        assert_eq!(Lang::parse("english"), Some(Lang::En));
+        assert_eq!(Lang::parse("ko"), Some(Lang::Ko));
+        assert_eq!(Lang::parse("ko-KR"), Some(Lang::Ko));
+        assert_eq!(Lang::parse("ko_KR"), Some(Lang::Ko));
+        assert_eq!(Lang::parse("korean"), Some(Lang::Ko));
+        assert_eq!(Lang::parse("한국어"), Some(Lang::Ko));
+        assert_eq!(Lang::parse("ja"), None);
+        assert_eq!(Lang::parse(""), None);
     }
 
     #[test]

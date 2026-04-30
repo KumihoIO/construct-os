@@ -11,6 +11,7 @@ use crate::config::{
     RuntimeConfig, SecretsConfig, SlackConfig, StorageConfig, TelegramConfig, WebhookConfig,
 };
 use crate::hardware::{self, HardwareConfig};
+use crate::i18n::{self, Lang};
 use crate::memory::{
     default_memory_backend_key, memory_backend_profile, selectable_memory_backends,
 };
@@ -19,7 +20,6 @@ use crate::providers::{
     is_moonshot_alias, is_qianfan_alias, is_qwen_alias, is_qwen_oauth_alias, is_zai_alias,
     is_zai_cn_alias,
 };
-use crate::i18n::{self, Lang};
 use crate::t;
 use anyhow::{Context, Result, bail};
 use console::style;
@@ -2330,7 +2330,7 @@ fn resolve_interactive_onboarding_mode(
                 path = config_path.display().to_string()
             )
         ))
-        .items(&options)
+        .items(options)
         .default(1)
         .interact()?;
 
