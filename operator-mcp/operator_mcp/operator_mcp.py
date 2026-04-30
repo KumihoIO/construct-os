@@ -68,7 +68,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "cwd": {
                         "type": "string",
-                        "description": "Working directory for the agent. Required unless template has default_cwd.",
+                        "description": "Working directory for the agent. Use an absolute path under your project root or workspace (e.g. ~/.construct/workspace, ~/code/myproject). The handler will accept the template's default_cwd when omitted, but the LLM client schema requires you to pass it explicitly.",
                     },
                     "title": {
                         "type": "string",
@@ -117,7 +117,7 @@ async def list_tools() -> list[Tool]:
                         "default": "development",
                     },
                 },
-                "required": ["title"],
+                "required": ["title", "cwd"],
             },
         ),
         Tool(

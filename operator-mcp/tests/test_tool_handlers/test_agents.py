@@ -97,10 +97,17 @@ class TestToolCreateAgent:
         assert "error" in result
 
     async def test_missing_cwd(self, journal, mock_pool_client):
+        # The schema requires cwd, but the handler also validates at runtime
+        # for non-schema-validating callers (and for the template-fallback
+        # path where cwd may be omitted in favor of template.default_cwd).
+        # Error message should hint at both ways out.
         result = await tool_create_agent({
             "title": "No CWD",
         }, journal, mock_pool_client)
         assert "error" in result
+        assert result.get("error_code") == "missing_cwd"
+        assert "default_cwd" in result["error"]
+        assert "absolute path" in result["error"]
 
     async def test_nonexistent_cwd(self, journal, mock_pool_client):
         result = await tool_create_agent({
