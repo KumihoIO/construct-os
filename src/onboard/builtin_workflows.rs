@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::t;
 use anyhow::{Context, Result};
 use console::style;
 use include_dir::{Dir, include_dir};
@@ -69,38 +70,40 @@ pub async fn run_sync(workspace_dir: PathBuf, force: bool) -> Result<()> {
     let dest = workspace_dir.join(WORKSPACE_WORKFLOWS_SUBDIR);
 
     println!(
-        "  {} {} built-in workflow{} available",
+        "  {} {}",
         style("✓").green().bold(),
-        style(total).green().bold(),
-        if total == 1 { "" } else { "s" }
+        style(t!("workflows-available", count = total))
+            .green()
+            .bold()
     );
     println!(
-        "  {} Destination: {}",
+        "  {} {}",
         style("·").dim(),
-        style(dest.display()).dim()
+        style(t!(
+            "workflows-destination",
+            path = dest.display().to_string()
+        ))
+        .dim()
     );
     if report.written > 0 {
         println!(
-            "  {} Wrote {} new file{}",
+            "  {} {}",
             style("+").green(),
-            report.written,
-            if report.written == 1 { "" } else { "s" }
+            t!("workflows-wrote", count = report.written)
         );
     }
     if report.overwritten > 0 {
         println!(
-            "  {} Overwrote {} file{}",
+            "  {} {}",
             style("~").yellow(),
-            report.overwritten,
-            if report.overwritten == 1 { "" } else { "s" }
+            t!("workflows-overwrote", count = report.overwritten)
         );
     }
     if report.skipped > 0 {
         println!(
-            "  {} Skipped {} existing file{} (run with --force to overwrite)",
+            "  {} {}",
             style("·").dim(),
-            report.skipped,
-            if report.skipped == 1 { "" } else { "s" }
+            t!("workflows-skipped", count = report.skipped)
         );
     }
     Ok(())
@@ -114,10 +117,11 @@ pub fn run_list() {
         .collect();
     names.sort_unstable();
     println!(
-        "  {} {} built-in workflow{}",
+        "  {} {}",
         style("✓").green().bold(),
-        style(names.len()).green().bold(),
-        if names.len() == 1 { "" } else { "s" }
+        style(t!("workflows-summary", count = names.len()))
+            .green()
+            .bold()
     );
     for name in names {
         println!("  {} {}", style("·").dim(), name);

@@ -878,35 +878,100 @@ async fn run_quick_setup_with_home(
     println!("  {}", style(t!("next-steps-header")).white().bold());
     if credential_override.is_none() {
         if provider_supports_keyless_local_usage(&provider_name) {
-            println!("    1. Chat:     construct agent -m \"Hello!\"");
-            println!("    2. Gateway:  construct gateway");
-            println!("    3. Status:   construct status");
+            println!(
+                "    1. {:13} {}",
+                t!("next-action-chat"),
+                t!("next-cmd-chat-hello")
+            );
+            println!(
+                "    2. {:13} {}",
+                t!("next-action-gateway"),
+                t!("next-cmd-gateway")
+            );
+            println!(
+                "    3. {:13} {}",
+                t!("next-action-status"),
+                t!("next-cmd-status")
+            );
         } else if provider_supports_device_flow(&provider_name) {
             if canonical_provider_name(&provider_name) == "copilot" {
-                println!("    1. Chat:              construct agent -m \"Hello!\"");
+                println!(
+                    "    1. {:22} {}",
+                    t!("next-action-chat"),
+                    t!("next-cmd-chat-hello")
+                );
                 println!("       (device / OAuth auth will prompt on first run)");
-                println!("    2. Gateway:           construct gateway");
-                println!("    3. Status:            construct status");
+                println!(
+                    "    2. {:22} {}",
+                    t!("next-action-gateway"),
+                    t!("next-cmd-gateway")
+                );
+                println!(
+                    "    3. {:22} {}",
+                    t!("next-action-status"),
+                    t!("next-cmd-status")
+                );
             } else {
                 println!(
-                    "    1. Login:             construct auth login --provider {}",
-                    provider_name
+                    "    1. {:22} {}",
+                    t!("next-action-login"),
+                    t!("next-cmd-login", provider = provider_name.to_string())
                 );
-                println!("    2. Chat:              construct agent -m \"Hello!\"");
-                println!("    3. Gateway:           construct gateway");
-                println!("    4. Status:            construct status");
+                println!(
+                    "    2. {:22} {}",
+                    t!("next-action-chat"),
+                    t!("next-cmd-chat-hello")
+                );
+                println!(
+                    "    3. {:22} {}",
+                    t!("next-action-gateway"),
+                    t!("next-cmd-gateway")
+                );
+                println!(
+                    "    4. {:22} {}",
+                    t!("next-action-status"),
+                    t!("next-cmd-status")
+                );
             }
         } else {
             let env_var = provider_env_var(&provider_name);
-            println!("    1. Set your API key:  export {env_var}=\"sk-...\"");
-            println!("    2. Or edit:           ~/.construct/config.toml");
-            println!("    3. Chat:              construct agent -m \"Hello!\"");
-            println!("    4. Gateway:           construct gateway");
+            println!(
+                "    1. {:22} {}",
+                t!("next-action-set-key"),
+                t!("next-cmd-export-key", env_var = env_var.to_string())
+            );
+            println!(
+                "    2. {:22} {}",
+                t!("next-action-or-edit"),
+                t!("next-cmd-config-toml")
+            );
+            println!(
+                "    3. {:22} {}",
+                t!("next-action-chat"),
+                t!("next-cmd-chat-hello")
+            );
+            println!(
+                "    4. {:22} {}",
+                t!("next-action-gateway"),
+                t!("next-cmd-gateway")
+            );
         }
     } else {
-        println!("    1. Chat:     construct agent -m \"Hello!\"");
-        println!("    2. Gateway:  construct gateway");
-        println!("    3. Status:   construct status");
+        println!(
+            "    1. {:13} {}",
+            t!("next-action-chat"),
+            t!("next-cmd-chat-hello")
+        );
+        println!(
+            "    2. {:13} {}",
+            t!("next-action-gateway"),
+            t!("next-cmd-gateway")
+        );
+        println!(
+            "    3. {:13} {}",
+            t!("next-action-status"),
+            t!("next-cmd-status")
+        );
     }
     println!();
 
@@ -2579,17 +2644,15 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         println!();
         println!(
             "  {} {}",
-            style("Custom Provider Setup").white().bold(),
-            style("— any OpenAI-compatible API").dim()
+            style(t!("custom-provider-title")).white().bold(),
+            style(t!("custom-provider-subtitle")).dim()
         );
-        print_bullet(
-            "Construct works with ANY API that speaks the OpenAI chat completions format.",
-        );
-        print_bullet("Examples: LiteLLM, LocalAI, vLLM, text-generation-webui, LM Studio, etc.");
+        print_bullet(&t!("custom-provider-info-1"));
+        print_bullet(&t!("custom-provider-info-2"));
         println!();
 
         let base_url: String = Input::new()
-            .with_prompt("  API base URL (e.g. http://localhost:1234 or https://my-api.com)")
+            .with_prompt(format!("  {}", t!("provider-api-base-prompt")))
             .interact_text()?;
 
         let base_url = base_url.trim().trim_end_matches('/').to_string();
@@ -2598,22 +2661,25 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         }
 
         let api_key: String = Input::new()
-            .with_prompt("  API key (or Enter to skip if not needed)")
+            .with_prompt(format!("  {}", t!("provider-api-key-optional")))
             .allow_empty(true)
             .interact_text()?;
 
         let model: String = Input::new()
-            .with_prompt("  Model name (e.g. llama3, gpt-4o, mistral)")
-            .default("default")
+            .with_prompt(format!("  {}", t!("provider-model-name")))
+            .default("default".to_string())
             .interact_text()?;
 
         let provider_name = format!("custom:{base_url}");
 
         println!(
-            "  {} Provider: {} | Model: {}",
+            "  {} {}",
             style("✓").green().bold(),
-            style(&provider_name).green(),
-            style(&model).green()
+            t!(
+                "custom-provider-confirmed",
+                provider = style(&provider_name).green().to_string(),
+                model = style(&model).green().to_string()
+            )
         );
 
         return Ok((provider_name, api_key, model, None));
@@ -2633,14 +2699,14 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
     let mut provider_api_url: Option<String> = None;
     let api_key = if provider_name == "ollama" {
         let use_remote_ollama = Confirm::new()
-            .with_prompt("  Use a remote Ollama endpoint (for example Ollama Cloud)?")
+            .with_prompt(format!("  {}", t!("ollama-use-remote")))
             .default(false)
             .interact()?;
 
         if use_remote_ollama {
             let raw_url: String = Input::new()
-                .with_prompt("  Remote Ollama endpoint URL")
-                .default("https://ollama.com")
+                .with_prompt(format!("  {}", t!("ollama-remote-url-prompt")))
+                .default("https://ollama.com".to_string())
                 .interact_text()?;
 
             let normalized_url = normalize_ollama_endpoint_url(&raw_url);
@@ -2655,39 +2721,39 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
 
             provider_api_url = Some(normalized_url.clone());
 
-            print_bullet(&format!(
-                "Remote endpoint configured: {}",
-                style(&normalized_url).cyan()
+            print_bullet(&t!(
+                "ollama-remote-configured",
+                url = style(&normalized_url).cyan().to_string()
             ));
             if raw_url.trim().trim_end_matches('/') != normalized_url {
-                print_bullet("Normalized endpoint to base URL (removed trailing /api).");
+                print_bullet(&t!("ollama-normalized-base"));
             }
-            print_bullet(&format!(
-                "If you use cloud-only models, append {} to the model ID.",
-                style(":cloud").yellow()
+            print_bullet(&t!(
+                "ollama-cloud-suffix-hint",
+                suffix = style(":cloud").yellow().to_string()
             ));
 
             let key: String = Input::new()
-                .with_prompt("  API key for remote Ollama endpoint (or Enter to skip)")
+                .with_prompt(format!("  {}", t!("ollama-remote-key-prompt")))
                 .allow_empty(true)
                 .interact_text()?;
 
             if key.trim().is_empty() {
-                print_bullet(&format!(
-                    "No API key provided. Set {} later if required by your endpoint.",
-                    style("OLLAMA_API_KEY").yellow()
+                print_bullet(&t!(
+                    "ollama-no-key-hint",
+                    env_var = style("OLLAMA_API_KEY").yellow().to_string()
                 ));
             }
 
             key
         } else {
-            print_bullet("Using local Ollama at http://localhost:11434 (no API key needed).");
+            print_bullet(&t!("ollama-using-local"));
             String::new()
         }
     } else if matches!(provider_name, "llamacpp" | "llama.cpp") {
         let raw_url: String = Input::new()
-            .with_prompt("  llama.cpp server endpoint URL")
-            .default("http://localhost:8080/v1")
+            .with_prompt(format!("  {}", t!("llamacpp-url-prompt")))
+            .default("http://localhost:8080/v1".to_string())
             .interact_text()?;
 
         let normalized_url = raw_url.trim().trim_end_matches('/').to_string();
@@ -2696,29 +2762,29 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         }
         provider_api_url = Some(normalized_url.clone());
 
-        print_bullet(&format!(
-            "Using llama.cpp server endpoint: {}",
-            style(&normalized_url).cyan()
+        print_bullet(&t!(
+            "llamacpp-using",
+            url = style(&normalized_url).cyan().to_string()
         ));
-        print_bullet("No API key needed unless your llama.cpp server is started with --api-key.");
+        print_bullet(&t!("llamacpp-key-info"));
 
         let key: String = Input::new()
-            .with_prompt("  API key for llama.cpp server (or Enter to skip)")
+            .with_prompt(format!("  {}", t!("llamacpp-key-prompt")))
             .allow_empty(true)
             .interact_text()?;
 
         if key.trim().is_empty() {
-            print_bullet(&format!(
-                "No API key provided. Set {} later only if your server requires authentication.",
-                style("LLAMACPP_API_KEY").yellow()
+            print_bullet(&t!(
+                "local-server-no-key-hint",
+                env_var = style("LLAMACPP_API_KEY").yellow().to_string()
             ));
         }
 
         key
     } else if provider_name == "sglang" {
         let raw_url: String = Input::new()
-            .with_prompt("  SGLang server endpoint URL")
-            .default("http://localhost:30000/v1")
+            .with_prompt(format!("  {}", t!("sglang-url-prompt")))
+            .default("http://localhost:30000/v1".to_string())
             .interact_text()?;
 
         let normalized_url = raw_url.trim().trim_end_matches('/').to_string();
@@ -2727,29 +2793,29 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         }
         provider_api_url = Some(normalized_url.clone());
 
-        print_bullet(&format!(
-            "Using SGLang server endpoint: {}",
-            style(&normalized_url).cyan()
+        print_bullet(&t!(
+            "sglang-using",
+            url = style(&normalized_url).cyan().to_string()
         ));
-        print_bullet("No API key needed unless your SGLang server requires authentication.");
+        print_bullet(&t!("sglang-key-info"));
 
         let key: String = Input::new()
-            .with_prompt("  API key for SGLang server (or Enter to skip)")
+            .with_prompt(format!("  {}", t!("sglang-key-prompt")))
             .allow_empty(true)
             .interact_text()?;
 
         if key.trim().is_empty() {
-            print_bullet(&format!(
-                "No API key provided. Set {} later only if your server requires authentication.",
-                style("SGLANG_API_KEY").yellow()
+            print_bullet(&t!(
+                "local-server-no-key-hint",
+                env_var = style("SGLANG_API_KEY").yellow().to_string()
             ));
         }
 
         key
     } else if provider_name == "vllm" {
         let raw_url: String = Input::new()
-            .with_prompt("  vLLM server endpoint URL")
-            .default("http://localhost:8000/v1")
+            .with_prompt(format!("  {}", t!("vllm-url-prompt")))
+            .default("http://localhost:8000/v1".to_string())
             .interact_text()?;
 
         let normalized_url = raw_url.trim().trim_end_matches('/').to_string();
@@ -2758,29 +2824,29 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         }
         provider_api_url = Some(normalized_url.clone());
 
-        print_bullet(&format!(
-            "Using vLLM server endpoint: {}",
-            style(&normalized_url).cyan()
+        print_bullet(&t!(
+            "vllm-using",
+            url = style(&normalized_url).cyan().to_string()
         ));
-        print_bullet("No API key needed unless your vLLM server requires authentication.");
+        print_bullet(&t!("vllm-key-info"));
 
         let key: String = Input::new()
-            .with_prompt("  API key for vLLM server (or Enter to skip)")
+            .with_prompt(format!("  {}", t!("vllm-key-prompt")))
             .allow_empty(true)
             .interact_text()?;
 
         if key.trim().is_empty() {
-            print_bullet(&format!(
-                "No API key provided. Set {} later only if your server requires authentication.",
-                style("VLLM_API_KEY").yellow()
+            print_bullet(&t!(
+                "local-server-no-key-hint",
+                env_var = style("VLLM_API_KEY").yellow().to_string()
             ));
         }
 
         key
     } else if provider_name == "osaurus" {
         let raw_url: String = Input::new()
-            .with_prompt("  Osaurus server endpoint URL")
-            .default("http://localhost:1337/v1")
+            .with_prompt(format!("  {}", t!("osaurus-url-prompt")))
+            .default("http://localhost:1337/v1".to_string())
             .interact_text()?;
 
         let normalized_url = raw_url.trim().trim_end_matches('/').to_string();
@@ -2789,21 +2855,21 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         }
         provider_api_url = Some(normalized_url.clone());
 
-        print_bullet(&format!(
-            "Using Osaurus server endpoint: {}",
-            style(&normalized_url).cyan()
+        print_bullet(&t!(
+            "osaurus-using",
+            url = style(&normalized_url).cyan().to_string()
         ));
-        print_bullet("No API key needed unless your Osaurus server requires authentication.");
+        print_bullet(&t!("osaurus-key-info"));
 
         let key: String = Input::new()
-            .with_prompt("  API key for Osaurus server (or Enter to skip)")
+            .with_prompt(format!("  {}", t!("osaurus-key-prompt")))
             .allow_empty(true)
             .interact_text()?;
 
         if key.trim().is_empty() {
-            print_bullet(&format!(
-                "No API key provided. Set {} later only if your server requires authentication.",
-                style("OSAURUS_API_KEY").yellow()
+            print_bullet(&t!(
+                "local-server-no-key-hint",
+                env_var = style("OSAURUS_API_KEY").yellow().to_string()
             ));
         }
 
@@ -2812,79 +2878,81 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         // Special handling for Gemini: check for CLI auth first
         if crate::providers::gemini::GeminiProvider::has_cli_credentials() {
             print_bullet(&format!(
-                "{} Gemini CLI credentials detected! You can skip the API key.",
-                style("✓").green().bold()
+                "{} {}",
+                style("✓").green().bold(),
+                t!("gemini-cli-detected")
             ));
-            print_bullet("Construct will reuse your existing Gemini CLI authentication.");
+            print_bullet(&t!("gemini-cli-reuse-info"));
             println!();
 
             let use_cli: bool = dialoguer::Confirm::new()
-                .with_prompt("  Use existing Gemini CLI authentication?")
+                .with_prompt(format!("  {}", t!("gemini-cli-confirm")))
                 .default(true)
                 .interact()?;
 
             if use_cli {
-                println!(
-                    "  {} Using Gemini CLI OAuth tokens",
-                    style("✓").green().bold()
-                );
+                println!("  {} {}", style("✓").green().bold(), t!("gemini-cli-using"));
                 String::new() // Empty key = will use CLI tokens
             } else {
-                print_bullet("Get your API key at: https://aistudio.google.com/app/apikey");
+                print_bullet(&t!("gemini-key-url-info"));
                 Input::new()
-                    .with_prompt("  Paste your Gemini API key")
+                    .with_prompt(format!("  {}", t!("gemini-key-prompt")))
                     .allow_empty(true)
                     .interact_text()?
             }
         } else if std::env::var("GEMINI_API_KEY").is_ok() {
             print_bullet(&format!(
-                "{} GEMINI_API_KEY environment variable detected!",
-                style("✓").green().bold()
+                "{} {}",
+                style("✓").green().bold(),
+                t!("gemini-env-detected")
             ));
             String::new()
         } else {
-            print_bullet("Get your API key at: https://aistudio.google.com/app/apikey");
-            print_bullet("Or run `gemini` CLI to authenticate (tokens will be reused).");
+            print_bullet(&t!("gemini-key-url-info"));
+            print_bullet(&t!("gemini-cli-fallback-info"));
             println!();
 
             Input::new()
-                .with_prompt("  Paste your Gemini API key (or press Enter to skip)")
+                .with_prompt(format!("  {}", t!("gemini-key-prompt-optional")))
                 .allow_empty(true)
                 .interact_text()?
         }
     } else if canonical_provider_name(provider_name) == "anthropic" {
         if std::env::var("ANTHROPIC_OAUTH_TOKEN").is_ok() {
             print_bullet(&format!(
-                "{} ANTHROPIC_OAUTH_TOKEN environment variable detected!",
-                style("✓").green().bold()
+                "{} {}",
+                style("✓").green().bold(),
+                t!("anthropic-oauth-detected")
             ));
             String::new()
         } else if std::env::var("ANTHROPIC_API_KEY").is_ok() {
             print_bullet(&format!(
-                "{} ANTHROPIC_API_KEY environment variable detected!",
-                style("✓").green().bold()
+                "{} {}",
+                style("✓").green().bold(),
+                t!("anthropic-key-detected")
             ));
             String::new()
         } else {
-            print_bullet(&format!(
-                "Get your API key at: {}",
-                style("https://console.anthropic.com/settings/keys")
+            print_bullet(&t!(
+                "anthropic-key-url-info",
+                url = style("https://console.anthropic.com/settings/keys")
                     .cyan()
                     .underlined()
+                    .to_string()
             ));
-            print_bullet("Or run `claude setup-token` to get an OAuth setup-token.");
+            print_bullet(&t!("anthropic-setup-token-info"));
             println!();
 
             let key: String = Input::new()
-                .with_prompt("  Paste your API key or setup-token (or press Enter to skip)")
+                .with_prompt(format!("  {}", t!("anthropic-key-prompt")))
                 .allow_empty(true)
                 .interact_text()?;
 
             if key.is_empty() {
-                print_bullet(&format!(
-                    "Skipped. Set {} or {} or edit config.toml later.",
-                    style("ANTHROPIC_API_KEY").yellow(),
-                    style("ANTHROPIC_OAUTH_TOKEN").yellow()
+                print_bullet(&t!(
+                    "anthropic-skipped",
+                    env_oauth = style("ANTHROPIC_OAUTH_TOKEN").yellow().to_string(),
+                    env_key = style("ANTHROPIC_API_KEY").yellow().to_string()
                 ));
             }
 
@@ -2893,32 +2961,27 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
     } else if canonical_provider_name(provider_name) == "qwen-code" {
         if std::env::var("QWEN_OAUTH_TOKEN").is_ok() {
             print_bullet(&format!(
-                "{} QWEN_OAUTH_TOKEN environment variable detected!",
-                style("✓").green().bold()
+                "{} {}",
+                style("✓").green().bold(),
+                t!("qwen-oauth-detected")
             ));
             "qwen-oauth".to_string()
         } else {
-            print_bullet(
-                "Qwen Code OAuth credentials are usually stored in ~/.qwen/oauth_creds.json.",
-            );
-            print_bullet(
-                "Run `qwen` once and complete OAuth login to populate cached credentials.",
-            );
-            print_bullet("You can also set QWEN_OAUTH_TOKEN directly.");
+            print_bullet(&t!("qwen-oauth-creds-info"));
+            print_bullet(&t!("qwen-oauth-run-cli"));
+            print_bullet(&t!("qwen-oauth-token-info"));
             println!();
 
             let key: String = Input::new()
-                .with_prompt(
-                    "  Paste your Qwen OAuth token (or press Enter to auto-detect cached OAuth)",
-                )
+                .with_prompt(format!("  {}", t!("qwen-oauth-prompt")))
                 .allow_empty(true)
                 .interact_text()?;
 
             if key.trim().is_empty() {
-                print_bullet(&format!(
-                    "Using OAuth auto-detection. Set {} and optional {} if needed.",
-                    style("QWEN_OAUTH_TOKEN").yellow(),
-                    style("QWEN_OAUTH_RESOURCE_URL").yellow()
+                print_bullet(&t!(
+                    "qwen-oauth-skipped",
+                    env_oauth = style("QWEN_OAUTH_TOKEN").yellow().to_string(),
+                    env_key = style("QWEN_OAUTH_RESOURCE_URL").yellow().to_string()
                 ));
                 "qwen-oauth".to_string()
             } else {
@@ -2970,44 +3033,44 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         println!();
         if matches!(provider_name, "bedrock" | "aws-bedrock") {
             // Bedrock uses AWS AKSK, not a single API key.
-            print_bullet("Bedrock uses AWS credentials (not a single API key).");
-            print_bullet(&format!(
-                "Set {} and {} environment variables.",
-                style("AWS_ACCESS_KEY_ID").yellow(),
-                style("AWS_SECRET_ACCESS_KEY").yellow(),
+            print_bullet(&t!("bedrock-info-1"));
+            print_bullet(&t!(
+                "bedrock-info-2",
+                env_access = style("AWS_ACCESS_KEY_ID").yellow().to_string(),
+                env_secret = style("AWS_SECRET_ACCESS_KEY").yellow().to_string()
             ));
-            print_bullet(&format!(
-                "Optionally set {} for the region (default: us-east-1).",
-                style("AWS_REGION").yellow(),
+            print_bullet(&t!(
+                "bedrock-region-info",
+                env_region = style("AWS_REGION").yellow().to_string()
             ));
             if !key_url.is_empty() {
-                print_bullet(&format!(
-                    "Manage IAM credentials at: {}",
-                    style(key_url).cyan().underlined()
+                print_bullet(&t!(
+                    "bedrock-iam-url",
+                    url = style(key_url).cyan().underlined().to_string()
                 ));
             }
             println!();
             String::new()
         } else {
             if !key_url.is_empty() {
-                print_bullet(&format!(
-                    "Get your API key at: {}",
-                    style(key_url).cyan().underlined()
+                print_bullet(&t!(
+                    "provider-key-url-info",
+                    url = style(key_url).cyan().underlined().to_string()
                 ));
             }
-            print_bullet("You can also set it later via env var or config file.");
+            print_bullet(&t!("provider-key-config-info"));
             println!();
 
             let key: String = Input::new()
-                .with_prompt("  Paste your API key (or press Enter to skip)")
+                .with_prompt(format!("  {}", t!("provider-api-key-prompt")))
                 .allow_empty(true)
                 .interact_text()?;
 
             if key.is_empty() {
                 let env_var = provider_env_var(provider_name);
-                print_bullet(&format!(
-                    "Skipped. Set {} or edit config.toml later.",
-                    style(env_var).yellow()
+                print_bullet(&t!(
+                    "provider-key-skipped",
+                    env_var = style(env_var).yellow().to_string()
                 ));
             }
 
@@ -3037,9 +3100,9 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                     .is_some_and(|value| !value.trim().is_empty()));
 
         if canonical_provider == "ollama" && ollama_remote && !has_api_key {
-            print_bullet(&format!(
-                "Remote Ollama live-model refresh needs an API key ({}); using curated models.",
-                style("OLLAMA_API_KEY").yellow()
+            print_bullet(&t!(
+                "model-needs-key-fallback",
+                env_var = style("OLLAMA_API_KEY").yellow().to_string()
             ));
         }
 
@@ -3049,9 +3112,10 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                     .await?
             {
                 let shown_count = cached.models.len().min(LIVE_MODEL_MAX_OPTIONS);
-                print_bullet(&format!(
-                    "Found cached models ({shown_count}) updated {} ago.",
-                    humanize_age(cached.age_secs)
+                print_bullet(&t!(
+                    "model-cache-found",
+                    count = shown_count,
+                    age = humanize_age(cached.age_secs)
                 ));
 
                 live_options = Some(build_model_options(
@@ -3064,12 +3128,17 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                 ));
             }
 
+            let refresh_prompt = t!("model-refresh-prompt");
+            let fetch_prompt = t!("model-fetch-prompt");
             let should_fetch_now = Confirm::new()
-                .with_prompt(if live_options.is_some() {
-                    "  Refresh models from provider now?"
-                } else {
-                    "  Fetch latest models from provider now?"
-                })
+                .with_prompt(format!(
+                    "  {}",
+                    if live_options.is_some() {
+                        refresh_prompt.as_str()
+                    } else {
+                        fetch_prompt.as_str()
+                    }
+                ))
                 .default(live_options.is_none())
                 .interact()?;
 
@@ -3097,22 +3166,24 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                             .collect();
 
                         if shown_count < fetched_count {
-                            print_bullet(&format!(
-                                "Fetched {fetched_count} models. Showing first {shown_count}."
+                            print_bullet(&t!(
+                                "model-fetched-truncated",
+                                total = fetched_count,
+                                shown = shown_count
                             ));
                         } else {
-                            print_bullet(&format!("Fetched {shown_count} live models."));
+                            print_bullet(&t!("model-fetched-all", count = shown_count));
                         }
 
                         live_options = Some(build_model_options(shown_models, "live"));
                     }
                     Ok(_) => {
-                        print_bullet("Provider returned no models; using curated list.");
+                        print_bullet(&t!("model-no-models-returned"));
                     }
                     Err(error) => {
-                        print_bullet(&format!(
-                            "Live fetch failed ({}); using cached/curated list.",
-                            style(error.to_string()).yellow()
+                        print_bullet(&t!(
+                            "model-fetch-failed",
+                            err = style(error.to_string()).yellow().to_string()
                         ));
 
                         if live_options.is_none() {
@@ -3120,9 +3191,9 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                                 load_any_cached_models_for_provider(workspace_dir, provider_name)
                                     .await?
                             {
-                                print_bullet(&format!(
-                                    "Loaded stale cache from {} ago.",
-                                    humanize_age(stale.age_secs)
+                                print_bullet(&t!(
+                                    "model-cache-stale",
+                                    age = humanize_age(stale.age_secs)
                                 ));
 
                                 live_options = Some(build_model_options(
@@ -3139,8 +3210,8 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
                 }
             }
         } else {
-            print_bullet("No API key detected, so using curated model list.");
-            print_bullet("Tip: add an API key and rerun onboarding to fetch live models.");
+            print_bullet(&t!("model-no-key-curated"));
+            print_bullet(&t!("model-tip-add-key"));
         }
     }
 
@@ -3151,7 +3222,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         ];
 
         let source_idx = Select::new()
-            .with_prompt("  Model source")
+            .with_prompt(format!("  {}", t!("model-source-prompt")))
             .items(&source_options)
             .default(0)
             .interact()?;
@@ -3179,7 +3250,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
         .collect();
 
     let model_idx = Select::new()
-        .with_prompt("  Select your default model")
+        .with_prompt(format!("  {}", t!("provider-select-model")))
         .items(&model_labels)
         .default(0)
         .interact()?;
@@ -3187,7 +3258,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
     let selected_model = model_options[model_idx].0.clone();
     let model = if selected_model == CUSTOM_MODEL_SENTINEL {
         Input::new()
-            .with_prompt("  Enter custom model ID")
+            .with_prompt(format!("  {}", t!("provider-enter-custom-model")))
             .default(default_model_for_provider(provider_name))
             .interact_text()?
     } else {
@@ -3286,18 +3357,18 @@ fn provider_supports_device_flow(provider_name: &str) -> bool {
 // ── Step 5: Tool Mode & Security ────────────────────────────────
 
 fn setup_tool_mode() -> Result<(ComposioConfig, SecretsConfig)> {
-    print_bullet("Choose how Construct connects to external apps.");
-    print_bullet("You can always change this later in config.toml.");
+    print_bullet(&t!("tool-mode-info-1"));
+    print_bullet(&t!("tool-mode-info-2"));
     println!();
 
-    let options = vec![
+    let options = [
         "Sovereign (local only) — you manage API keys, full privacy (default)",
         "Composio (managed OAuth) — 1000+ apps via OAuth, no raw keys shared",
     ];
 
     let choice = Select::new()
-        .with_prompt("  Select tool mode")
-        .items(&options)
+        .with_prompt(format!("  {}", t!("tool-mode-select")))
+        .items(options)
         .default(0)
         .interact()?;
 
@@ -3305,29 +3376,29 @@ fn setup_tool_mode() -> Result<(ComposioConfig, SecretsConfig)> {
         println!();
         println!(
             "  {} {}",
-            style("Composio Setup").white().bold(),
-            style("— 1000+ OAuth integrations (Gmail, Notion, GitHub, Slack, ...)").dim()
+            style(t!("composio-title")).white().bold(),
+            style(t!("composio-subtitle")).dim()
         );
-        print_bullet("Get your API key at: https://app.composio.dev/settings");
-        print_bullet("Construct uses Composio as a tool — your core agent stays local.");
+        print_bullet(&t!("composio-key-url"));
+        print_bullet(&t!("composio-info"));
         println!();
 
         let api_key: String = Input::new()
-            .with_prompt("  Composio API key (or Enter to skip)")
+            .with_prompt(format!("  {}", t!("composio-key-prompt")))
             .allow_empty(true)
             .interact_text()?;
 
         if api_key.trim().is_empty() {
-            println!(
-                "  {} Skipped — set composio.api_key in config.toml later",
-                style("→").dim()
-            );
+            println!("  {} {}", style("→").dim(), t!("composio-skipped"));
             ComposioConfig::default()
         } else {
             println!(
-                "  {} Composio: {} (1000+ OAuth tools available)",
+                "  {} {}",
                 style("✓").green().bold(),
-                style("enabled").green()
+                t!(
+                    "composio-confirmed",
+                    value = style("enabled").green().to_string()
+                )
             );
             ComposioConfig {
                 enabled: true,
@@ -3346,11 +3417,11 @@ fn setup_tool_mode() -> Result<(ComposioConfig, SecretsConfig)> {
 
     // ── Encrypted secrets ──
     println!();
-    print_bullet("Construct can encrypt API keys stored in config.toml.");
-    print_bullet("A local key file protects against plaintext exposure and accidental leaks.");
+    print_bullet(&t!("secrets-info-1"));
+    print_bullet(&t!("secrets-info-2"));
 
     let encrypt = Confirm::new()
-        .with_prompt("  Enable encrypted secret storage?")
+        .with_prompt(format!("  {}", t!("secrets-encrypt")))
         .default(true)
         .interact()?;
 
@@ -3358,15 +3429,21 @@ fn setup_tool_mode() -> Result<(ComposioConfig, SecretsConfig)> {
 
     if encrypt {
         println!(
-            "  {} Secrets: {} — keys encrypted with local key file",
+            "  {} {}",
             style("✓").green().bold(),
-            style("encrypted").green()
+            t!(
+                "secrets-status-encrypted",
+                value = style("encrypted").green().to_string()
+            )
         );
     } else {
         println!(
-            "  {} Secrets: {} — keys stored as plaintext (not recommended)",
+            "  {} {}",
             style("✓").green().bold(),
-            style("plaintext").yellow()
+            t!(
+                "secrets-status-plaintext",
+                value = style("plaintext").yellow().to_string()
+            )
         );
     }
 
@@ -3376,8 +3453,8 @@ fn setup_tool_mode() -> Result<(ComposioConfig, SecretsConfig)> {
 // ── Step 6: Hardware (Physical World) ───────────────────────────
 
 fn setup_hardware() -> Result<HardwareConfig> {
-    print_bullet("Construct can talk to physical hardware (LEDs, sensors, motors).");
-    print_bullet("Scanning for connected devices...");
+    print_bullet(&t!("hardware-info-1"));
+    print_bullet(&t!("hardware-scanning"));
     println!();
 
     // ── Auto-discovery ──
@@ -3387,18 +3464,18 @@ fn setup_hardware() -> Result<HardwareConfig> {
         println!(
             "  {} {}",
             style("ℹ").dim(),
-            style("No hardware devices detected on this system.").dim()
+            style(t!("hardware-no-devices")).dim()
         );
         println!(
             "  {} {}",
             style("ℹ").dim(),
-            style("You can enable hardware later in config.toml under [hardware].").dim()
+            style(t!("hardware-enable-later")).dim()
         );
     } else {
         println!(
-            "  {} {} device(s) found:",
+            "  {} {}",
             style("✓").green().bold(),
-            devices.len()
+            t!("hardware-devices-found", count = devices.len())
         );
         for device in &devices {
             let detail = device
@@ -3423,18 +3500,22 @@ fn setup_hardware() -> Result<HardwareConfig> {
     }
     println!();
 
-    let options = vec![
-        "🚀 Native — direct GPIO on this Linux board (Raspberry Pi, Orange Pi, etc.)",
-        "🔌 Tethered — control an Arduino/ESP32/Nucleo plugged into USB",
-        "🔬 Debug Probe — flash/read MCUs via SWD/JTAG (probe-rs)",
-        "☁️  Software Only — no hardware access (default)",
+    let opt_native = t!("hardware-mode-native");
+    let opt_tethered = t!("hardware-mode-tethered");
+    let opt_probe = t!("hardware-mode-debug-probe");
+    let opt_software = t!("hardware-mode-software");
+    let options = [
+        opt_native.as_str(),
+        opt_tethered.as_str(),
+        opt_probe.as_str(),
+        opt_software.as_str(),
     ];
 
     let recommended = hardware::recommended_wizard_default(&devices);
 
     let choice = Select::new()
-        .with_prompt("  How should Construct interact with the physical world?")
-        .items(&options)
+        .with_prompt(format!("  {}", t!("hardware-prompt")))
+        .items(options)
         .default(recommended)
         .interact()?;
 
@@ -3460,7 +3541,7 @@ fn setup_hardware() -> Result<HardwareConfig> {
                 .collect();
 
             let port_idx = Select::new()
-                .with_prompt("  Multiple serial devices found — select one")
+                .with_prompt(format!("  {}", t!("hardware-multiple-serial")))
                 .items(&port_labels)
                 .default(0)
                 .interact()?;
@@ -3469,23 +3550,26 @@ fn setup_hardware() -> Result<HardwareConfig> {
         } else if serial_devices.is_empty() {
             // User chose serial but no device discovered — ask for manual path
             let manual_port: String = Input::new()
-                .with_prompt("  Serial port path (e.g. /dev/ttyUSB0)")
-                .default("/dev/ttyUSB0")
+                .with_prompt(format!("  {}", t!("hardware-serial-port-prompt")))
+                .default("/dev/ttyUSB0".to_string())
                 .interact_text()?;
             hw_config.serial_port = Some(manual_port);
         }
 
         // Baud rate
-        let baud_options = vec![
-            "115200 (default, recommended)",
-            "9600 (legacy Arduino)",
+        let baud_default = t!("hardware-baud-default");
+        let baud_legacy = t!("hardware-baud-legacy");
+        let baud_custom = t!("hardware-baud-custom");
+        let baud_options = [
+            baud_default.as_str(),
+            baud_legacy.as_str(),
             "57600",
             "230400",
-            "Custom",
+            baud_custom.as_str(),
         ];
         let baud_idx = Select::new()
-            .with_prompt("  Serial baud rate")
-            .items(&baud_options)
+            .with_prompt(format!("  {}", t!("hardware-baud-rate-prompt")))
+            .items(baud_options)
             .default(0)
             .interact()?;
 
@@ -3495,8 +3579,8 @@ fn setup_hardware() -> Result<HardwareConfig> {
             3 => 230_400,
             4 => {
                 let custom: String = Input::new()
-                    .with_prompt("  Custom baud rate")
-                    .default("115200")
+                    .with_prompt(format!("  {}", t!("hardware-baud-custom-prompt")))
+                    .default("115200".to_string())
                     .interact_text()?;
                 custom.parse::<u32>().unwrap_or(115_200)
             }
@@ -3509,8 +3593,8 @@ fn setup_hardware() -> Result<HardwareConfig> {
         && hw_config.probe_target.is_none()
     {
         let target: String = Input::new()
-            .with_prompt("  Target MCU chip (e.g. STM32F411CEUx, nRF52840_xxAA)")
-            .default("STM32F411CEUx")
+            .with_prompt(format!("  {}", t!("hardware-mcu-prompt")))
+            .default("STM32F411CEUx".to_string())
             .interact_text()?;
         hw_config.probe_target = Some(target);
     }
@@ -3518,7 +3602,7 @@ fn setup_hardware() -> Result<HardwareConfig> {
     // ── Datasheet RAG ──
     if hw_config.enabled {
         let datasheets = Confirm::new()
-            .with_prompt("  Enable datasheet RAG? (index PDF schematics for AI pin lookups)")
+            .with_prompt(format!("  {}", t!("hardware-rag-prompt")))
             .default(true)
             .interact()?;
         hw_config.workspace_datasheets = datasheets;
@@ -3540,21 +3624,28 @@ fn setup_hardware() -> Result<HardwareConfig> {
             hardware::HardwareTransport::None => "Software Only".to_string(),
         };
 
+        let rag_state = if hw_config.workspace_datasheets {
+            style("on").green().to_string()
+        } else {
+            style("off").dim().to_string()
+        };
         println!(
-            "  {} Hardware: {} | datasheets: {}",
+            "  {} {}",
             style("✓").green().bold(),
-            style(&transport_label).green(),
-            if hw_config.workspace_datasheets {
-                style("on").green().to_string()
-            } else {
-                style("off").dim().to_string()
-            }
+            t!(
+                "hardware-status-with-rag",
+                mode = style(&transport_label).green().to_string(),
+                rag = rag_state
+            )
         );
     } else {
         println!(
-            "  {} Hardware: {}",
+            "  {} {}",
             style("✓").green().bold(),
-            style("disabled (software only)").dim()
+            t!(
+                "hardware-status",
+                mode = style("disabled (software only)").dim().to_string()
+            )
         );
     }
 
@@ -3564,69 +3655,96 @@ fn setup_hardware() -> Result<HardwareConfig> {
 // ── Step 6: Project Context ─────────────────────────────────────
 
 fn setup_project_context() -> Result<ProjectContext> {
-    print_bullet("Let's personalize your agent. You can always update these later.");
-    print_bullet("Press Enter to accept defaults.");
+    print_bullet(&t!("ctx-info-personalize"));
+    print_bullet(&t!("ctx-info-defaults"));
     println!();
 
     let user_name: String = Input::new()
-        .with_prompt("  Your name")
-        .default("User")
+        .with_prompt(format!("  {}", t!("ctx-your-name")))
+        .default("User".to_string())
         .interact_text()?;
 
-    let tz_options = vec![
-        "US/Eastern (EST/EDT)",
-        "US/Central (CST/CDT)",
-        "US/Mountain (MST/MDT)",
-        "US/Pacific (PST/PDT)",
-        "Europe/London (GMT/BST)",
-        "Europe/Berlin (CET/CEST)",
-        "Asia/Tokyo (JST)",
+    let tz_us_eastern = t!("ctx-tz-us-eastern");
+    let tz_us_central = t!("ctx-tz-us-central");
+    let tz_us_mountain = t!("ctx-tz-us-mountain");
+    let tz_us_pacific = t!("ctx-tz-us-pacific");
+    let tz_eu_london = t!("ctx-tz-eu-london");
+    let tz_eu_berlin = t!("ctx-tz-eu-berlin");
+    let tz_asia_tokyo = t!("ctx-tz-asia-tokyo");
+    let tz_utc = t!("ctx-tz-utc");
+    let tz_other = t!("ctx-tz-other");
+    let tz_options = [
+        tz_us_eastern.as_str(),
+        tz_us_central.as_str(),
+        tz_us_mountain.as_str(),
+        tz_us_pacific.as_str(),
+        tz_eu_london.as_str(),
+        tz_eu_berlin.as_str(),
+        tz_asia_tokyo.as_str(),
+        tz_utc.as_str(),
+        tz_other.as_str(),
+    ];
+
+    // IANA tz names extracted from the labels — always English regardless of UI lang.
+    let tz_canonical = [
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Los_Angeles",
+        "Europe/London",
+        "Europe/Berlin",
+        "Asia/Tokyo",
         "UTC",
-        "Other (type manually)",
+        "", // Other — handled below
     ];
 
     let tz_idx = Select::new()
-        .with_prompt("  Your timezone")
-        .items(&tz_options)
+        .with_prompt(format!("  {}", t!("ctx-timezone")))
+        .items(tz_options)
         .default(0)
         .interact()?;
 
     let timezone = if tz_idx == tz_options.len() - 1 {
         Input::new()
-            .with_prompt("  Enter timezone (e.g. America/New_York)")
-            .default("UTC")
+            .with_prompt(format!("  {}", t!("ctx-timezone-enter")))
+            .default("UTC".to_string())
             .interact_text()?
     } else {
-        // Extract the short label before the parenthetical
-        tz_options[tz_idx]
-            .split('(')
-            .next()
-            .unwrap_or("UTC")
-            .trim()
-            .to_string()
+        tz_canonical[tz_idx].to_string()
     };
 
     let agent_name: String = Input::new()
-        .with_prompt("  Agent name")
-        .default("Construct")
+        .with_prompt(format!("  {}", t!("ctx-agent-name")))
+        .default("Construct".to_string())
         .interact_text()?;
 
-    let style_options = vec![
-        "Direct & concise — skip pleasantries, get to the point",
-        "Friendly & casual — warm, human, and helpful",
-        "Professional & polished — calm, confident, and clear",
-        "Expressive & playful — more personality + natural emojis",
-        "Technical & detailed — thorough explanations, code-first",
-        "Balanced — adapt to the situation",
-        "Custom — write your own style guide",
+    let style_direct = t!("ctx-style-direct");
+    let style_friendly = t!("ctx-style-friendly");
+    let style_professional = t!("ctx-style-professional");
+    let style_expressive = t!("ctx-style-expressive");
+    let style_technical = t!("ctx-style-technical");
+    let style_balanced = t!("ctx-style-balanced");
+    let style_custom_lbl = t!("ctx-style-custom");
+    let style_options = [
+        style_direct.as_str(),
+        style_friendly.as_str(),
+        style_professional.as_str(),
+        style_expressive.as_str(),
+        style_technical.as_str(),
+        style_balanced.as_str(),
+        style_custom_lbl.as_str(),
     ];
 
     let style_idx = Select::new()
-        .with_prompt("  Communication style")
-        .items(&style_options)
+        .with_prompt(format!("  {}", t!("ctx-comm-style")))
+        .items(style_options)
         .default(1)
         .interact()?;
 
+    // The persona descriptions baked into the workspace are intentionally
+    // English regardless of UI language — they're prompts the agent receives,
+    // not user-facing UI. Localizing them would change agent behavior, which
+    // is out of scope for the wizard i18n pass.
     let communication_style = match style_idx {
         0 => "Be direct and concise. Skip pleasantries. Get to the point.".to_string(),
         1 => "Be friendly, human, and conversational. Show warmth and empathy while staying efficient. Use natural contractions.".to_string(),
@@ -3635,9 +3753,9 @@ fn setup_project_context() -> Result<ProjectContext> {
         4 => "Be technical and detailed. Thorough explanations, code-first.".to_string(),
         5 => "Adapt to the situation. Default to warm and clear communication; be concise when needed, thorough when it matters.".to_string(),
         _ => Input::new()
-            .with_prompt("  Custom communication style")
+            .with_prompt(format!("  {}", t!("ctx-comm-style-custom")))
             .default(
-                "Be warm, natural, and clear. Use occasional relevant emojis (1-2 max) and avoid robotic phrasing.",
+                "Be warm, natural, and clear. Use occasional relevant emojis (1-2 max) and avoid robotic phrasing.".to_string(),
             )
             .interact_text()?,
     };
@@ -5566,30 +5684,35 @@ fn setup_tunnel() -> Result<crate::config::TunnelConfig> {
         TunnelConfig,
     };
 
-    print_bullet("A tunnel exposes your gateway to the internet securely.");
-    print_bullet("Skip this if you only use CLI or local channels.");
+    print_bullet(&t!("tunnel-info-1"));
+    print_bullet(&t!("tunnel-info-2"));
     println!();
 
-    let options = vec![
-        "Skip — local only (default)",
-        "Cloudflare Tunnel — Zero Trust, free tier",
-        "Tailscale — private tailnet or public Funnel",
-        "ngrok — instant public URLs",
-        "Custom — bring your own (bore, frp, ssh, etc.)",
+    let opt_skip = t!("tunnel-option-skip");
+    let opt_cf = t!("tunnel-option-cloudflare");
+    let opt_ts = t!("tunnel-option-tailscale");
+    let opt_ng = t!("tunnel-option-ngrok");
+    let opt_custom = t!("tunnel-option-custom");
+    let options = [
+        opt_skip.as_str(),
+        opt_cf.as_str(),
+        opt_ts.as_str(),
+        opt_ng.as_str(),
+        opt_custom.as_str(),
     ];
 
     let choice = Select::new()
-        .with_prompt("  Select tunnel provider")
-        .items(&options)
+        .with_prompt(format!("  {}", t!("tunnel-select")))
+        .items(options)
         .default(0)
         .interact()?;
 
     let config = match choice {
         1 => {
             println!();
-            print_bullet("Get your tunnel token from the Cloudflare Zero Trust dashboard.");
+            print_bullet(&t!("cloudflare-token-info"));
             let tunnel_value: String = Input::new()
-                .with_prompt("  Cloudflare tunnel token")
+                .with_prompt(format!("  {}", t!("cloudflare-token-prompt")))
                 .interact_text()?;
             if tunnel_value.trim().is_empty() {
                 println!("  {} Skipped", style("→").dim());
@@ -5611,9 +5734,9 @@ fn setup_tunnel() -> Result<crate::config::TunnelConfig> {
         }
         2 => {
             println!();
-            print_bullet("Tailscale must be installed and authenticated (tailscale up).");
+            print_bullet(&t!("tailscale-info"));
             let funnel = Confirm::new()
-                .with_prompt("  Use Funnel (public internet)? No = tailnet only")
+                .with_prompt(format!("  {}", t!("tailscale-funnel-prompt")))
                 .default(false)
                 .interact()?;
             println!(
@@ -5637,18 +5760,16 @@ fn setup_tunnel() -> Result<crate::config::TunnelConfig> {
         }
         3 => {
             println!();
-            print_bullet(
-                "Get your auth token at https://dashboard.ngrok.com/get-started/your-authtoken",
-            );
+            print_bullet(&t!("ngrok-token-info"));
             let auth_token: String = Input::new()
-                .with_prompt("  ngrok auth token")
+                .with_prompt(format!("  {}", t!("ngrok-token-prompt")))
                 .interact_text()?;
             if auth_token.trim().is_empty() {
                 println!("  {} Skipped", style("→").dim());
                 TunnelConfig::default()
             } else {
                 let domain: String = Input::new()
-                    .with_prompt("  Custom domain (optional, Enter to skip)")
+                    .with_prompt(format!("  {}", t!("ngrok-domain-prompt")))
                     .allow_empty(true)
                     .interact_text()?;
                 println!(
@@ -5672,11 +5793,11 @@ fn setup_tunnel() -> Result<crate::config::TunnelConfig> {
         }
         4 => {
             println!();
-            print_bullet("Enter the command to start your tunnel.");
-            print_bullet("Use {port} and {host} as placeholders.");
-            print_bullet("Example: bore local {port} --to bore.pub");
+            print_bullet(&t!("custom-tunnel-info-1"));
+            print_bullet(&t!("custom-tunnel-info-2"));
+            print_bullet(&t!("custom-tunnel-info-3"));
             let cmd: String = Input::new()
-                .with_prompt("  Start command")
+                .with_prompt(format!("  {}", t!("custom-tunnel-cmd-prompt")))
                 .interact_text()?;
             if cmd.trim().is_empty() {
                 println!("  {} Skipped", style("→").dim());
