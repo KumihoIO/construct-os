@@ -1437,6 +1437,28 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             Duration::from_secs(60),
         ));
 
+    // Chat attachment uploads need their own body limit — the global
+    // `MAX_BODY_SIZE` (64 KiB) caps small JSON payloads but the
+    // attachment endpoint accepts files up to 25 MiB. Built as a
+    // separate router that gets merged AFTER the global limit layer
+    // so this larger cap takes effect on the upload route only.
+    // The handler itself enforces the 25 MiB cap and short-circuits
+    // larger payloads with 413 so this layer is just the transport
+    // floor; raising it any higher is unnecessary and would weaken
+    // backpressure under load.
+    const ATTACHMENT_MAX_BODY: usize = 25 * 1024 * 1024;
+    let attachments_router = Router::new()
+        .route(
+            "/api/sessions/{session_id}/attachments",
+            post(api_attachments::handle_upload),
+        )
+        .with_state(state.clone())
+        .layer(RequestBodyLimitLayer::new(ATTACHMENT_MAX_BODY))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(120),
+        ));
+
     // Build router with middleware
     let inner = Router::new()
         // ── Admin routes (for CLI management) ──
@@ -1552,11 +1574,6 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/api/kumiho/{*path}", get(api_kumiho_proxy::handle_kumiho_proxy))
         // ── Artifact body (serve local file bytes referenced by Kumiho) ──
         .route("/api/artifact-body", get(api_artifact_body::handle_artifact_body))
-        // ── Chat attachment uploads (Operator chat composer) ──
-        .route(
-            "/api/sessions/{session_id}/attachments",
-            post(api_attachments::handle_upload),
-        )
         // ── Pairing + Device management API ──
         .route("/api/pairing/initiate", post(api_pairing::initiate_pairing))
         .route("/api/pair", post(api_pairing::submit_pairing_enhanced))
@@ -1650,6 +1667,10 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
     // Merge memory graph router (has its own 60s timeout, outside the global 30s)
     let inner = inner.merge(memory_graph_router);
+
+    // Merge attachments router (has its own 25 MiB body limit + 120s timeout,
+    // outside the global 64 KiB / 30s caps).
+    let inner = inner.merge(attachments_router);
 
     // Nest under path prefix when configured (axum strips prefix before routing).
     // nest() at "/prefix" handles both "/prefix" and "/prefix/*" but not "/prefix/"
