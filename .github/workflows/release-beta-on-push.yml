@@ -608,12 +608,10 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "${IMG}@${DIGEST_DEBIAN}"
 
-  # ── Post-publish: sync marketplace templates (Coolify, Dokploy, EasyPanel) ──
-  marketplace:
-    name: Sync Marketplace Templates
-    needs: [version, docker]
-    if: ${{ !cancelled() && needs.docker.result == 'success' }}
-    uses: ./.github/workflows/sync-marketplace-templates.yml
-    with:
-      release_tag: ${{ needs.version.outputs.tag }}
-    secrets: inherit
+  # NOTE: marketplace template syncing (Coolify, Dokploy, EasyPanel) used to
+  # fire here on every beta push, but that produced ~10 PRs/day which (a)
+  # tripped Coolify's `max-daily-forks: 7` anti-spam rule in
+  # peakoss/anti-slop and (b) flooded maintainers with version churn that
+  # never reached the marketplace anyway. Marketplace sync now runs only
+  # on stable tags via release-stable-manual.yml. See PR fixing zero-merge
+  # rate of external template PRs.
