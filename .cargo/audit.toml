@@ -19,6 +19,7 @@ ignore = [
     "RUSTSEC-2026-0094",
     "RUSTSEC-2026-0095",
     "RUSTSEC-2026-0096",
+    "RUSTSEC-2026-0114",
     # instant crate unmaintained — transitive dep via nostr; no upstream fix
     "RUSTSEC-2024-0384",
 ]
