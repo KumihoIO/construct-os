@@ -392,6 +392,13 @@ jobs:
 
   sync-easypanel:
     name: PR to EasyPanel
+    # DISABLED 2026-05-01: EasyPanel maintainer (@Ahson-Shaikh) explicitly
+    # asked us to stop opening automated PRs ("That's so annoying to keep
+    # creating PR and not following the instructions. Please stop it." —
+    # easypanel-io/templates#1367). Re-enable only after explicit
+    # coordination with their maintainers about an acceptable cadence /
+    # format. Job logic preserved below for that future restart.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
