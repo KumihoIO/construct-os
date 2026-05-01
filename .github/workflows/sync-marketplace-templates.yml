@@ -161,7 +161,7 @@ jobs:
 
           # See preamble: this email MUST match the MARKETPLACE_PAT account.
           git config user.name "Construct Bot"
-          git config user.email "bot@construct.com"
+          git config user.email "kumihoclouds@gmail.com"
           git commit -m "feat: add/update Construct service template (v${VERSION})"
           git push -u origin "$BRANCH"
 
@@ -359,7 +359,7 @@ jobs:
           git diff --cached --quiet && echo "No changes" && exit 0
 
           git config user.name "Construct Bot"
-          git config user.email "bot@construct.com"
+          git config user.email "kumihoclouds@gmail.com"
           git commit -m "feat: add/update Construct template (v${VERSION})"
           git push -u origin "$BRANCH"
 
@@ -614,7 +614,7 @@ jobs:
           git diff --cached --quiet && echo "No changes" && exit 0
 
           git config user.name "Construct Bot"
-          git config user.email "bot@construct.com"
+          git config user.email "kumihoclouds@gmail.com"
           git commit -m "feat: add/update Construct template (v${VERSION})"
           git push -u origin "$BRANCH"
 
