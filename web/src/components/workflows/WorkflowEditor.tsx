@@ -24,6 +24,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import '@/construct/styles/editor-chrome.css';
 import type { WorkflowDefinition } from '@/types/api';
 // Skills are loaded on-demand via search in TaskSidePanel
 import { taskNodeTypes } from './TaskNode';
@@ -578,7 +579,7 @@ function WorkflowEditorInner({
   const miniMapNodeColor = useCallback(() => 'var(--pc-accent)', []);
 
   return (
-    <div className={containerClassName ?? 'flex flex-col h-[calc(100vh-3.5rem)] animate-fade-in'}>
+    <div className={`editor-chrome ${containerClassName ?? 'flex flex-col h-[calc(100vh-3.5rem)] animate-fade-in'}`}>
       {/* Top bar */}
       <div
         className="flex items-center gap-3 px-5 py-2.5 border-b"
