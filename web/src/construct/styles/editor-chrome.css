@@ -1,5 +1,8 @@
 /* Zion — engineering-deck palette for the workflow editor view.
    Layers on top of the user's global theme, scoped to .editor-chrome.
+   Overrides both --pc-* tokens and the decorative --construct-* tokens
+   (bg, border, text, grid, soft signal chips, selection halo) that
+   drive the editor's top bar, panels, grid, and node chrome.
    Status tokens (--construct-status-*, --construct-signal-live) are
    intentionally NOT overridden — failures, runs, and approvals must
    read at a glance. */
@@ -30,6 +33,23 @@
   --pc-accent-rgb: 200, 122, 60;
 
   --construct-signal-network: #c87a3c;
+
+  /* Decorative --construct-* chrome tokens that drive the editor's
+     actual visual identity (top bar, panels, grid, soft chips, selection halo).
+     Status tokens (--construct-status-*, --construct-signal-live) are
+     intentionally still NOT overridden. */
+  --construct-bg-base: #0e0d0c;
+  --construct-bg-surface: #181715;
+  --construct-bg-elevated: #22201d;
+  --construct-bg-panel-strong: #22201d;
+  --construct-border-soft: rgba(220,200,170,0.06);
+  --construct-border-strong: rgba(220,200,170,0.10);
+  --construct-text-primary: #d6d3cc;
+  --construct-text-secondary: #a8a39a;
+  --construct-text-faint: #4d4945;
+  --construct-grid-line: rgba(220,200,170,0.04);
+  --construct-signal-network-soft: rgba(200,122,60,0.12);
+  --construct-signal-selected: rgba(200,122,60,0.15);
 
   color-scheme: dark;
 }
