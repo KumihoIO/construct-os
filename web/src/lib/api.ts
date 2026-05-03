@@ -34,6 +34,10 @@ import type {
 } from '../types/api';
 import { clearToken, getToken, setToken } from './auth';
 import { apiOrigin, basePath } from './basePath';
+import {
+  EDITOR_SESSION_HEADER,
+  getEditorSessionId,
+} from '../construct/components/workflows/sessionId';
 
 // ---------------------------------------------------------------------------
 // Base fetch wrapper
@@ -670,6 +674,7 @@ export async function createWorkflow(workflow: WorkflowCreateRequest): Promise<W
   return apiFetch<WorkflowDefinition | { workflow: WorkflowDefinition }>('/api/workflows', {
     method: 'POST',
     body: JSON.stringify(workflow),
+    headers: { [EDITOR_SESSION_HEADER]: getEditorSessionId() },
   }).then((data) => unwrapField(data, 'workflow'));
 }
 
@@ -678,6 +683,7 @@ export async function updateWorkflow(workflow: WorkflowUpdateRequest): Promise<W
   return apiFetch<WorkflowDefinition | { workflow: WorkflowDefinition }>(`/api/workflows/${path}`, {
     method: 'PUT',
     body: JSON.stringify(workflow),
+    headers: { [EDITOR_SESSION_HEADER]: getEditorSessionId() },
   }).then((data) => unwrapField(data, 'workflow'));
 }
 

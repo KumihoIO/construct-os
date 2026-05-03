@@ -53,3 +53,15 @@
 
   color-scheme: dark;
 }
+
+/* P1.2 — brief pulse on a node touched by a remote SSE update.
+   Box-shadow only so the underlying gradient/border stay intact. */
+@keyframes step-updated-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--pc-accent-glow), 0 4px 12px rgba(0,0,0,0.3); }
+  40%  { box-shadow: 0 0 0 6px var(--pc-accent-dim),  0 4px 12px rgba(0,0,0,0.3); }
+  100% { box-shadow: 0 0 0 0 transparent,             0 4px 12px rgba(0,0,0,0.3); }
+}
+
+.editor-chrome .step-updated-pulse {
+  animation: step-updated-pulse 1.2s ease-out;
+}
