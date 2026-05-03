@@ -23,6 +23,7 @@ import {
   Crosshair,
   LayoutGrid,
   Plus,
+  Radio,
   X,
   Zap,
 } from 'lucide-react';
@@ -71,6 +72,11 @@ import {
   type AddStepDetail,
   type OpenAgentPickerDetail,
 } from './stepEvents';
+import {
+  useWorkflowEvents,
+  type WorkflowRevisionPublishedEvent,
+} from './useWorkflowEvents';
+import { fetchWorkflowByRevisionKref } from '@/lib/api';
 import '@/construct/styles/editor-chrome.css';
 
 const allNodeTypes = { ...taskNodeTypes, ...gateNodeTypes };
@@ -98,6 +104,26 @@ export default function WorkflowEditor(props: WorkflowEditorProps) {
       <WorkflowEditorInner {...props} />
     </ReactFlowProvider>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Time helpers
+// ---------------------------------------------------------------------------
+
+// Render a recent timestamp (ISO/RFC3339 string) as "just now", "Ns ago",
+// "Nm ago", "Nh ago" or fall back to the raw string. Used by the conflict
+// banner and the "Operator edited" pill — both surface remote events that
+// happened seconds-to-hours ago, never further out.
+function formatRelative(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const seconds = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
 }
 
 // ---------------------------------------------------------------------------
@@ -463,6 +489,54 @@ function WorkflowEditorInner({
     return () => window.removeEventListener(OPEN_AGENT_PICKER_EVENT, handler as EventListener);
   }, []);
 
+  // ── Real-time updates (P1.2) ────────────────────────────────────────────
+  // `lastSyncedYaml` is the round-tripped YAML the editor was last hydrated
+  // from — either the prop on mount or a remote revision applied via SSE.
+  // Comparing the current graph's YAML against it tells us whether the user
+  // has unsaved local edits (the `dirty` flag below).
+  //
+  // We normalize the baseline through a parse → serialize pass so formatting
+  // differences (key ordering, whitespace) don't make the editor look dirty
+  // immediately on mount.
+  const initialYamlRef = useRef<string>('');
+  const [lastSyncedYaml, setLastSyncedYaml] = useState<string>('');
+  // Hydrate the baseline once per workflow load.
+  useEffect(() => {
+    if (!workflow?.definition) {
+      initialYamlRef.current = '';
+      setLastSyncedYaml('');
+      return;
+    }
+    try {
+      const parsed = parseWorkflowYaml(workflow.definition);
+      const meta = parseWorkflowMeta(workflow.definition);
+      const normalized = tasksToYaml(parsed, {
+        ...meta,
+        name: workflow.name,
+        description: workflow.description,
+      });
+      initialYamlRef.current = normalized;
+      setLastSyncedYaml(normalized);
+    } catch {
+      initialYamlRef.current = workflow.definition;
+      setLastSyncedYaml(workflow.definition);
+    }
+  }, [workflow?.kref, workflow?.definition, workflow?.name, workflow?.description]);
+  const [pendingRemoteUpdate, setPendingRemoteUpdate] =
+    useState<WorkflowRevisionPublishedEvent | null>(null);
+  const [remotePill, setRemotePill] = useState<{
+    publishedAt: string;
+    expiresAt: number;
+  } | null>(null);
+
+  // Auto-dismiss the pill after 4s.
+  useEffect(() => {
+    if (!remotePill) return undefined;
+    const remaining = Math.max(0, remotePill.expiresAt - Date.now());
+    const timer = setTimeout(() => setRemotePill(null), remaining);
+    return () => clearTimeout(timer);
+  }, [remotePill]);
+
   // Forward ref so the ⌘I keydown effect (registered before openYamlPanel
   // is declared) can dispatch to the latest callback.
   const openYamlPanelRef = useRef<() => void>(() => {});
@@ -757,6 +831,118 @@ function WorkflowEditorInner({
     }
   };
 
+  // ── Compute current YAML for dirty detection ────────────────────────────
+  // Cheap to recompute (the editor already does this on Save / YAML toggle);
+  // re-running it as a memo only when nodes/edges/meta change avoids stale-
+  // dirty bugs.
+  const currentYaml = useMemo(() => {
+    const tasks = flowToTasks(nodes as Node<TaskNodeData>[], edges);
+    return tasksToYaml(tasks, { ...workflowMeta, name, description });
+  }, [nodes, edges, workflowMeta, name, description]);
+
+  const dirty = useMemo(() => {
+    // No baseline yet (create mode with no edits) — never dirty.
+    if (!lastSyncedYaml && !initialYamlRef.current) return false;
+    return currentYaml !== (lastSyncedYaml || initialYamlRef.current);
+  }, [currentYaml, lastSyncedYaml]);
+
+  // ── Apply a remote revision to the canvas ────────────────────────────────
+  // Fetches the new YAML, replaces the in-memory graph, briefly highlights
+  // changed step IDs, and surfaces the toolbar pill. Used by the SSE handler
+  // (auto-apply path) and the conflict banner's "Apply" button.
+  const applyRemoteRevision = useCallback(
+    async (event: WorkflowRevisionPublishedEvent) => {
+      try {
+        const remote = await fetchWorkflowByRevisionKref(event.revision_kref);
+        const newDefinition = remote.definition ?? '';
+        const newTasks = parseWorkflowYaml(newDefinition);
+        const newMeta = parseWorkflowMeta(newDefinition);
+        const { nodes: rawNodes, edges: newEdges } = tasksToFlow(newTasks);
+        const laidOut = layoutNodes(rawNodes, newEdges);
+
+        // Compute changed step IDs by comparing serialized step blobs.
+        const oldTasks = flowToTasks(nodes as Node<TaskNodeData>[], edges);
+        const oldById = new Map(oldTasks.map((t) => [t.id, JSON.stringify(t)]));
+        const changedIds = new Set<string>();
+        for (const t of newTasks) {
+          const prev = oldById.get(t.id);
+          if (prev === undefined || prev !== JSON.stringify(t)) {
+            changedIds.add(t.id);
+          }
+        }
+
+        // Mark changed nodes; clear after 1.2s.
+        const markedNodes = laidOut.map((n) =>
+          changedIds.has(n.id)
+            ? { ...n, data: { ...(n.data as TaskNodeData), justUpdated: true } }
+            : n,
+        );
+
+        setNodes(markedNodes);
+        setEdges(newEdges);
+        setWorkflowMeta(newMeta);
+        setName(remote.name ?? event.name);
+        setDescription(remote.description ?? '');
+        // Normalize the baseline through the same pipeline the dirty check
+        // uses (parse → tasksToYaml) so a clean apply doesn't immediately
+        // register as "dirty" because of formatting differences.
+        const normalized = tasksToYaml(newTasks, {
+          ...newMeta,
+          name: remote.name ?? event.name,
+          description: remote.description ?? '',
+        });
+        setLastSyncedYaml(normalized);
+        initialYamlRef.current = normalized;
+        taskIdCounter.current = newTasks.length;
+        setPendingRemoteUpdate(null);
+        setRemotePill({
+          publishedAt: event.published_at,
+          expiresAt: Date.now() + 4000,
+        });
+
+        if (changedIds.size > 0) {
+          setTimeout(() => {
+            setNodes((nds) =>
+              nds.map((n) => {
+                const data = n.data as TaskNodeData & { justUpdated?: boolean };
+                if (!data.justUpdated) return n;
+                const { justUpdated: _drop, ...rest } = data;
+                void _drop;
+                return { ...n, data: rest as TaskNodeData };
+              }),
+            );
+          }, 1200);
+        }
+      } catch (err) {
+        // Don't blow up the editor — surface a soft warning. The user can
+        // refresh manually if the auto-apply fails.
+        setWarning(
+          `Couldn't apply remote update: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodes, edges, setNodes, setEdges],
+  );
+
+  // Stable refs so the SSE callback doesn't re-subscribe on every state change.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const applyRef = useRef(applyRemoteRevision);
+  applyRef.current = applyRemoteRevision;
+
+  useWorkflowEvents({
+    workflowKref: workflow?.kref ?? null,
+    onRevisionPublished: useCallback((event) => {
+      if (dirtyRef.current) {
+        // Queue behind a conflict banner — user picks Apply / Keep mine.
+        setPendingRemoteUpdate(event);
+      } else {
+        void applyRef.current(event);
+      }
+    }, []),
+  });
+
   // ── Save ────────────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
     setError(null);
@@ -863,6 +1049,36 @@ function WorkflowEditorInner({
               minWidth: 0,
             }}
           />
+          {remotePill ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 8px',
+                borderRadius: 999,
+                border: '1px solid var(--construct-border-soft)',
+                background: 'var(--construct-signal-network-soft)',
+                color: 'var(--construct-signal-network)',
+                fontSize: 11,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+              title={`Updated at ${remotePill.publishedAt}`}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: 'var(--construct-signal-network)',
+                }}
+              />
+              <Radio size={11} />
+              Operator edited · {formatRelative(remotePill.publishedAt)}
+            </span>
+          ) : null}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -999,6 +1215,56 @@ function WorkflowEditorInner({
           {warning}
         </div>
       )}
+
+      {pendingRemoteUpdate ? (
+        <div
+          className="construct-panel"
+          data-variant="utility"
+          style={{
+            margin: '8px 20px 0',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Radio size={14} style={{ color: 'var(--construct-signal-network)' }} />
+          <span
+            style={{
+              flex: 1,
+              fontSize: 13,
+              color: 'var(--construct-text-primary)',
+              minWidth: 0,
+            }}
+          >
+            Operator updated this workflow
+            {pendingRemoteUpdate.published_at
+              ? ` ${formatRelative(pendingRemoteUpdate.published_at)}`
+              : ''}
+            {' — your edits aren\'t saved yet.'}
+          </span>
+          <button
+            type="button"
+            className="construct-button"
+            data-variant="primary"
+            onClick={() => {
+              if (pendingRemoteUpdate) void applyRemoteRevision(pendingRemoteUpdate);
+            }}
+            style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600 }}
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            className="construct-button"
+            onClick={() => setPendingRemoteUpdate(null)}
+            style={{ padding: '4px 12px', fontSize: 12 }}
+          >
+            Keep mine
+          </button>
+        </div>
+      ) : null}
 
       {/* Body grid */}
       <div

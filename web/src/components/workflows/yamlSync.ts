@@ -355,6 +355,9 @@ export interface TaskNodeData {
   deprecateReason: string;
   /** Run-mode overlay — populated when viewing a workflow run */
   runInfo?: StepRunInfo;
+  /** P1.2 transient flag — set briefly after a remote SSE update touched
+   *  this step so the node can pulse a highlight. Cleared after ~1.2s. */
+  justUpdated?: boolean;
   [key: string]: unknown;
 }
 

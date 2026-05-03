@@ -111,7 +111,7 @@ function TaskNode({ id, data, selected }: { id: string; data: TaskNodeData; sele
 
   return (
     <div
-      className="px-4 py-3 rounded-xl shadow-lg transition-all"
+      className={`px-4 py-3 rounded-xl shadow-lg transition-all${data.justUpdated ? ' step-updated-pulse' : ''}`}
       style={{
         position: 'relative',
         background: selected
