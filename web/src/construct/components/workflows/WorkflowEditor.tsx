@@ -62,7 +62,15 @@ import Panel from '@/construct/components/ui/Panel';
 import EditorCommandList from './EditorCommandList';
 import StepConfigPanel from './StepConfigPanel';
 import StepTypePalette from './StepTypePalette';
-import { ADD_STEP_EVENT, type AddStepDetail } from './stepEvents';
+import AgentPicker from './AgentPicker';
+import { useAgentRoster } from './useAgentRoster';
+import {
+  ADD_STEP_EVENT,
+  OPEN_AGENT_PICKER_EVENT,
+  emitOpenAgentPicker,
+  type AddStepDetail,
+  type OpenAgentPickerDetail,
+} from './stepEvents';
 import '@/construct/styles/editor-chrome.css';
 
 const allNodeTypes = { ...taskNodeTypes, ...gateNodeTypes };
@@ -281,6 +289,16 @@ function WorkflowEditorInner({
   const [changeTypeFor, setChangeTypeFor] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
+  // Agent picker state — driven by `construct:open-agent-picker` events from
+  // canvas badges (and our own auto-open after creating an agent step).
+  const [agentPickerState, setAgentPickerState] = useState<{
+    taskId: string;
+    anchorRect: DOMRect | null;
+  } | null>(null);
+
+  // Prime the agent roster cache so the picker opens instantly on first click.
+  useAgentRoster();
+
   const taskIdCounter = useRef(0);
   const connectingFrom = useRef<{ nodeId: string; handleType: string; handleId: string | null } | null>(null);
   const connectionMade = useRef(false);
@@ -399,6 +417,26 @@ function WorkflowEditorInner({
       });
       if (newEdge) setEdges((eds) => [...eds, newEdge!]);
       setSelectedNodeId(id);
+
+      // Auto-open agent picker for new agent steps. Wait one frame for xyflow
+      // to mount the node, then try to anchor the picker to the new badge.
+      // If the badge isn't in the DOM yet, the editor's listener falls back
+      // to a centered popover (anchorRect: null).
+      if (detail.type === 'agent') {
+        requestAnimationFrame(() => {
+          const nodeEl = document.querySelector(
+            `.react-flow__node[data-id="${id}"] button[title^="No pool agent"], ` +
+              `.react-flow__node[data-id="${id}"] button[title^="Assigned"]`,
+          ) as HTMLElement | null;
+          const rect = nodeEl?.getBoundingClientRect() ?? null;
+          if (rect) {
+            emitOpenAgentPicker({ taskId: id, anchorRect: rect });
+          } else {
+            // Fallback — surface a centered picker by setting state directly.
+            setAgentPickerState({ taskId: id, anchorRect: null });
+          }
+        });
+      }
     },
     [getViewportCenter, setNodes, setEdges],
   );
@@ -413,6 +451,17 @@ function WorkflowEditorInner({
     window.addEventListener(ADD_STEP_EVENT, handler as EventListener);
     return () => window.removeEventListener(ADD_STEP_EVENT, handler as EventListener);
   }, [insertStep]);
+
+  // ── Subscribe to global open-agent-picker events ───────────────────────
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const ce = event as CustomEvent<OpenAgentPickerDetail>;
+      if (!ce.detail) return;
+      setAgentPickerState({ taskId: ce.detail.taskId, anchorRect: ce.detail.anchorRect });
+    };
+    window.addEventListener(OPEN_AGENT_PICKER_EVENT, handler as EventListener);
+    return () => window.removeEventListener(OPEN_AGENT_PICKER_EVENT, handler as EventListener);
+  }, []);
 
   // Forward ref so the ⌘I keydown effect (registered before openYamlPanel
   // is declared) can dispatch to the latest callback.
@@ -1213,6 +1262,25 @@ function WorkflowEditorInner({
               }
             : undefined
         }
+      />
+
+      {/* Shared agent picker — anchored from canvas badges or auto-opened
+          after creating a new agent step. Side panel mounts its own. */}
+      <AgentPicker
+        open={agentPickerState !== null}
+        onOpenChange={(o) => {
+          if (!o) setAgentPickerState(null);
+        }}
+        value={
+          agentPickerState
+            ? (nodes.find((n) => n.id === agentPickerState.taskId)?.data as TaskNodeData | undefined)?.assign
+            : undefined
+        }
+        anchorRect={agentPickerState?.anchorRect ?? null}
+        onSelect={(name) => {
+          if (!agentPickerState) return;
+          handleNodeUpdate(agentPickerState.taskId, { assign: name ?? '' });
+        }}
       />
     </div>
   );

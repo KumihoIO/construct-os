@@ -22,8 +22,30 @@ export function emitAddStep(detail: AddStepDetail): void {
   window.dispatchEvent(new CustomEvent<AddStepDetail>(ADD_STEP_EVENT, { detail }));
 }
 
+// ---------------------------------------------------------------------------
+// Open agent-picker — fired by the canvas TaskNode badge (and any other
+// surface that wants the shared AgentPicker anchored to itself). The editor
+// owns the picker mount and is the single listener.
+// ---------------------------------------------------------------------------
+
+export interface OpenAgentPickerDetail {
+  /** Node id of the step to assign. The editor uses this to write `assign`. */
+  taskId: string;
+  /** Bounding rect of the trigger element — used to anchor the popover. */
+  anchorRect: DOMRect;
+}
+
+export const OPEN_AGENT_PICKER_EVENT = 'construct:open-agent-picker';
+
+export function emitOpenAgentPicker(detail: OpenAgentPickerDetail): void {
+  window.dispatchEvent(
+    new CustomEvent<OpenAgentPickerDetail>(OPEN_AGENT_PICKER_EVENT, { detail }),
+  );
+}
+
 declare global {
   interface WindowEventMap {
     'construct:add-step': CustomEvent<AddStepDetail>;
+    'construct:open-agent-picker': CustomEvent<OpenAgentPickerDetail>;
   }
 }

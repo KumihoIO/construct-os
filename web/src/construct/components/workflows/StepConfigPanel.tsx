@@ -10,10 +10,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Sparkles, Trash2, X } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { ACTION_TO_TYPE, type TaskNodeData } from '@/components/workflows/yamlSync';
-import type { AgentDefinition, SkillDefinition } from '@/types/api';
-import { fetchAgents, fetchSkills, getChannels } from '@/lib/api';
+import type { SkillDefinition } from '@/types/api';
+import { fetchSkills, getChannels } from '@/lib/api';
 import Panel from '@/construct/components/ui/Panel';
 import { STEP_TYPES_BY_TYPE } from './stepRegistry';
+import AgentPicker from './AgentPicker';
+import { useAgentRoster } from './useAgentRoster';
 
 const AGENT_HINT_OPTIONS = ['coder', 'researcher', 'reviewer'];
 
@@ -124,10 +126,11 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
   const [allSkills, setAllSkills] = useState<SkillDefinition[]>([]);
   const [skillLoading, setSkillLoading] = useState(false);
   const [channelOptions, setChannelOptions] = useState<string[]>(['dashboard']);
-  const [poolAgents, setPoolAgents] = useState<AgentDefinition[]>([]);
-  const [poolSearch, setPoolSearch] = useState('');
-  const [showPoolPicker, setShowPoolPicker] = useState(false);
-  const [poolLoading, setPoolLoading] = useState(false);
+
+  // Pool-agent picker — shared component anchored to the field button below.
+  const { agents: poolAgents } = useAgentRoster();
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [agentAnchorRect, setAgentAnchorRect] = useState<DOMRect | null>(null);
 
   // Channels: load for human / notify steps
   useEffect(() => {
@@ -149,28 +152,6 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
       .catch(() => setAllSkills([]))
       .finally(() => setSkillLoading(false));
   }, [showSkillPicker, allSkills.length]);
-
-  // Pool agents: load for agent steps
-  useEffect(() => {
-    if (stepType !== 'agent' || poolAgents.length > 0) return;
-    setPoolLoading(true);
-    fetchAgents(false, 1, 100)
-      .then((res) => setPoolAgents(res.agents))
-      .catch(() => setPoolAgents([]))
-      .finally(() => setPoolLoading(false));
-  }, [stepType, poolAgents.length]);
-
-  const filteredPoolAgents = useMemo(() => {
-    if (!poolSearch) return poolAgents;
-    const q = poolSearch.toLowerCase();
-    return poolAgents.filter(
-      (a) =>
-        a.item_name.toLowerCase().includes(q) ||
-        a.name.toLowerCase().includes(q) ||
-        a.role.toLowerCase().includes(q) ||
-        (a.identity && a.identity.toLowerCase().includes(q)),
-    );
-  }, [poolSearch, poolAgents]);
 
   const skillSearchResults = useMemo(() => {
     const assigned = new Set(data.skills);
@@ -424,107 +405,26 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
             <div style={sectionShellStyle}>
               <div style={sectionTitleStyle}>Agent Config</div>
 
-              {/* Pool Agent picker */}
-              <div style={{ position: 'relative' }}>
+              {/* Pool Agent — opens shared AgentPicker anchored to the field */}
+              <div>
                 <label style={labelStyle}>Pool Agent</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <input
-                      type="text"
-                      value={showPoolPicker ? poolSearch : data.assign || ''}
-                      onChange={(e) => {
-                        setPoolSearch(e.target.value);
-                        if (!showPoolPicker) setShowPoolPicker(true);
-                      }}
-                      onFocus={() => {
-                        setPoolSearch(data.assign || '');
-                        setShowPoolPicker(true);
-                      }}
-                      onBlur={() => setTimeout(() => setShowPoolPicker(false), 180)}
-                      placeholder="Search pool agents…"
-                      style={monoInputStyle}
-                    />
-                    {showPoolPicker && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 'calc(100% + 4px)',
-                          left: 0,
-                          right: 0,
-                          maxHeight: 200,
-                          overflowY: 'auto',
-                          background: 'var(--pc-bg-elevated)',
-                          border: '1px solid var(--construct-border-strong)',
-                          borderRadius: 8,
-                          zIndex: 10,
-                          boxShadow: '0 8px 16px rgba(0,0,0,0.18)',
-                        }}
-                      >
-                        {poolLoading ? (
-                          <div style={{ padding: 8, textAlign: 'center', fontSize: 11, color: 'var(--pc-text-faint)' }}>
-                            <Loader2 size={11} style={{ display: 'inline', marginRight: 4 }} className="animate-spin" />
-                            Loading…
-                          </div>
-                        ) : filteredPoolAgents.length === 0 ? (
-                          <div style={{ padding: 8, textAlign: 'center', fontSize: 11, color: 'var(--pc-text-faint)' }}>
-                            No agents found
-                          </div>
-                        ) : (
-                          filteredPoolAgents.map((agent) => (
-                            <button
-                              key={agent.kref}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => {
-                                onUpdate(node.id, {
-                                  assign: agent.item_name,
-                                  agentType: agent.agent_type || 'claude',
-                                  role: agent.role || 'coder',
-                                });
-                                setPoolSearch('');
-                                setShowPoolPicker(false);
-                              }}
-                              style={{
-                                width: '100%',
-                                textAlign: 'left',
-                                padding: '6px 8px',
-                                fontSize: 11,
-                                color: 'var(--pc-text-primary)',
-                                background: 'transparent',
-                                border: 0,
-                                cursor: 'pointer',
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--pc-hover)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                            >
-                              <div style={{ fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)', fontWeight: 500 }}>
-                                {agent.item_name}
-                              </div>
-                              <div style={{ fontSize: 9, color: 'var(--pc-text-faint)' }}>
-                                {agent.agent_type} · {agent.role}
-                                {agent.identity ? ` · ${agent.identity.slice(0, 50)}` : ''}
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {data.assign && (
-                    <button
-                      onClick={() => onUpdate(node.id, { assign: '' })}
-                      title="Clear pool agent"
-                      style={{
-                        padding: 4,
-                        border: 0,
-                        background: 'transparent',
-                        color: 'var(--pc-text-faint)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setAgentAnchorRect(e.currentTarget.getBoundingClientRect());
+                    setAgentPickerOpen(true);
+                  }}
+                  style={{
+                    ...monoInputStyle,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    color: data.assign
+                      ? 'var(--pc-text-primary)'
+                      : 'var(--pc-text-faint)',
+                  }}
+                >
+                  {data.assign || 'Choose agent…'}
+                </button>
                 {data.assign && (
                   <div
                     style={{
@@ -545,6 +445,24 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
                     {data.assign}
                   </div>
                 )}
+                <AgentPicker
+                  open={agentPickerOpen}
+                  onOpenChange={setAgentPickerOpen}
+                  value={data.assign}
+                  anchorRect={agentAnchorRect}
+                  onSelect={(name) => {
+                    if (name === null) {
+                      onUpdate(node.id, { assign: '' });
+                      return;
+                    }
+                    const picked = poolAgents.find((a) => a.item_name === name);
+                    onUpdate(node.id, {
+                      assign: name,
+                      agentType: picked?.agent_type || data.agentType || 'claude',
+                      role: picked?.role || data.role || 'coder',
+                    });
+                  }}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

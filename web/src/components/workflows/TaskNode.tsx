@@ -1,5 +1,8 @@
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
+import { Bot } from 'lucide-react';
 import type { TaskNodeData } from './yamlSync';
+import { ACTION_TO_TYPE } from './yamlSync';
+import { emitOpenAgentPicker } from '@/construct/components/workflows/stepEvents';
 
 // Action → token mapping. Maps semantic intent to Construct CSS vars.
 // Categories:
@@ -94,10 +97,17 @@ const AGENT_TYPE_TONES: Record<string, ActionTone> = {
   codex: 'warning',
 };
 
-function TaskNode({ data, selected }: { data: TaskNodeData; selected?: boolean }) {
+function TaskNode({ id, data, selected }: { id: string; data: TaskNodeData; selected?: boolean }) {
   const tone = getActionTone(data.action);
   const color = toneColorVar(tone);
   const soft = toneSoftVar(tone);
+  const isAgentStep = (ACTION_TO_TYPE[data.action] || 'agent') === 'agent';
+
+  const openAgentPicker = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    emitOpenAgentPicker({ taskId: id, anchorRect: rect });
+  };
 
   return (
     <div
@@ -153,21 +163,48 @@ function TaskNode({ data, selected }: { data: TaskNodeData; selected?: boolean }
         </div>
       )}
 
-      {/* Assigned pool agent */}
+      {/* Assigned pool agent — clickable for agent steps to open AgentPicker */}
       {data.assign && !data.runInfo && (
-        <div
+        <button
+          type="button"
+          onClick={isAgentStep ? openAgentPicker : undefined}
+          onMouseDown={(e) => e.stopPropagation()}
           className="mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold truncate inline-flex items-center gap-1"
           style={{
             background: 'var(--construct-signal-network-soft)',
             color: 'var(--construct-signal-network)',
             border: '1px solid var(--construct-border-strong)',
             maxWidth: '100%',
+            cursor: isAgentStep ? 'pointer' : 'default',
+            font: 'inherit',
           }}
-          title={`Assigned: ${data.assign}`}
+          title={`Assigned: ${data.assign}${isAgentStep ? ' — click to change' : ''}`}
         >
           <span style={{ fontSize: '8px' }}>●</span>
           {data.assign}
-        </div>
+        </button>
+      )}
+
+      {/* Unassigned pill — only for agent steps without an assignment */}
+      {!data.assign && isAgentStep && !data.runInfo && (
+        <button
+          type="button"
+          onClick={openAgentPicker}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold truncate inline-flex items-center gap-1"
+          style={{
+            background: 'color-mix(in srgb, var(--construct-status-warning) 16%, transparent)',
+            color: 'var(--construct-status-warning)',
+            border: '1px solid var(--construct-status-warning)',
+            maxWidth: '100%',
+            cursor: 'pointer',
+            font: 'inherit',
+          }}
+          title="No pool agent assigned — click to choose"
+        >
+          <Bot size={10} />
+          Unassigned
+        </button>
       )}
 
       {/* Agent hints */}
