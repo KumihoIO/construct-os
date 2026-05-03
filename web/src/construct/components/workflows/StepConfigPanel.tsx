@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { Loader2, Lock, Search, Sparkles, Trash2, X } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { ACTION_TO_TYPE, type TaskNodeData } from '@/components/workflows/yamlSync';
 import type { SkillDefinition } from '@/types/api';
@@ -15,7 +15,12 @@ import { fetchSkills, getChannels } from '@/lib/api';
 import Panel from '@/construct/components/ui/Panel';
 import { STEP_TYPES_BY_TYPE } from './stepRegistry';
 import AgentPicker from './AgentPicker';
+import AuthProfilePicker from './AuthProfilePicker';
 import { useAgentRoster } from './useAgentRoster';
+import { useAuthProfiles } from './useAuthProfiles';
+
+/** Step types that surface the encrypted auth-profile dropdown. */
+const AUTH_ELIGIBLE_STEP_TYPES = new Set(['agent', 'shell', 'python', 'email', 'a2a']);
 
 const AGENT_HINT_OPTIONS = ['coder', 'researcher', 'reviewer'];
 
@@ -131,6 +136,16 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
   const { agents: poolAgents } = useAgentRoster();
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [agentAnchorRect, setAgentAnchorRect] = useState<DOMRect | null>(null);
+
+  // Auth-profile picker — bound encrypted credential for external API calls.
+  const { profiles: authProfiles } = useAuthProfiles();
+  const [authPickerOpen, setAuthPickerOpen] = useState(false);
+  const [authAnchorRect, setAuthAnchorRect] = useState<DOMRect | null>(null);
+  const showAuthField = AUTH_ELIGIBLE_STEP_TYPES.has(stepType);
+  const selectedAuthProfile = useMemo(
+    () => authProfiles.find((p) => p.id === data.auth) ?? null,
+    [authProfiles, data.auth],
+  );
 
   // Channels: load for human / notify steps
   useEffect(() => {
@@ -1612,6 +1627,65 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
                   style={inputStyle}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Auth profile binding (encrypted credential for external API calls) */}
+          {showAuthField && (
+            <div>
+              <label style={labelStyle}>Auth profile</label>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setAuthAnchorRect(e.currentTarget.getBoundingClientRect());
+                  setAuthPickerOpen(true);
+                }}
+                style={{
+                  ...inputStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: data.auth ? 'var(--pc-text-primary)' : 'var(--pc-text-faint)',
+                }}
+              >
+                <Lock size={12} style={{ color: 'var(--construct-text-faint)', flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedAuthProfile
+                    ? `${selectedAuthProfile.provider} · ${selectedAuthProfile.profile_name}`
+                    : data.auth || 'None'}
+                </span>
+              </button>
+              {data.auth && (
+                <button
+                  type="button"
+                  onClick={() => onUpdate(node.id, { auth: '' })}
+                  style={{
+                    marginTop: 6,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    border: '1px solid var(--construct-status-warning)',
+                    background: 'color-mix(in srgb, var(--construct-status-warning) 14%, transparent)',
+                    color: 'var(--construct-status-warning)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+              <p style={helperStyle()}>
+                Optional. Bound credential for external API calls.
+              </p>
+              <AuthProfilePicker
+                open={authPickerOpen}
+                onOpenChange={setAuthPickerOpen}
+                value={data.auth}
+                anchorRect={authAnchorRect}
+                onSelect={(id) => onUpdate(node.id, { auth: id ?? '' })}
+              />
             </div>
           )}
 

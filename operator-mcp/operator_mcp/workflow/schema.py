@@ -90,6 +90,11 @@ class AgentStepConfig(BaseModel):
     tools: Literal["all", "memory", "none"] = "none"  # MCP tool injection level
     output_fields: list[str] = Field(default_factory=list)  # Expected structured fields in ```json block
     quality_check: QualityCheckConfig | None = None
+    # Auth profile binding (encrypted credential, resolved at runtime via the
+    # gateway's auth-profiles resolve endpoint). Format: "<provider>:<profile_name>".
+    # Agent steps see this only via the get_auth_token MCP tool — never injected
+    # into the system prompt or any other context.
+    auth: str | None = None
 
 
 class ShellStepConfig(BaseModel):
@@ -97,6 +102,10 @@ class ShellStepConfig(BaseModel):
     command: str
     timeout: float = 60.0
     allow_failure: bool = False  # If True, non-zero exit doesn't fail the workflow
+    # Auth profile binding — resolved at runtime; the decrypted token is passed
+    # to the subprocess via the CONSTRUCT_AUTH_TOKEN env var (kind in
+    # CONSTRUCT_AUTH_KIND). Format: "<provider>:<profile_name>".
+    auth: str | None = None
 
 
 class EmailStepConfig(BaseModel):
@@ -149,6 +158,9 @@ class EmailStepConfig(BaseModel):
 
     timeout: float = 30.0
     dry_run: bool = False  # Render & return without sending — for previews
+    # Auth profile binding — when set, the decrypted token overrides
+    # smtp_password for this step only. Format: "<provider>:<profile_name>".
+    auth: str | None = None
 
 
 class PythonStepConfig(BaseModel):
@@ -192,6 +204,9 @@ class PythonStepConfig(BaseModel):
     # Useful if a script needs deps the operator-mcp venv lacks — point it
     # at a project-local venv instead.
     python: str | None = None
+    # Auth profile binding — resolved at runtime; decrypted token passed via
+    # CONSTRUCT_AUTH_TOKEN env var. Format: "<provider>:<profile_name>".
+    auth: str | None = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "PythonStepConfig":
@@ -350,6 +365,10 @@ class A2AStepConfig(BaseModel):
     skill_id: str | None = None
     message: str = ""
     timeout: float = 300.0
+    # Auth profile binding — resolved at runtime; decrypted token added to
+    # outbound A2A request as `Authorization: Bearer <token>`. Format:
+    # "<provider>:<profile_name>".
+    auth: str | None = None
 
 
 # -- Orchestration pattern configs -----------------------------------------
