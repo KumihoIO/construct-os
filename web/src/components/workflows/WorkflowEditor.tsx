@@ -29,6 +29,8 @@ import type { WorkflowDefinition } from '@/types/api';
 import { taskNodeTypes } from './TaskNode';
 import { gateNodeTypes } from './GateNode';
 import TaskSidePanel from './TaskSidePanel';
+import AgentPicker from './AgentPicker';
+import { useAgentRoster } from './useAgentRoster';
 import {
   type TaskNodeData,
   parseWorkflowYaml,
@@ -202,6 +204,8 @@ function WorkflowEditorInner({
   });
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [agentPickerNodeId, setAgentPickerNodeId] = useState<string | null>(null);
+  const [agentPickerAnchor, setAgentPickerAnchor] = useState<DOMRect | null>(null);
   const taskIdCounter = useRef(0);
   const connectingFrom = useRef<{ nodeId: string; handleType: string; handleId: string | null } | null>(null);
   const connectionMade = useRef(false);
@@ -480,6 +484,50 @@ function WorkflowEditorInner({
       );
     },
     [setNodes],
+  );
+
+  // Listen for clicks on the per-node agent badge (dispatched from TaskNode)
+  // and after auto-creating a new agent step from elsewhere.
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ taskId: string; anchorRect?: DOMRect | null }>).detail;
+      if (!detail?.taskId) return;
+      setAgentPickerNodeId(detail.taskId);
+      setAgentPickerAnchor(detail.anchorRect ?? null);
+    };
+    window.addEventListener('construct:open-agent-picker', onOpen as EventListener);
+    return () => window.removeEventListener('construct:open-agent-picker', onOpen as EventListener);
+  }, []);
+
+  // Pre-fetch agent roster once an editor mounts so the canvas picker is instant.
+  // Look up the picked agent in the shared roster to mirror the side-panel
+  // side effects (agent_type, role).
+  const { agents: rosterAgents } = useAgentRoster();
+
+  // Resolve the picker's currently-targeted node by taskId
+  const agentPickerNode = useMemo(
+    () =>
+      agentPickerNodeId
+        ? (nodes as Node<TaskNodeData>[]).find((n) => n.data.taskId === agentPickerNodeId) ?? null
+        : null,
+    [agentPickerNodeId, nodes],
+  );
+  const handleCanvasAgentSelect = useCallback(
+    (name: string | null) => {
+      if (!agentPickerNode) return;
+      if (!name) {
+        handleNodeUpdate(agentPickerNode.id, { assign: '' });
+        return;
+      }
+      const picked = rosterAgents.find((a) => a.item_name === name);
+      handleNodeUpdate(agentPickerNode.id, {
+        assign: name,
+        ...(picked
+          ? { agentType: picked.agent_type || 'claude', role: picked.role || 'coder' }
+          : {}),
+      });
+    },
+    [agentPickerNode, rosterAgents, handleNodeUpdate],
   );
 
   // Delete node
@@ -1157,6 +1205,19 @@ function WorkflowEditorInner({
           </div>
         )}
       </div>
+
+      <AgentPicker
+        open={agentPickerNode !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAgentPickerNodeId(null);
+            setAgentPickerAnchor(null);
+          }
+        }}
+        value={agentPickerNode?.data.assign}
+        onSelect={handleCanvasAgentSelect}
+        anchorRect={agentPickerAnchor}
+      />
     </div>
   );
 }

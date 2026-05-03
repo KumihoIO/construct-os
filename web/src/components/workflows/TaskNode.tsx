@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
-import type { TaskNodeData } from './yamlSync';
+import { Bot } from 'lucide-react';
+import { ACTION_TO_TYPE, type TaskNodeData } from './yamlSync';
 
 // Action → color mapping
 const ACTION_COLORS: Record<string, string> = {
@@ -154,21 +155,39 @@ function TaskNode({ data, selected }: { data: TaskNodeData; selected?: boolean }
         </div>
       )}
 
-      {/* Assigned pool agent */}
-      {data.assign && !data.runInfo && (
-        <div
-          className="mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold truncate inline-flex items-center gap-1"
+      {/* Assigned pool agent — clickable to open picker */}
+      {!data.runInfo && (data.assign || ACTION_TO_TYPE[data.action] === 'agent') && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            window.dispatchEvent(
+              new CustomEvent('construct:open-agent-picker', {
+                detail: { taskId: data.taskId, anchorRect: rect },
+              }),
+            );
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold truncate inline-flex items-center gap-1 cursor-pointer transition-colors"
           style={{
-            background: 'rgba(99,102,241,0.12)',
-            color: '#818cf8',
-            border: '1px solid rgba(99,102,241,0.2)',
+            background: data.assign
+              ? 'var(--construct-signal-network-soft)'
+              : 'color-mix(in srgb, var(--construct-status-warning) 12%, transparent)',
+            color: data.assign
+              ? 'var(--construct-signal-network)'
+              : 'var(--construct-status-warning)',
+            border: data.assign
+              ? '1px solid color-mix(in srgb, var(--construct-signal-network) 28%, transparent)'
+              : '1px solid color-mix(in srgb, var(--construct-status-warning) 28%, transparent)',
             maxWidth: '100%',
           }}
-          title={`Assigned: ${data.assign}`}
+          title={data.assign ? `Assigned: ${data.assign} (click to change)` : 'Click to assign a pool agent'}
         >
-          <span style={{ fontSize: '8px' }}>●</span>
-          {data.assign}
-        </div>
+          <Bot className="h-2.5 w-2.5 flex-shrink-0" />
+          <span className="truncate">{data.assign || 'Unassigned'}</span>
+        </button>
       )}
 
       {/* Agent hints */}

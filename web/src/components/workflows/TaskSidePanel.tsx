@@ -1,9 +1,11 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Trash2, X, Sparkles, Search, Loader2 } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Trash2, X, Sparkles, Search, Loader2, Bot } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { ACTION_TO_TYPE, type TaskNodeData } from './yamlSync';
-import type { SkillDefinition, AgentDefinition } from '@/types/api';
-import { fetchSkills, fetchAgents, getChannels } from '@/lib/api';
+import type { SkillDefinition } from '@/types/api';
+import { fetchSkills, getChannels } from '@/lib/api';
+import AgentPicker from './AgentPicker';
+import { useAgentRoster } from './useAgentRoster';
 
 const AGENT_HINT_OPTIONS = ['coder', 'researcher', 'reviewer'];
 
@@ -37,10 +39,30 @@ export default function TaskSidePanel({
   const [allSkills, setAllSkills] = useState<SkillDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [channelOptions, setChannelOptions] = useState<string[]>(['dashboard']);
-  const [poolAgents, setPoolAgents] = useState<AgentDefinition[]>([]);
-  const [poolSearch, setPoolSearch] = useState('');
-  const [showPoolPicker, setShowPoolPicker] = useState(false);
-  const [poolLoading, setPoolLoading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const poolFieldRef = useRef<HTMLDivElement>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null);
+  const { agents: pickerAgents } = useAgentRoster();
+
+  const handleAgentSelect = useCallback(
+    (name: string | null) => {
+      if (!name) {
+        onUpdate(node.id, { assign: '' });
+        return;
+      }
+      const picked = pickerAgents.find((a) => a.item_name === name);
+      onUpdate(node.id, {
+        assign: name,
+        ...(picked
+          ? {
+              agentType: picked.agent_type || 'claude',
+              role: picked.role || 'coder',
+            }
+          : {}),
+      });
+    },
+    [node.id, pickerAgents, onUpdate],
+  );
 
   // Load active channels for human_input / notify actions
   useEffect(() => {
@@ -66,29 +88,6 @@ export default function TaskSidePanel({
       .catch(() => setAllSkills([]))
       .finally(() => setLoading(false));
   }, [showSkillPicker, allSkills.length]);
-
-  // Load pool agents lazily when Agent Config is visible
-  useEffect(() => {
-    if (stepType !== 'agent' || poolAgents.length > 0) return;
-    setPoolLoading(true);
-    fetchAgents(false, 1, 100)
-      .then((res) => setPoolAgents(res.agents))
-      .catch(() => setPoolAgents([]))
-      .finally(() => setPoolLoading(false));
-  }, [stepType, poolAgents.length]);
-
-  // Filter pool agents by search
-  const filteredPoolAgents = useMemo(() => {
-    if (!poolSearch) return poolAgents;
-    const q = poolSearch.toLowerCase();
-    return poolAgents.filter(
-      (a) =>
-        a.item_name.toLowerCase().includes(q) ||
-        a.name.toLowerCase().includes(q) ||
-        a.role.toLowerCase().includes(q) ||
-        (a.identity && a.identity.toLowerCase().includes(q)),
-    );
-  }, [poolSearch, poolAgents]);
 
   // Instant client-side filtering
   const searchResults = useMemo(() => {
@@ -290,70 +289,33 @@ export default function TaskSidePanel({
             </div>
 
             {/* Pool Agent Template selector */}
-            <div className="relative">
+            <div ref={poolFieldRef}>
               <label className="block text-[9px] font-medium mb-0.5" style={{ color: 'var(--pc-text-faint)' }}>Pool Agent</label>
               <div className="flex items-center gap-1">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={showPoolPicker ? poolSearch : (data.assign || '')}
-                    onChange={(e) => {
-                      setPoolSearch(e.target.value);
-                      if (!showPoolPicker) setShowPoolPicker(true);
-                    }}
-                    onFocus={() => {
-                      setPoolSearch(data.assign || '');
-                      setShowPoolPicker(true);
-                    }}
-                    onBlur={() => {
-                      // Delay to allow click on dropdown items
-                      setTimeout(() => setShowPoolPicker(false), 200);
-                    }}
-                    placeholder="Search pool agents…"
-                    className="input-electric w-full px-2 py-1 text-[11px] font-mono"
-                  />
-                  {showPoolPicker && (
-                    <div
-                      className="absolute z-20 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border shadow-lg"
-                      style={{ background: 'var(--pc-bg-surface)', borderColor: 'var(--pc-border)' }}
-                    >
-                      {poolLoading ? (
-                        <div className="p-2 text-center text-[10px]" style={{ color: 'var(--pc-text-faint)' }}>
-                          <Loader2 className="inline animate-spin mr-1" size={10} /> Loading…
-                        </div>
-                      ) : filteredPoolAgents.length === 0 ? (
-                        <div className="p-2 text-center text-[10px]" style={{ color: 'var(--pc-text-faint)' }}>
-                          No agents found
-                        </div>
-                      ) : (
-                        filteredPoolAgents.map((agent) => (
-                          <button
-                            key={agent.kref}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              onUpdate(node.id, {
-                                assign: agent.item_name,
-                                agentType: agent.agent_type || 'claude',
-                                role: agent.role || 'coder',
-                              });
-                              setPoolSearch('');
-                              setShowPoolPicker(false);
-                            }}
-                            className="w-full text-left px-2 py-1.5 text-[11px] transition-colors"
-                            style={{ color: 'var(--pc-text-primary)' }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--pc-bg-base)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <div className="font-mono font-medium truncate">{agent.item_name}</div>
-                            <div className="text-[9px] truncate" style={{ color: 'var(--pc-text-faint)' }}>
-                              {agent.agent_type} · {agent.role}{agent.identity ? ` · ${agent.identity.slice(0, 50)}` : ''}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerAnchor(poolFieldRef.current?.getBoundingClientRect() ?? null);
+                    setPickerOpen(true);
+                  }}
+                  className="flex-1 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] truncate transition-colors"
+                  style={{
+                    background: data.assign
+                      ? 'var(--construct-signal-network-soft)'
+                      : 'var(--pc-bg-surface)',
+                    color: data.assign
+                      ? 'var(--construct-signal-network)'
+                      : 'var(--pc-text-muted)',
+                    border: '1px solid var(--pc-border)',
+                    fontFamily: data.assign ? 'var(--pc-font-mono)' : 'inherit',
+                  }}
+                  title={data.assign ? `Assigned: ${data.assign}` : 'Choose a pool agent'}
+                >
+                  <Bot className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate flex-1 text-left">
+                    {data.assign || 'Choose agent…'}
+                  </span>
+                </button>
                 {data.assign && (
                   <button
                     onClick={() => onUpdate(node.id, { assign: '' })}
@@ -365,20 +327,6 @@ export default function TaskSidePanel({
                   </button>
                 )}
               </div>
-              {data.assign && (
-                <div
-                  className="mt-1 px-2 py-0.5 rounded-md text-[10px] font-semibold truncate inline-flex items-center gap-1"
-                  style={{
-                    background: '#6366f122',
-                    color: '#818cf8',
-                    border: '1px solid #6366f144',
-                    maxWidth: '100%',
-                  }}
-                >
-                  <span style={{ fontSize: '8px' }}>●</span>
-                  {data.assign}
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -1742,6 +1690,14 @@ export default function TaskSidePanel({
           Delete Task
         </button>
       </div>
+
+      <AgentPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        value={data.assign}
+        onSelect={handleAgentSelect}
+        anchorRect={pickerAnchor}
+      />
     </div>
   );
 }
