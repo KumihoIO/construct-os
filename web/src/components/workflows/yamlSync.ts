@@ -30,6 +30,8 @@ export interface TaskDefinition {
   params?: Record<string, string>;
   /** Pre-assigned pool agent template name */
   assign?: string;
+  /** When true, executor skips the step and passes inputs straight through as output_data */
+  disabled?: boolean;
   /** Gate-only fields */
   condition?: string;
   on_true?: string;
@@ -164,6 +166,13 @@ export interface TaskDefinition {
   email_smtp_host?: string;      // override; default reads from config.toml
   email_dry_run?: boolean;
   email_timeout?: number;
+  // --- Tag step: re-tag an existing Kumiho entity revision ---
+  tag_item_kref?: string;        // kref of the item (supports ${...} interpolation)
+  tag_value?: string;            // tag to apply to the latest revision
+  tag_untag?: string;            // optional: tag to remove first
+  // --- Deprecate step: deprecate a Kumiho item ---
+  deprecate_item_kref?: string;  // kref of the item
+  deprecate_reason?: string;     // optional deprecation reason
 }
 
 /** Step result from a workflow run — overlaid on nodes when viewing runs */
@@ -220,6 +229,8 @@ export interface TaskNodeData {
   skills: string[];
   /** Pre-assigned pool agent template name */
   assign: string;
+  /** When true, executor skips the step and passes inputs straight through as output_data */
+  disabled?: boolean;
   paramCount: number;
   dependencyCount: number;
   /** Gate-only: condition expression */
@@ -335,6 +346,13 @@ export interface TaskNodeData {
   emailSmtpHost: string;
   emailDryRun: boolean;
   emailTimeout: number;
+  // Tag step
+  tagItemKref: string;
+  tagValue: string;
+  tagUntag: string;
+  // Deprecate step
+  deprecateItemKref: string;
+  deprecateReason: string;
   /** Run-mode overlay — populated when viewing a workflow run */
   runInfo?: StepRunInfo;
   [key: string]: unknown;
@@ -501,6 +519,8 @@ export function parseWorkflowYaml(yaml: string): TaskDefinition[] {
         current.retry = parseInt(value) || 0;
       } else if (key === 'retry_delay' || key === 'retryDelay') {
         current.retry_delay = parseFloat(value) || 5;
+      } else if (key === 'disabled') {
+        current.disabled = value.toLowerCase() === 'true';
       } else if (key === 'assign' || key === 'template') {
         current.assign = value;
       } else if (key === 'params' || key === 'parameters' || key === 'config') {
@@ -1062,6 +1082,28 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       }
     }
 
+    // Tag step block — `tag_step:` with item_kref / tag / untag
+    const tagStepMatch = block.match(/^\s{4}tag_step:\s*\n((?:\s{5,}.*\n?)*)/m);
+    if (tagStepMatch) {
+      const tb = tagStepMatch[1]!;
+      const itemM = tb.match(/^\s+item_kref:\s*"?([^"\n]+)"?\s*$/m);
+      const tagM = tb.match(/^\s+tag:\s*"?([^"\n]+)"?\s*$/m);
+      const untagM = tb.match(/^\s+untag:\s*"?([^"\n]+)"?\s*$/m);
+      if (itemM) data.tag_item_kref = itemM[1]!.trim();
+      if (tagM) data.tag_value = tagM[1]!.trim();
+      if (untagM) data.tag_untag = untagM[1]!.trim();
+    }
+
+    // Deprecate step block — `deprecate_step:` with item_kref / reason
+    const deprecateStepMatch = block.match(/^\s{4}deprecate_step:\s*\n((?:\s{5,}.*\n?)*)/m);
+    if (deprecateStepMatch) {
+      const db = deprecateStepMatch[1]!;
+      const itemM = db.match(/^\s+item_kref:\s*"?([^"\n]+)"?\s*$/m);
+      const reasonM = db.match(/^\s+reason:\s*"?([^"\n]+)"?\s*$/m);
+      if (itemM) data.deprecate_item_kref = itemM[1]!.trim();
+      if (reasonM) data.deprecate_reason = reasonM[1]!.trim();
+    }
+
     // Resolve block — capture all lines indented deeper than `resolve:` (5+ spaces)
     const resolveMatch = block.match(/^\s{4}resolve:\s*\n((?:\s{5,}.*\n?)*)/m);
     if (resolveMatch) {
@@ -1134,6 +1176,12 @@ function finalizeTask(partial: Partial<TaskDefinition>, paramCount: number): Tas
     for_each_carry_forward: partial.for_each_carry_forward,
     for_each_fail_fast: partial.for_each_fail_fast,
     for_each_max_iterations: partial.for_each_max_iterations,
+    disabled: partial.disabled,
+    tag_item_kref: partial.tag_item_kref,
+    tag_value: partial.tag_value,
+    tag_untag: partial.tag_untag,
+    deprecate_item_kref: partial.deprecate_item_kref,
+    deprecate_reason: partial.deprecate_reason,
   };
 }
 
@@ -1142,9 +1190,9 @@ function finalizeTask(partial: Partial<TaskDefinition>, paramCount: number): Tas
 // ---------------------------------------------------------------------------
 
 export const GATE_EDGE_STYLES = {
-  true: { stroke: '#22c55e', strokeWidth: 2 },
-  false: { stroke: '#ef4444', strokeWidth: 2 },
-  default: { stroke: '#f97316', strokeWidth: 2 },
+  true: { stroke: 'var(--construct-status-success)', strokeWidth: 2 },
+  false: { stroke: 'var(--construct-status-danger)', strokeWidth: 2 },
+  default: { stroke: 'var(--construct-status-warning)', strokeWidth: 2 },
 } as const;
 
 export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData>[]; edges: Edge[] } {
@@ -1257,6 +1305,12 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
       emailSmtpHost: task.email_smtp_host || '',
       emailDryRun: task.email_dry_run || false,
       emailTimeout: task.email_timeout || 30,
+      tagItemKref: task.tag_item_kref || '',
+      tagValue: task.tag_value || '',
+      tagUntag: task.tag_untag || '',
+      deprecateItemKref: task.deprecate_item_kref || '',
+      deprecateReason: task.deprecate_reason || '',
+      disabled: task.disabled ?? false,
     },
   }));
 
@@ -1361,7 +1415,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
           animated: true,
           selectable: true,
           interactionWidth: 20,
-          style: { stroke: '#10b981', strokeWidth: 2 },
+          style: { stroke: 'var(--construct-signal-live)', strokeWidth: 2 },
           data: { synthetic: true },
         });
       } else {
@@ -1377,7 +1431,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
             animated: true,
             selectable: true,
             interactionWidth: 20,
-            style: { stroke: '#10b981', strokeWidth: 2 },
+            style: { stroke: 'var(--construct-signal-live)', strokeWidth: 2 },
             data: { synthetic: true },
           });
         }
@@ -1400,7 +1454,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
         interactionWidth: 20,
         style: GATE_EDGE_STYLES.true,
         label: 'true',
-        labelStyle: { fill: '#22c55e', fontSize: 10, fontWeight: 600 },
+        labelStyle: { fill: 'var(--construct-status-success)', fontSize: 10, fontWeight: 600 },
       });
     }
     if (task.on_false && nodeIds.has(task.on_false)) {
@@ -1415,7 +1469,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
         interactionWidth: 20,
         style: GATE_EDGE_STYLES.false,
         label: 'false',
-        labelStyle: { fill: '#ef4444', fontSize: 10, fontWeight: 600 },
+        labelStyle: { fill: 'var(--construct-status-danger)', fontSize: 10, fontWeight: 600 },
       });
     }
   }
@@ -1452,9 +1506,9 @@ export function stepsToFlow(steps: TaskDefinition[]): { nodes: Node<StepNodeData
           target: step.id,
           type: 'default',
           animated: true,
-          style: { stroke: '#f97316', strokeWidth: 2 },
+          style: { stroke: 'var(--construct-status-warning)', strokeWidth: 2 },
           label: 'depends on',
-          labelStyle: { fill: '#f97316', fontSize: 10 },
+          labelStyle: { fill: 'var(--construct-status-warning)', fontSize: 10 },
         });
       }
     }
@@ -1537,6 +1591,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       notify_title: st === 'notify' && d.notifyTitle ? d.notifyTitle : undefined,
       retry: d.retry > 0 ? d.retry : undefined,
       retry_delay: d.retryDelay !== 5 ? d.retryDelay : undefined,
+      disabled: d.disabled === true ? true : undefined,
     };
     // Pass through executor-specific fields
     if (st === 'agent') {
@@ -1662,6 +1717,15 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (!d.forEachFailFast) base.for_each_fail_fast = false;
       if (d.forEachMaxIterations && d.forEachMaxIterations !== 20) base.for_each_max_iterations = d.forEachMaxIterations;
     }
+    if (action === 'tag') {
+      if (d.tagItemKref) base.tag_item_kref = d.tagItemKref;
+      if (d.tagValue) base.tag_value = d.tagValue;
+      if (d.tagUntag) base.tag_untag = d.tagUntag;
+    }
+    if (action === 'deprecate') {
+      if (d.deprecateItemKref) base.deprecate_item_kref = d.deprecateItemKref;
+      if (d.deprecateReason) base.deprecate_reason = d.deprecateReason;
+    }
     return base;
   });
 }
@@ -1680,6 +1744,7 @@ export const ACTION_TO_TYPE: Record<string, string> = {
   human_approval: 'human_approval',
   // New step types — see operator_mcp/workflow/schema.py
   python: 'python', email: 'email',
+  tag: 'tag', deprecate: 'deprecate',
 };
 
 export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta>): string {
@@ -1755,6 +1820,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
     }
     if (task.retry && task.retry > 0) lines.push(`    retry: ${task.retry}`);
     if (task.retry_delay && task.retry_delay !== 5) lines.push(`    retry_delay: ${task.retry_delay}`);
+    if (task.disabled === true) lines.push(`    disabled: true`);
     if (task.action === 'gate' && task.condition) {
       lines.push(`    condition: ${yamlEscape(task.condition)}`);
     }
@@ -1999,6 +2065,17 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.for_each_carry_forward === false) lines.push(`      carry_forward: false`);
       if (task.for_each_fail_fast === false) lines.push(`      fail_fast: false`);
       if (task.for_each_max_iterations && task.for_each_max_iterations !== 20) lines.push(`      max_iterations: ${task.for_each_max_iterations}`);
+    }
+    if (stepType === 'tag') {
+      lines.push(`    tag_step:`);
+      if (task.tag_item_kref) lines.push(`      item_kref: ${yamlEscape(task.tag_item_kref)}`);
+      if (task.tag_value) lines.push(`      tag: ${yamlEscape(task.tag_value)}`);
+      if (task.tag_untag) lines.push(`      untag: ${yamlEscape(task.tag_untag)}`);
+    }
+    if (stepType === 'deprecate') {
+      lines.push(`    deprecate_step:`);
+      if (task.deprecate_item_kref) lines.push(`      item_kref: ${yamlEscape(task.deprecate_item_kref)}`);
+      if (task.deprecate_reason) lines.push(`      reason: ${yamlEscape(task.deprecate_reason)}`);
     }
     if (task.agent_hints.length > 0) {
       lines.push(`    agent_hints: [${task.agent_hints.join(', ')}]`);
