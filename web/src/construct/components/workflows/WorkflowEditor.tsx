@@ -63,6 +63,7 @@ import EditorCommandList from './EditorCommandList';
 import StepConfigPanel from './StepConfigPanel';
 import StepTypePalette from './StepTypePalette';
 import { ADD_STEP_EVENT, type AddStepDetail } from './stepEvents';
+import '@/construct/styles/editor-chrome.css';
 
 const allNodeTypes = { ...taskNodeTypes, ...gateNodeTypes };
 
@@ -746,7 +747,7 @@ function WorkflowEditorInner({
 
   return (
     <div
-      className={containerClassName ?? 'flex h-[calc(100vh-3.5rem)] flex-col'}
+      className={`editor-chrome ${containerClassName ?? 'flex h-[calc(100vh-3.5rem)] flex-col'}`}
       style={{ background: 'var(--construct-bg-base, var(--pc-bg-base))' }}
     >
       {/* Top bar */}

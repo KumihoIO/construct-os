@@ -1,0 +1,35 @@
+/* Zion — engineering-deck palette for the workflow editor view.
+   Layers on top of the user's global theme, scoped to .editor-chrome.
+   Status tokens (--construct-status-*, --construct-signal-live) are
+   intentionally NOT overridden — failures, runs, and approvals must
+   read at a glance. */
+
+.editor-chrome {
+  --pc-bg-base: #0e0d0c;
+  --pc-bg-surface: #181715;
+  --pc-bg-elevated: #22201d;
+  --pc-bg-input: #100f0d;
+  --pc-bg-code: #100f0d;
+  --pc-bg-sidebar: #0e0d0cf2;
+
+  --pc-text-primary: #d6d3cc;
+  --pc-text-secondary: #a8a39a;
+  --pc-text-muted: #75716a;
+  --pc-text-faint: #4d4945;
+
+  --pc-border: rgba(220, 200, 170, 0.06);
+  --pc-border-strong: rgba(220, 200, 170, 0.10);
+  --pc-hover: rgba(220, 200, 170, 0.04);
+  --pc-hover-strong: rgba(220, 200, 170, 0.07);
+  --pc-separator: rgba(220, 200, 170, 0.05);
+
+  --pc-accent: #c87a3c;
+  --pc-accent-light: #e09454;
+  --pc-accent-dim: rgba(200, 122, 60, 0.25);
+  --pc-accent-glow: rgba(200, 122, 60, 0.10);
+  --pc-accent-rgb: 200, 122, 60;
+
+  --construct-signal-network: #c87a3c;
+
+  color-scheme: dark;
+}
