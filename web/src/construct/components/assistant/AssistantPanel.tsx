@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle,
@@ -19,6 +19,8 @@ import {
 import { useLocation } from 'react-router-dom';
 import { generateUUID } from '@/lib/uuid';
 import { useAgentChatSession } from '@/construct/hooks/useAgentChatSession';
+import { useTheme } from '@/construct/hooks/useTheme';
+import { useT, type Locale } from '@/construct/hooks/useT';
 import { useV2Assistant } from './AssistantContext';
 import { v2RouteMeta } from '../layout/construct-navigation';
 import {
@@ -32,6 +34,14 @@ import XTerminal from './XTerminal';
 import CodeTab, { basename, type CodeSession, toolLabel } from './CodeTab';
 import ActivityCard from './ActivityCard';
 import AttachmentChip from './AttachmentChip';
+import SlashCommandMenu from './SlashCommandMenu';
+import {
+  matchCommands,
+  parseInput,
+  resolveCommand,
+  type SlashCommandContext,
+  type SlashThemeName,
+} from './slashCommands';
 import { copyToClipboard } from '@/construct/lib/clipboard';
 
 /* ── types ─────────────────────────────────────────── */
@@ -161,6 +171,9 @@ function ChatPane({
   config,
   colors,
   visible,
+  onAddTab,
+  onCloseActiveTab,
+  onOpenNewTabMenu,
 }: {
   sessionId: string;
   pageContext: string;
@@ -172,12 +185,19 @@ function ChatPane({
    *  hook's state. Switching back instantly shows the in-flight progress
    *  instead of unmounting + remounting + losing every event in between. */
   visible: boolean;
+  onAddTab: (type: TabType) => void;
+  onCloseActiveTab: () => void;
+  onOpenNewTabMenu: () => void;
 }) {
   const { open } = useV2Assistant();
+  const { setTheme } = useTheme();
+  const { setLocale } = useT();
   const {
     activities,
     addAttachment,
+    appendSystemMessage,
     attachments,
+    clearMessages,
     connected,
     error,
     handleSend,
@@ -186,6 +206,7 @@ function ChatPane({
     inputRef,
     messages,
     removeAttachment,
+    setInput,
     streamingContent,
     streamingThinking,
     typing,
@@ -194,8 +215,16 @@ function ChatPane({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dragHover, setDragHover] = useState(false);
+  // Index highlighted in the slash menu — driven by ArrowUp/Down from the
+  // textarea so the input can keep focus while we navigate the popover.
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  // After Esc, suppress the menu until the user changes the input again.
+  // Otherwise pressing Esc would just flicker — matchCommands would keep
+  // returning the same list on every render.
+  const [slashDismissed, setSlashDismissed] = useState(false);
 
   // Concurrently upload a list of files (e.g. multi-select from the
   // file picker, or multiple drag-drop items). Errors on individual
@@ -212,6 +241,95 @@ function ChatPane({
   const onPickFiles = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // ── Slash command plumbing ───────────────────────────────────────
+  // Menu visibility: only while the user is typing the *name* — input
+  // starts with `/`, no space (args mode), no newline (multi-line draft).
+  const slashMatches = useMemo(() => {
+    if (slashDismissed) return [];
+    const trimmed = input.trimStart();
+    if (!trimmed.startsWith('/')) return [];
+    if (trimmed.includes(' ') || trimmed.includes('\n')) return [];
+    return matchCommands(trimmed);
+  }, [input, slashDismissed]);
+
+  // Clamp the highlighted index whenever the match list shrinks.
+  useEffect(() => {
+    if (slashSelectedIndex >= slashMatches.length) {
+      setSlashSelectedIndex(slashMatches.length === 0 ? 0 : slashMatches.length - 1);
+    }
+  }, [slashMatches.length, slashSelectedIndex]);
+
+  // Re-arm the menu the moment the user starts typing again after Esc.
+  useEffect(() => {
+    if (slashDismissed && !input.startsWith('/')) setSlashDismissed(false);
+  }, [input, slashDismissed]);
+
+  const slashCtx = useMemo<SlashCommandContext>(
+    () => ({
+      clearMessages,
+      appendSystemMessage,
+      openFilePicker: () => fileInputRef.current?.click(),
+      addTab: onAddTab,
+      openNewTabMenu: onOpenNewTabMenu,
+      closeActiveTab: onCloseActiveTab,
+      setLang: (code: string) => {
+        setLocale(code as Locale);
+      },
+      setTheme: (theme: SlashThemeName) => {
+        setTheme(theme);
+      },
+    }),
+    [clearMessages, appendSystemMessage, onAddTab, onOpenNewTabMenu, onCloseActiveTab, setLocale, setTheme],
+  );
+
+  /** Resolve and run a typed slash invocation (called from Enter when
+   *  the input parses as `/<known-name> [args]`). Returns true if a
+   *  command was executed; false if the input wasn't a recognized
+   *  command and should fall through to `handleSend`. */
+  const runSlashFromInput = useCallback((): boolean => {
+    const parsed = parseInput(input);
+    if (!parsed) return false;
+    const cmd = resolveCommand(parsed.name);
+    if (!cmd) return false;
+    setInput('');
+    setSlashSelectedIndex(0);
+    setSlashDismissed(false);
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+    try {
+      void cmd.handler(slashCtx, parsed.args);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendSystemMessage(`Command "/${cmd.name}" failed: ${msg}`);
+    }
+    return true;
+  }, [input, slashCtx, setInput, inputRef, appendSystemMessage]);
+
+  /** Pick a command from the menu (click or Enter while menu is open).
+   *  If the command takes args, prefill `/<name> ` so the user can type
+   *  them; otherwise execute immediately. */
+  const pickSlashCommand = useCallback(
+    (index: number) => {
+      const cmd = slashMatches[index];
+      if (!cmd) return;
+      if (cmd.args) {
+        setInput(`/${cmd.name} `);
+        setSlashSelectedIndex(0);
+        inputRef.current?.focus();
+      } else {
+        setInput('');
+        setSlashSelectedIndex(0);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        try {
+          void cmd.handler(slashCtx, '');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          appendSystemMessage(`Command "/${cmd.name}" failed: ${msg}`);
+        }
+      }
+    },
+    [slashMatches, slashCtx, setInput, inputRef, appendSystemMessage],
+  );
 
   const onPaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -436,6 +554,7 @@ function ChatPane({
           Drag-drop and paste handlers on the wrapper accept file uploads;
           the dotted-border overlay shows up while a drag is in flight. */}
       <div
+        ref={composerRef}
         className="relative border-t px-4 py-3"
         style={{ borderColor: 'var(--construct-border-soft)' }}
         onDragEnter={onDragEnter}
@@ -526,7 +645,39 @@ function ChatPane({
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+              const menuOpen = slashMatches.length > 0;
+              if (menuOpen) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSlashSelectedIndex((i) => (i + 1) % slashMatches.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSlashSelectedIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+                  return;
+                }
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  pickSlashCommand(slashSelectedIndex);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setSlashDismissed(true);
+                  return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  pickSlashCommand(slashSelectedIndex);
+                  return;
+                }
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (runSlashFromInput()) return;
+                handleSend();
+              }
             }}
             onPaste={onPaste}
             placeholder={connected ? 'message…' : 'connecting…'}
@@ -602,6 +753,13 @@ function ChatPane({
             {pageContext}
           </span>
         </div>
+
+        <SlashCommandMenu
+          anchorRef={composerRef}
+          matches={slashMatches}
+          selectedIndex={slashSelectedIndex}
+          onPick={pickSlashCommand}
+        />
       </div>
     </div>
   );
@@ -979,6 +1137,9 @@ export default function AssistantPanel() {
                 config={config}
                 colors={colors}
                 visible={activeTabId === tab.id}
+                onAddTab={addTab}
+                onCloseActiveTab={() => closeTab(tab.id)}
+                onOpenNewTabMenu={() => setShowNewTabMenu(true)}
               />
             ))}
           </div>
