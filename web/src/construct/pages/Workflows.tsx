@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useT } from '@/construct/hooks/useT';
 import { parseWorkflowYaml, type TaskDefinition } from '@/components/workflows/yamlSync';
-import WorkflowEditor from '@/components/workflows/WorkflowEditor';
+import WorkflowEditor from '@/construct/components/workflows/WorkflowEditor';
 import type { WorkflowCreateRequest, WorkflowDefinition, WorkflowRunDetail, WorkflowRunSummary, WorkflowUpdateRequest } from '@/types/api';
 import { ApiError, createWorkflow, deleteWorkflow, fetchWorkflowRun, fetchWorkflowRuns, fetchWorkflows, runWorkflow, toggleWorkflowDeprecation, updateWorkflow } from '@/lib/api';
 import {
