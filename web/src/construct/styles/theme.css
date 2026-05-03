@@ -241,6 +241,28 @@
   grid-template-columns: minmax(0, 1fr);
 }
 .construct-skills-grid > :nth-child(3) { grid-column: 1 / -1; }
+
+/* Mobile: stack panels naturally and let the page scroll. The desktop
+   layout puts each panel in its own flex-1 column with internal
+   overflow-y-auto, but on a narrow viewport that squashes all three
+   stacked panels into ~150px tall slivers and clips the cards. Override
+   the inner-flex behavior so panels grow to fit their content and the
+   document body scrolls instead. */
+@media (max-width: 1023px) {
+  .construct-skills-grid,
+  .construct-skills-grid > div {
+    flex: none;
+    min-height: 0;
+  }
+  .construct-skills-grid [class*="overflow-y-auto"] {
+    /* Cap inner scroll at a reasonable mobile-tall height instead of
+       0 (squashed flex-1 with no parent height). 60vh keeps the panel
+       big enough that 4-5 cards fit without scrolling, and short
+       enough that the next panel is visible by scrolling the page. */
+    max-height: 60vh;
+  }
+}
+
 @media (min-width: 1024px) {
   .construct-skills-grid { grid-template-columns: 20rem minmax(0, 1fr); }
   .construct-skills-grid > :nth-child(3) { grid-column: 1 / -1; }

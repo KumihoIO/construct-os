@@ -91,6 +91,35 @@ export default function Dashboard() {
     loadDashboard();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Audit-chain check is owned by Header at a 60s cadence; Dashboard has
+  // to refresh on the same beat or the trust badge here drifts out of
+  // sync with the one in the header. Polling just `verifyAuditChain` is
+  // cheap (one HEAD-equivalent on the audit log file); we don't reload
+  // the rest of the dashboard. Also refresh on window focus so coming
+  // back to a tab after a long idle catches up immediately.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshAudit = () => {
+      verifyAuditChain()
+        .then((res) => {
+          if (!cancelled) setAudit(res);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setAudit({ verified: false, error: err instanceof Error ? err.message : String(err) });
+          }
+        });
+    };
+    const id = window.setInterval(refreshAudit, 60_000);
+    const onFocus = () => refreshAudit();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
+
   useEffect(() => {
     if (!shouldScrollToWorkspace || !selectedRun) return;
     workspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

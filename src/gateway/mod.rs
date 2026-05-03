@@ -61,7 +61,7 @@ use anyhow::{Context, Result};
 use axum::{
     Router,
     body::Bytes,
-    extract::{ConnectInfo, Query, State},
+    extract::{ConnectInfo, DefaultBodyLimit, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Json},
     routing::{delete, get, post, put},
@@ -1453,6 +1453,17 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             post(api_attachments::handle_upload),
         )
         .with_state(state.clone())
+        // Order matters here. Axum applies a default 2 MiB body limit on
+        // every route via its built-in `DefaultBodyLimit` extractor —
+        // `RequestBodyLimitLayer` only sets a *maximum*, it can't override
+        // axum's lower default. We have to explicitly disable the
+        // default limit and then let our 25 MiB layer apply on top.
+        // Without `DefaultBodyLimit::disable()` here, multipart uploads
+        // larger than 2 MiB get rejected with HTTP 413 even though the
+        // RequestBodyLimitLayer says 25 MiB. Layers stack outer-to-inner
+        // so this layer is added BEFORE the body-limit layer, meaning
+        // the disable runs closer to the handler.
+        .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(ATTACHMENT_MAX_BODY))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
