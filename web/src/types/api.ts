@@ -546,3 +546,27 @@ export interface SessionMessagesResponse {
   messages: SessionMessageRow[];
   session_persistence: boolean;
 }
+
+/**
+ * Metadata-only summary of an entry in the encrypted auth-profile store.
+ *
+ * Returned from `GET /api/auth/profiles`. **Token bytes are never included.**
+ * Editor surfaces (workflow step "Auth" dropdown, lock icon) consume this
+ * shape; the runtime fetches the actual decrypted token via the
+ * service-token-gated `/api/auth/profiles/{id}/resolve` endpoint.
+ */
+export interface AuthProfileSummary {
+  /** `<provider>:<profile_name>` — used as the value of the YAML `auth:` field. */
+  id: string;
+  provider: string;
+  profile_name: string;
+  /** "oauth" or "token". */
+  kind: 'oauth' | 'token';
+  account_id: string | null;
+  workspace_id: string | null;
+  /** Only populated for OAuth profiles. ISO 8601. */
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+

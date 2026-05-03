@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
-import { Bot } from 'lucide-react';
+import { Bot, Lock } from 'lucide-react';
 import type { TaskNodeData } from './yamlSync';
 import { ACTION_TO_TYPE } from './yamlSync';
 import { emitOpenAgentPicker } from '@/construct/components/workflows/stepEvents';
@@ -225,6 +225,17 @@ function TaskNode({ id, data, selected }: { id: string; data: TaskNodeData; sele
               </span>
             );
           })}
+        </div>
+      )}
+
+      {/* Auth profile binding — small lock icon when an encrypted credential is bound */}
+      {data.auth && (
+        <div
+          className="flex items-center gap-1 mt-1"
+          title={`Auth: ${data.auth}`}
+          style={{ color: 'var(--construct-text-faint)' }}
+        >
+          <Lock size={12} />
         </div>
       )}
 

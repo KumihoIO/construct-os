@@ -11,6 +11,7 @@ pub mod api;
 pub mod api_agents;
 pub mod api_artifact_body;
 pub mod api_attachments;
+pub mod api_auth_profiles;
 pub mod api_clawhub;
 pub mod api_kumiho_proxy;
 pub mod api_mcp;
@@ -342,6 +343,49 @@ fn normalize_max_keys(configured: usize, fallback: usize) -> usize {
     }
 }
 
+/// Generate (once) and persist the gateway's service token to disk.
+///
+/// The file lives at `<state_dir>/service-token` with mode 0600 on POSIX.
+/// The operator-mcp runtime reads it back to authenticate calls into
+/// `/api/auth/profiles/{id}/resolve` from the same machine.
+fn ensure_service_token(state_dir: &std::path::Path) -> std::io::Result<String> {
+    use std::io::{Read, Write};
+    let path = state_dir.join("service-token");
+    if let Ok(mut f) = std::fs::File::open(&path) {
+        let mut buf = String::new();
+        f.read_to_string(&mut buf)?;
+        let trimmed = buf.trim().to_string();
+        if !trimmed.is_empty() {
+            return Ok(trimmed);
+        }
+    }
+    if !state_dir.exists() {
+        std::fs::create_dir_all(state_dir)?;
+    }
+    // 32 bytes of randomness, hex-encoded — same shape as our other
+    // shared-secret tokens so log greppers find them consistently.
+    let bytes: [u8; 32] = rand::random();
+    let token = bytes.iter().fold(String::with_capacity(64), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{:02x}", b);
+        s
+    });
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path)?;
+    f.write_all(token.as_bytes())?;
+    drop(f);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(&path, perms);
+    }
+    Ok(token)
+}
+
 /// Shared state for all axum handlers
 #[derive(Clone)]
 pub struct AppState {
@@ -408,6 +452,14 @@ pub struct AppState {
     /// MCP server failed to bind — proxy handlers should then return 503.
     /// Populated after MCP server bind in [`run_gateway`].
     pub mcp_local_url: Option<Arc<str>>,
+    /// Encrypted credential store for workflow-step auth-profile dropdown.
+    /// `None` in test mocks. See [`crate::auth::profiles::AuthProfilesStore`].
+    pub auth_profiles: Option<Arc<crate::auth::profiles::AuthProfilesStore>>,
+    /// Service token for internal-only endpoints (e.g. auth-profile resolve).
+    /// Empty string disables those endpoints. Generated at gateway startup
+    /// and persisted to `<state_dir>/service-token` so the operator-mcp
+    /// runtime can read it back without IPC.
+    pub service_token: Arc<str>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -909,6 +961,34 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         None
     };
 
+    // ── Encrypted credential store for workflow auth-profile dropdown ────
+    //
+    // Surfaces the existing AuthProfilesStore (~/.construct/auth-profiles.json,
+    // ChaCha20-Poly1305 via SecretStore) over GET /api/auth/profiles. The
+    // resolve endpoint is gated by a service token that lives next to the
+    // store on disk — this lets the operator-mcp runtime read it back with
+    // file-permissions auth instead of going through bearer-pairing.
+    let auth_profiles_store: Option<Arc<crate::auth::profiles::AuthProfilesStore>> = {
+        let state_dir = crate::auth::state_dir_from_config(&config);
+        Some(Arc::new(crate::auth::profiles::AuthProfilesStore::new(
+            &state_dir,
+            config.secrets.encrypt,
+        )))
+    };
+    let service_token: Arc<str> = {
+        let state_dir = crate::auth::state_dir_from_config(&config);
+        match ensure_service_token(&state_dir) {
+            Ok(t) => Arc::<str>::from(t),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "service token init failed — auth-profile resolve endpoint will be disabled"
+                );
+                Arc::<str>::from("")
+            }
+        }
+    };
+
     // ── Build RuntimeHandles for the in-process MCP server ──────────────
     //
     // The MCP task needs live handles so the tools the standalone binary
@@ -1041,6 +1121,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         approval_registry: approval_registry::global(),
         // Populated after the in-process MCP server binds (see below).
         mcp_local_url: None,
+        auth_profiles: auth_profiles_store,
+        service_token,
         #[cfg(feature = "webauthn")]
         webauthn: if config.security.webauthn.enabled {
             let secret_store = Arc::new(crate::security::SecretStore::new(
@@ -1544,6 +1626,12 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/api/agents", get(api_agents::handle_list_agents).post(api_agents::handle_create_agent))
         .route("/api/agents/deprecate", post(api_agents::handle_deprecate_agent))
         .route("/api/agents/{*kref}", put(api_agents::handle_update_agent).delete(api_agents::handle_delete_agent))
+        // ── Auth profiles (workflow step credential dropdown) ──
+        // GET — bearer-auth, metadata only (token bytes never returned).
+        // POST {id}/resolve — service-token-only, used by the operator-mcp
+        // runtime to decrypt at step-execution time.
+        .route("/api/auth/profiles", get(api_auth_profiles::handle_list_auth_profiles))
+        .route("/api/auth/profiles/{id}/resolve", post(api_auth_profiles::handle_resolve_auth_profile))
         // ── Skill management API (proxied to Kumiho FastAPI) ──
         .route("/api/skills", get(api_skills::handle_list_skills).post(api_skills::handle_create_skill))
         .route("/api/skills/deprecate", post(api_skills::handle_deprecate_skill))
@@ -3063,6 +3151,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3135,6 +3225,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3552,6 +3644,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3634,6 +3728,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3728,6 +3824,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3794,6 +3892,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3865,6 +3965,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -3941,6 +4043,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };
@@ -4014,6 +4118,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         };

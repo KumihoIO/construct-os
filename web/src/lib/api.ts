@@ -31,6 +31,7 @@ import type {
   WorkflowRunDetail,
   WorkflowDashboard,
   MemoryGraphResponse,
+  AuthProfileSummary,
 } from '../types/api';
 import { clearToken, getToken, setToken } from './auth';
 import { apiOrigin, basePath } from './basePath';
@@ -519,6 +520,16 @@ export async function toggleAgentDeprecation(kref: string, deprecated: boolean):
 export async function deleteAgent(kref: string): Promise<void> {
   const path = kref.replace(/^kref:\/\//, '');
   return apiFetch<void>(`/api/agents/${path}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Auth profiles (workflow step credential dropdown)
+// ---------------------------------------------------------------------------
+
+/** Metadata-only listing — the gateway never returns token bytes here. */
+export async function fetchAuthProfiles(): Promise<AuthProfileSummary[]> {
+  const data = await apiFetch<{ profiles: AuthProfileSummary[] }>('/api/auth/profiles');
+  return data.profiles ?? [];
 }
 
 // ---------------------------------------------------------------------------

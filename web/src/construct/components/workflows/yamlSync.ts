@@ -173,6 +173,13 @@ export interface TaskDefinition {
   // --- Deprecate step: deprecate a Kumiho item ---
   deprecate_item_kref?: string;
   deprecate_reason?: string;
+  /**
+   * Encrypted auth-profile binding for agent / shell / python / email / a2a
+   * steps. Format: `<provider>:<profile_name>`. Resolved at runtime via the
+   * gateway's auth-profile resolve endpoint — token bytes never appear in
+   * YAML, list responses, or agent system prompts.
+   */
+  auth?: string;
 }
 
 /** Step result from a workflow run — overlaid on nodes when viewing runs */
@@ -353,6 +360,8 @@ export interface TaskNodeData {
   // Deprecate step
   deprecateItemKref: string;
   deprecateReason: string;
+  /** Encrypted auth-profile id (e.g. `gmail:work`) — resolved at runtime. */
+  auth?: string;
   /** Run-mode overlay — populated when viewing a workflow run */
   runInfo?: StepRunInfo;
   [key: string]: unknown;
@@ -802,6 +811,8 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       }
       const agentModel = block.match(/\bmodel:\s*(\S+)/);
       if (agentModel) data.model = agentModel[1]!.replace(/["']/g, '');
+      const auth = block.match(/^\s{6}auth:\s*(.+)$/m);
+      if (auth) data.auth = auth[1]!.trim().replace(/^["']|["']$/g, '');
     }
 
     // Parallel block: join, max_concurrency
@@ -860,6 +871,8 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       if (shellTimeout) data.shell_timeout = parseFloat(shellTimeout[1]!);
       const allowFail = block.match(/allow_failure:\s*(true|false)/i);
       if (allowFail) data.shell_allow_failure = allowFail[1]!.toLowerCase() === 'true';
+      const auth = block.match(/^\s{6}auth:\s*(.+)$/m);
+      if (auth) data.auth = auth[1]!.trim().replace(/^["']|["']$/g, '');
     }
 
     // Python block — script XOR code; args is a JSON object string
@@ -879,6 +892,8 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       if (pyTimeout) data.python_timeout = parseFloat(pyTimeout[1]!);
       const pyAllowFail = block.match(/allow_failure:\s*(true|false)/i);
       if (pyAllowFail) data.python_allow_failure = pyAllowFail[1]!.toLowerCase() === 'true';
+      const auth = block.match(/^\s{6}auth:\s*(.+)$/m);
+      if (auth) data.auth = auth[1]!.trim().replace(/^["']|["']$/g, '');
     }
 
     // Email block
@@ -918,6 +933,8 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       if (dryRun) data.email_dry_run = dryRun[1]!.toLowerCase() === 'true';
       const emailTimeout = block.match(/timeout:\s*(\d+(?:\.\d+)?)/);
       if (emailTimeout) data.email_timeout = parseFloat(emailTimeout[1]!);
+      const auth = block.match(/^\s{6}auth:\s*(.+)$/m);
+      if (auth) data.auth = auth[1]!.trim().replace(/^["']|["']$/g, '');
     }
 
     // Output block
@@ -1034,6 +1051,8 @@ function extractStepBlockData(yaml: string): Map<string, Partial<TaskDefinition>
       if (a2aMsg) data.a2a_message = a2aMsg[1]!;
       const a2aTimeout = block.match(/timeout:\s*(\d+(?:\.\d+)?)/);
       if (a2aTimeout) data.a2a_timeout = parseFloat(a2aTimeout[1]!);
+      const auth = block.match(/^\s{6}auth:\s*(.+)$/m);
+      if (auth) data.auth = auth[1]!.trim().replace(/^["']|["']$/g, '');
     }
 
     // MapReduce block
@@ -1329,6 +1348,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
       tagUntag: task.tag_untag || '',
       deprecateItemKref: task.deprecate_item_kref || '',
       deprecateReason: task.deprecate_reason || '',
+      auth: task.auth || '',
     },
   }));
 
@@ -1606,6 +1626,10 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       retry: d.retry > 0 ? d.retry : undefined,
       retry_delay: d.retryDelay !== 5 ? d.retryDelay : undefined,
       disabled: d.disabled === true ? true : undefined,
+      // Auth profile binding only emitted on the step types that consume it.
+      auth: ['agent', 'shell', 'python', 'email', 'a2a'].includes(st) && d.auth
+        ? d.auth
+        : undefined,
     };
     // Pass through executor-specific fields
     if (st === 'agent') {
@@ -1861,7 +1885,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (notifyTitle) lines.push(`      title: ${yamlEscape(notifyTitle)}`);
     }
     // Executor-specific nested blocks
-    if (stepType === 'agent' && (task.agent_type || task.role || task.prompt || task.assign)) {
+    if (stepType === 'agent' && (task.agent_type || task.role || task.prompt || task.assign || task.auth)) {
       lines.push(`    agent:`);
       if (task.agent_type) lines.push(`      agent_type: ${task.agent_type}`);
       if (task.role) lines.push(`      role: ${task.role}`);
@@ -1878,6 +1902,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       }
       if (task.timeout && task.timeout !== 300) lines.push(`      timeout: ${task.timeout}`);
       if (task.model) lines.push(`      model: ${task.model}`);
+      if (task.auth) lines.push(`      auth: ${yamlEscape(task.auth)}`);
     }
     if (stepType === 'parallel') {
       lines.push(`    parallel:`);
@@ -1916,6 +1941,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.shell_command) lines.push(`      command: ${yamlEscape(task.shell_command)}`);
       if (task.shell_timeout && task.shell_timeout !== 60) lines.push(`      timeout: ${task.shell_timeout}`);
       if (task.shell_allow_failure) lines.push(`      allow_failure: true`);
+      if (task.auth) lines.push(`      auth: ${yamlEscape(task.auth)}`);
     }
     if (stepType === 'python') {
       lines.push(`    python:`);
@@ -1931,6 +1957,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.python_args) lines.push(`      args: ${task.python_args}`);
       if (task.python_timeout && task.python_timeout !== 60) lines.push(`      timeout: ${task.python_timeout}`);
       if (task.python_allow_failure) lines.push(`      allow_failure: true`);
+      if (task.auth) lines.push(`      auth: ${yamlEscape(task.auth)}`);
     }
     if (stepType === 'email') {
       lines.push(`    email:`);
@@ -1964,6 +1991,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.email_smtp_host) lines.push(`      smtp_host: ${yamlEscape(task.email_smtp_host)}`);
       if (task.email_dry_run) lines.push(`      dry_run: true`);
       if (task.email_timeout && task.email_timeout !== 30) lines.push(`      timeout: ${task.email_timeout}`);
+      if (task.auth) lines.push(`      auth: ${yamlEscape(task.auth)}`);
     }
     if (stepType === 'output') {
       lines.push(`    output:`);
@@ -2034,6 +2062,7 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
       if (task.a2a_skill_id) lines.push(`      skill_id: ${task.a2a_skill_id}`);
       if (task.a2a_message) lines.push(`      message: ${yamlEscape(task.a2a_message)}`);
       if (task.a2a_timeout && task.a2a_timeout !== 300) lines.push(`      timeout: ${task.a2a_timeout}`);
+      if (task.auth) lines.push(`      auth: ${yamlEscape(task.auth)}`);
     }
     if (stepType === 'map_reduce') {
       lines.push(`    map_reduce:`);
