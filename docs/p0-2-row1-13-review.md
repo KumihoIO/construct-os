@@ -1,12 +1,14 @@
 # P0-2 Remediation Review — Rows 1 + 13 paired fix
 
 ## Round 2
+
 **Verdict:** PASS
 **Reviewed by:** codex/gpt-5.5 (auto mode)
 **Reviewed at:** 2026-05-04T20:00:00+09:00
 **Branch:** fix/kumiho-stock-install-coherence
 
 ### Summary
+
 Round 2 satisfies the rescope. The old filesystem/package-presence probe is gone; `src/agent/kumiho.rs` now exposes `registry_has_advanced_kumiho_tools(tool_names: &[String])`, and every traced caller feeds it `registry.tool_names()` after `McpRegistry::connect_all` succeeds. That gates the prompt on actual MCP-registered tool names instead of whether `site-packages/kumiho_memory/` exists.
 
 The lite prompts are now properly stripped. `KUMIHO_BOOTSTRAP_PROMPT_LITE` and `KUMIHO_CHANNEL_BOOTSTRAP_PROMPT_LITE` name only `kumiho_memory_store` and `kumiho_memory_retrieve`; they do not mention `kumiho_memory_engage`, `kumiho_memory_reflect`, `kumiho_memory_recall`, `kumiho_memory_consolidate`, or `kumiho_memory_dream_state` in either positive or negative phrasing. The prompt tests were tightened to plain substring rejection, fixing the Round 1 weak-test issue.
@@ -14,6 +16,7 @@ The lite prompts are now properly stripped. `KUMIHO_BOOTSTRAP_PROMPT_LITE` and `
 I accept the three coder-flagged deviations. Moving the warning out of `inject_kumiho` is the correct shape because `inject_kumiho` runs before MCP startup and cannot know registry state without creating a second async/probe path. I also accept relying on the existing `connect_all` path rather than adding a new 5s wrapper, because the new probe itself is pure and nonblocking after registry connection; adding a separate timeout would be a broader MCP lifecycle change. I accept `src/gateway/mod.rs` as an additional warning site because it is directly tied to the same runtime registry state and makes the gateway lifecycle visible before the first agent run.
 
 ### Checklist results
+
 1. Installer change: ✓ — `scripts/install-sidecars.sh` and `scripts/install-sidecars.bat` still install `kumiho_memory>=0.5.0`; Round 1 already verified the spec exists on PyPI.
 2. Prompt builder conditional: ✓ — `PromptContext.kumiho_memory_advanced_available` drives full vs lite selection, and the flag is now supplied from post-connect registry contents.
 3. Test coverage: ✓ — prompt-builder tests cover disabled / lite / full; lite assertions are plain substring rejections for all high-level memory reflex tool names; `kumiho.rs` includes registry probe tests for empty, unprefixed, bare-only, and prefixed-sentinel registries.
@@ -23,6 +26,7 @@ I accept the three coder-flagged deviations. Moving the warning out of `inject_k
 7. Net-deletes ≥ net-adds: ✓ with caveat — this is still a net-add patch, but the new prose is materially smaller and stripped, and the main fix is now a structured runtime registry check. I would not block on net line count here.
 
 ### Spot-checks
+
 `src/agent/kumiho.rs:277-280`:
 
 ```rust
@@ -114,6 +118,7 @@ match tools::McpRegistry::connect_all(&gateway_mcp_config.servers).await {
 ```
 
 ### Deviation Decisions
+
 A. Warning location moved: accept — the warning needs post-connect registry state; keeping it in sync `inject_kumiho` would reintroduce guesswork or require a second startup/probe path.
 
 B. No 5s timeout wrapper: accept — the probe itself is constant-time after `connect_all`; a new timeout wrapper belongs to broader MCP startup policy, not this remediation. Existing error / empty / disabled fallback keeps the prompt conservative.
@@ -121,20 +126,24 @@ B. No 5s timeout wrapper: accept — the probe itself is constant-time after `co
 C. `src/gateway/mod.rs` warning site: accept — it is relevant to the gateway lifecycle and does not broaden behavior beyond Row 1's prompt/tool-availability contract.
 
 ### Verification
+
 `cargo check --lib` passed cleanly in 4m36s.
 
 ### Follow-up
+
 Nonblocking challenge: `registry_has_advanced_kumiho_tools` uses `kumiho_memory_engage` as a sentinel for the whole advanced set. That is defensible given the documented all-or-none merge behavior, but if the MCP package ever supports partial registration, this should become an explicit required-set check for at least engage + reflect.
 
 ---
 
 ## Round 1
+
 **Verdict:** FAIL-rescope
 **Reviewed by:** codex/gpt-5.5 (auto mode)
 **Reviewed at:** 2026-05-04T19:42:20+09:00
 **Branch:** fix/kumiho-stock-install-coherence
 
 ## Summary
+
 The installer half is directionally correct: both POSIX and Windows sidecar installers now install `kumiho_memory>=0.5.0` alongside `kumiho[mcp]>=0.9.20`, and an escalated `python3 -m pip index versions kumiho_memory` lookup confirmed that `0.5.0` through `0.5.2` exist on PyPI. `cargo check --lib` passed.
 
 The Row 1 runtime contract is not satisfied. The implementation does not probe actual registered tool availability; it checks whether a `site-packages/kumiho_memory/` directory exists next to the configured launcher. That can report true while the MCP registry still lacks the required tools due to import failure, incompatible package contents, broken startup, tool exclusion, or a nonstandard runtime layout. This is the core audit prescription, so this is a rescope failure rather than a small fix.
@@ -142,6 +151,7 @@ The Row 1 runtime contract is not satisfied. The implementation does not probe a
 There are also coder-fixable issues: the lite prompt still names the high-level tools it is supposed to avoid, references low-level tools beyond the prescribed always-available `kumiho_memory_store` / `kumiho_memory_retrieve` pair, and the scope check against `origin/dev..HEAD` is not clean.
 
 ## Checklist results
+
 1. Installer change: ✓ — `scripts/install-sidecars.sh:179` and `scripts/install-sidecars.bat:111` install `"kumiho_memory>=0.5.0"`. The spec is a lower bound, not an exact pin, and PyPI currently has `0.5.0`, `0.5.1`, and `0.5.2`. Initial sandboxed `python3 -m pip index versions kumiho_memory` failed due network restriction; escalated lookup passed.
 2. Prompt builder conditional: ✗ — `PromptContext.kumiho_memory_advanced_available` exists and `KumihoBootstrapSection::build` selects full vs lite, but the flag is driven by package-directory probing, not actual registry contents. The lite constant also still mentions `kumiho_memory_engage` / `reflect` and additional low-level tools.
 3. Test coverage: ✗ — prompt-builder tests cover disabled / lite / full states, and installer grep tests exist. However the lite tests only reject narrow substrings such as `"Call kumiho_memory_engage"` while the lite prompt still contains `kumiho_memory_engage`. `cargo check --lib` passed. `cargo test --test component install_sidecars_kumiho_memory` was started twice but did not complete after extended compilation time, so I did not confirm the installer grep test result.
@@ -151,6 +161,7 @@ There are also coder-fixable issues: the lite prompt still names the high-level 
 7. Net-deletes ≥ net-adds: ✗ — the runtime probe is the right kind of artifact, but the prompt changes add duplicated prose and the lite prompt is not truly stripped. The working tree is net +363 lines by `git diff --stat`, and the lite variants duplicate warning/instruction text instead of parameterizing the common parts.
 
 ## Spot-checks
+
 `scripts/install-sidecars.sh:179`:
 
 ```bash
@@ -202,7 +213,9 @@ assert!(!out.contains("kumiho_memory_reflect only"));
 The assertions are too weak; they pass even though the lite prompt contains `kumiho_memory_engage` and `reflect`.
 
 ## Required fixes (if FAIL-fix)
+
 Not the primary verdict. If the approach is kept after rescope, tighten the lite prompt/tests and clean the branch scope before requesting another review.
 
 ## Required rescope (if FAIL-rescope)
+
 Replace the filesystem `site-packages/kumiho_memory` heuristic with a check based on actual registered tool availability. The acceptance criterion should be whether the runtime registry contains the required high-level tool names, not whether a Python package directory exists. Also make the lite prompt reference only the guaranteed tools named in the audit prescription: `kumiho_memory_store` and `kumiho_memory_retrieve`.

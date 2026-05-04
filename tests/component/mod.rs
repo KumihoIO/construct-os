@@ -1,9 +1,9 @@
 mod config_persistence;
 mod config_schema;
 mod dockerignore_test;
-mod install_sidecars_kumiho_memory;
 mod gateway;
 mod gemini_capabilities;
+mod install_sidecars_kumiho_memory;
 mod otel_dependency_feature_regression;
 mod provider_resolution;
 mod provider_schema;
