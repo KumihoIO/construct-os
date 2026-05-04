@@ -304,29 +304,15 @@ export default function Dashboard() {
         )}
       />
 
-      {/* Three-column layout. Reading order across the rails (top-to-bottom,
-          left rail then right rail) is the operator's posture sequence:
-          Risk → Agent → Command → Recent Runs. We tried stacking all four
-          cards in a single right rail to make the sequence purely vertical,
-          but at typical viewport heights the column overflowed and Recent
-          Runs / Agent activity got clipped. Splitting back into two narrower
-          rails preserves the reading order while giving each card enough
-          vertical room to breathe. */}
-      <div className="grid gap-4 grid-cols-1 lg:min-h-0 lg:flex-1 lg:grid-cols-[18rem_minmax(0,1fr)_20rem] lg:[grid-template-rows:minmax(0,1fr)]">
-        <div className="flex flex-col gap-4 lg:overflow-y-auto lg:min-h-0">
-          <RiskRailCard
-            audit={audit}
-            cost={cost}
-            degradedComponentCount={degradedComponentCount}
-          />
-          <AgentRailCard
-            sessions={sessions}
-            channels={channels}
-            activeSessionCount={activeSessionCount}
-            activeChannelCount={activeChannelCount}
-          />
-        </div>
-
+      {/* Two-column layout — workflow workspace on the left, single
+          stacked rail on the right with the operator's reading order:
+          Risk → Agent → Command → Recent Runs. The rail is wider than
+          the previous 22rem (now 24rem) and is explicitly height-capped
+          via `max-h` so the inner overflow-y-auto reliably engages even
+          when the document body itself is scrollable — that was the
+          truncation bug in the earlier attempt: the rail just kept
+          extending below the viewport instead of giving us a scrollbar. */}
+      <div className="grid gap-4 grid-cols-1 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem] lg:[grid-template-rows:minmax(0,1fr)]">
         <Panel className="flex flex-col p-5 lg:min-h-0">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -515,7 +501,25 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        <div className="flex flex-col gap-4 lg:overflow-y-auto lg:min-h-0">
+        {/* Right rail — single column, 4 cards, reading order is the
+            operator's posture sequence. `lg:max-h-[calc(100vh-9rem)]`
+            is what actually makes overflow-y-auto kick in: without it
+            the parent grid was happy to grow the column to its content
+            and let the page itself scroll, hiding the lower cards under
+            the fold. The 9rem subtracts the page header + dashboard
+            header + the gap above the rail. */}
+        <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-9rem)] lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+          <RiskRailCard
+            audit={audit}
+            cost={cost}
+            degradedComponentCount={degradedComponentCount}
+          />
+          <AgentRailCard
+            sessions={sessions}
+            channels={channels}
+            activeSessionCount={activeSessionCount}
+            activeChannelCount={activeChannelCount}
+          />
           <CommandBandCard
             selectedRunStatus={selectedRun?.status}
             audit={audit}
