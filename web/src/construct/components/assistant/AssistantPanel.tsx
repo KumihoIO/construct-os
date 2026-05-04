@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle,
@@ -160,12 +160,18 @@ function ChatPane({
   placeholder,
   config,
   colors,
+  visible,
 }: {
   sessionId: string;
   pageContext: string;
   placeholder: string;
   config: AssistantConfig;
   colors: SchemeColors;
+  /** When false the pane is `display:none` but stays mounted, so the
+   *  WebSocket stream keeps producing typing/chunk/done events into the
+   *  hook's state. Switching back instantly shows the in-flight progress
+   *  instead of unmounting + remounting + losing every event in between. */
+  visible: boolean;
 }) {
   const { open } = useV2Assistant();
   const {
@@ -257,16 +263,16 @@ function ChatPane({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [activities, messages, streamingContent, typing]);
 
-  // Focus the message input each time the panel opens. The 320ms delay
-  // matches the panel's 300ms slide-down transition (line 532) so the
-  // textarea is on screen and clickable when the cursor lands. inputRef
-  // is a stable ref so depending on `open` is what actually drives the
-  // re-focus on every dropdown.
+  // Focus the message input each time the panel opens *and* this pane
+  // is the visible one. The 320ms delay matches the panel's 300ms
+  // slide-down transition so the textarea is on screen when the cursor
+  // lands. Without the visible guard, every mounted (but hidden) chat
+  // tab would race to grab focus when the panel opens.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !visible) return;
     const id = setTimeout(() => inputRef.current?.focus(), 320);
     return () => clearTimeout(id);
-  }, [open, inputRef]);
+  }, [open, visible, inputRef]);
 
   const roleColor = useCallback(
     (role: string) => {
@@ -287,7 +293,10 @@ function ChatPane({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="min-h-0 flex-1 flex-col"
+      style={{ display: visible ? 'flex' : 'none' }}
+    >
       {typing && (
         <div className="h-[2px] overflow-hidden" style={{ background: 'var(--construct-bg-surface)' }}>
           <div
@@ -709,7 +718,6 @@ export default function AssistantPanel() {
   const [showNewTabMenu, setShowNewTabMenu] = useState(false);
   const newTabBtnRef = useRef<HTMLButtonElement>(null);
   const [showConfig, setShowConfig] = useState(false);
-  const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId) ?? tabs[0], [tabs, activeTabId]);
 
   useEffect(() => {
     if (!open) return;
@@ -955,17 +963,24 @@ export default function AssistantPanel() {
               />
             ))}
 
-            {/* Active chat tab */}
-            {activeTab?.type === 'chat' && (
+            {/* Chat tabs — all rendered, visibility toggled so the
+                WebSocket stream and in-flight typing/streaming state
+                survive tab switches. Otherwise asking a question, swapping
+                to a terminal/code tab, and switching back would unmount
+                the pane mid-turn — losing every event between unmount
+                and remount, so the user sees a blank pane until the next
+                history fetch (i.e. the next tab swap). */}
+            {tabs.filter((t) => t.type === 'chat').map((tab) => (
               <ChatPane
-                key={activeTab.id}
-                sessionId={activeTab.sessionId}
-                pageContext={activeTab.pageContextOverride ?? pageContext}
+                key={tab.id}
+                sessionId={tab.sessionId}
+                pageContext={tab.pageContextOverride ?? pageContext}
                 placeholder={placeholder}
                 config={config}
                 colors={colors}
+                visible={activeTabId === tab.id}
               />
-            )}
+            ))}
           </div>
         )}
       </div>
