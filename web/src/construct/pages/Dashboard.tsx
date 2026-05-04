@@ -502,13 +502,17 @@ export default function Dashboard() {
         </Panel>
 
         {/* Right rail — single column, 4 cards, reading order is the
-            operator's posture sequence. `lg:max-h-[calc(100vh-9rem)]`
-            is what actually makes overflow-y-auto kick in: without it
-            the parent grid was happy to grow the column to its content
-            and let the page itself scroll, hiding the lower cards under
-            the fold. The 9rem subtracts the page header + dashboard
-            header + the gap above the rail. */}
-        <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-9rem)] lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+            operator's posture sequence. Three things keep this stable:
+            (1) `lg:max-h-[calc(100vh-9rem)]` constrains rail height so
+            overflow-y-auto can engage. (2) `[&>*]:shrink-0` on direct
+            children — without it, flex-shrink defaults to 1 and the
+            cards get squeezed to fit the rail. Combined with
+            `.construct-panel { overflow: hidden }` (from theme.css),
+            squeezed cards silently clip their inner content (Risk Rail
+            losing Component health, Agent Rail losing session activity).
+            (3) The `pr-1` reserves space for the scrollbar so it
+            doesn't overlap card borders. */}
+        <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-9rem)] lg:min-h-0 lg:overflow-y-auto lg:pr-1 [&>*]:shrink-0">
           <RiskRailCard
             audit={audit}
             cost={cost}
