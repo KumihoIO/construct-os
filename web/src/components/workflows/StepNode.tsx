@@ -33,7 +33,7 @@ function getActionColor(action: string): string {
 // ---------------------------------------------------------------------------
 
 function StepNode({ data }: { data: StepNodeData }) {
-  const color = getActionColor(data.action);
+  const color = getActionColor(data.type);
 
   return (
     <div
@@ -59,7 +59,7 @@ function StepNode({ data }: { data: StepNodeData }) {
           className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
           style={{ background: color + '22', color }}
         >
-          {data.action}
+          {data.type}
         </span>
         {data.paramCount > 0 && (
           <span

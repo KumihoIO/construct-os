@@ -137,7 +137,7 @@ function defaultNodeData(id: string, overrides?: Partial<TaskNodeData>): TaskNod
     taskId: id,
     name: id,
     description: '',
-    action: 'task',
+    type: 'agent',
     agentHints: [],
     skills: [],
     assign: '',
@@ -243,18 +243,11 @@ function defaultNodeData(id: string, overrides?: Partial<TaskNodeData>): TaskNod
   };
 }
 
-// Map a step-type from the registry → legacy `action` field used by yamlSync.
-function actionForType(type: string): string {
-  // For "conditional" we still store action='gate' so legacy gate handles work.
-  if (type === 'conditional') return 'gate';
-  return type;
-}
-
-// Build initial node data overrides for a given step type (so a freshly
-// inserted node starts with the right defaults, e.g. action=shell).
+// Build initial node data overrides for a given step type. `type` is the
+// canonical executor identifier (matches StepType in operator schema) and is
+// the only step-kind field stored on the node going forward.
 function defaultsForType(type: string): Partial<TaskNodeData> {
-  const action = actionForType(type);
-  return { action };
+  return { type };
 }
 
 // ---------------------------------------------------------------------------
@@ -716,6 +709,42 @@ function WorkflowEditorInner({
       );
     },
     [setNodes],
+  );
+
+  // Atomic step-id rename: keeps node.id, data.taskId, and edge endpoints in
+  // lockstep so depends_on round-trips correctly.
+  //
+  // Known gap (P1.5a, intentional): does NOT rewrite `${old_id.output}`
+  // references buried inside other steps' fields (prompts, conditions, etc.).
+  // Users editing a Step ID see only the dependency wires move; if they had
+  // typed `${test-agent.output}` into a downstream prompt, that string keeps
+  // the old name. Surfacing those references in the panel is P1.5b/c work.
+  const handleRenameStep = useCallback(
+    (oldId: string, newId: string) => {
+      if (oldId === newId) return;
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === oldId
+            ? { ...n, id: newId, data: { ...n.data, taskId: newId, label: n.data.label === oldId ? newId : n.data.label } }
+            : n,
+        ),
+      );
+      setEdges((eds) =>
+        eds.map((e) => {
+          const next = { ...e };
+          let touched = false;
+          if (e.source === oldId) { next.source = newId; touched = true; }
+          if (e.target === oldId) { next.target = newId; touched = true; }
+          if (touched) {
+            const handle = e.sourceHandle ? `${e.sourceHandle}->` : '';
+            next.id = `${next.source}->${handle}${next.target}`;
+          }
+          return next;
+        }),
+      );
+      if (selectedNodeId === oldId) setSelectedNodeId(newId);
+    },
+    [setNodes, setEdges, selectedNodeId],
   );
 
   const handleNodeDelete = useCallback(
@@ -1500,7 +1529,9 @@ function WorkflowEditorInner({
         {selectedNode ? (
           <StepConfigPanel
             node={selectedNode as Node<TaskNodeData>}
+            existingTaskIds={nodes.map((n) => (n.data as TaskNodeData).taskId)}
             onUpdate={handleNodeUpdate}
+            onRenameStep={handleRenameStep}
             onDelete={handleNodeDelete}
             onChangeType={() => {
               setChangeTypeFor(selectedNode.id);

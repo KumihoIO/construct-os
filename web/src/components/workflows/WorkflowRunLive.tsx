@@ -885,7 +885,9 @@ function WorkflowGraphLive({
           status: 'pending',
           agent_type: inferred.agent_type,
           role: inferred.role,
-          action: yamlTask.action,
+          // StepRunInfo.action is the runtime overlay's free-text label —
+          // for the YAML pre-fill we surface the canonical step type.
+          action: yamlTask.type,
           skills: yamlTask.skills.length > 0 ? yamlTask.skills : undefined,
           template_name: yamlTask.assign || undefined,
         };
@@ -973,15 +975,15 @@ function WorkflowGraphLive({
               if (data?.runInfo?.status === 'completed') return '#34d399';
               if (data?.runInfo?.status === 'running') return '#eab308';
               if (data?.runInfo?.status === 'failed') return '#f87171';
-              const action = data?.action?.toLowerCase() ?? '';
-              if (action === 'gate' || action === 'conditional') return '#eab308';
-              if (action.includes('review')) return '#a855f7';
-              if (action.includes('deploy')) return '#f97316';
-              if (action.includes('test')) return '#06b6d4';
-              if (action.includes('code') || action.includes('build')) return '#00b4d8';
-              if (action.includes('research')) return '#22c55e';
-              if (action.includes('notify')) return '#ec4899';
-              if (action.includes('approve') || action.includes('human')) return '#8b5cf6';
+              const stepType = data?.type?.toLowerCase() ?? '';
+              if (stepType === 'conditional') return '#eab308';
+              if (stepType.includes('review')) return '#a855f7';
+              if (stepType.includes('deploy')) return '#f97316';
+              if (stepType.includes('test')) return '#06b6d4';
+              if (stepType.includes('code') || stepType.includes('build')) return '#00b4d8';
+              if (stepType.includes('research')) return '#22c55e';
+              if (stepType.includes('notify')) return '#ec4899';
+              if (stepType.includes('approve') || stepType.includes('human')) return '#8b5cf6';
               return '#22d3ee';
             }}
             nodeStrokeColor={(node: Node) => {

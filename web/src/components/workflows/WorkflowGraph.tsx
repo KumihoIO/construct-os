@@ -132,10 +132,7 @@ function WorkflowGraphInner({ definition, height = '400px', stepResults }: Workf
           <MiniMap
             nodeColor={(node: Node<TaskNodeData>) => {
               const data = node.data as TaskNodeData;
-              if (data?.action === 'gate') return '#eab308';
-              if (data?.action?.includes('review')) return '#a855f7';
-              if (data?.action?.includes('deploy')) return '#f97316';
-              if (data?.action?.includes('test')) return '#06b6d4';
+              if (data?.type === 'conditional') return '#eab308';
               return 'var(--pc-accent)';
             }}
             style={{

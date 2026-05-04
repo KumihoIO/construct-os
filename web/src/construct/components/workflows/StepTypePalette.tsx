@@ -10,12 +10,16 @@
 import { Command } from 'cmdk';
 import { Search } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CATEGORY_META,
   CATEGORY_ORDER,
   STEP_TYPES_BY_CATEGORY,
 } from './stepRegistry';
 import { emitAddStep, type AddStepDetail } from './stepEvents';
+
+const PICKER_BACKDROP_Z = 9000;
+const PICKER_PANEL_Z = 9001;
 
 interface Props {
   open: boolean;
@@ -60,6 +64,7 @@ export default function StepTypePalette({
   }, [open, onOpenChange]);
 
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
   const handlePick = (type: string) => {
     if (onSelect) {
@@ -70,7 +75,7 @@ export default function StepTypePalette({
     onOpenChange(false);
   };
 
-  return (
+  const content = (
     <div
       role="dialog"
       aria-modal="true"
@@ -81,7 +86,7 @@ export default function StepTypePalette({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 60,
+        zIndex: PICKER_BACKDROP_Z,
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -102,6 +107,7 @@ export default function StepTypePalette({
           borderColor: 'var(--construct-border-strong)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.36)',
           overflow: 'hidden',
+          zIndex: PICKER_PANEL_Z,
         }}
       >
         <Command
@@ -263,4 +269,9 @@ export default function StepTypePalette({
       `}</style>
     </div>
   );
+
+  // Portal to body so position:fixed escapes any ancestor with
+  // transform/filter/will-change that would otherwise become the
+  // containing block and clip the palette behind the side panel.
+  return createPortal(content, document.body);
 }
