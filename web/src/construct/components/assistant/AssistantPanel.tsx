@@ -522,7 +522,11 @@ function ChatPane({
             onPaste={onPaste}
             placeholder={connected ? 'message…' : 'connecting…'}
             disabled={!connected}
-            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none disabled:opacity-50"
+            // `focus-visible:outline-none` overrides the global `:focus-visible`
+            // ring set in index.css (2px accent outline) — without it Tailwind's
+            // `outline-none` loses to the global selector and we end up with a
+            // cyan halo around the composer on every keypress.
+            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
             style={{
               color: 'var(--construct-text-primary)',
               caretColor: colors.cursorColor,

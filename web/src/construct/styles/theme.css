@@ -272,6 +272,38 @@
   .construct-skills-grid > :nth-child(3) { grid-column: auto; }
 }
 
+/* Asset browser row layout — desktop renders the full 4-column table
+   (NAME / KIND / AUTHOR / CREATED). At narrow widths (< 768px) the
+   AUTHOR column collides with NAME and CREATED so we collapse to a
+   stacked layout: name + relative time on row 1, kind chip on row 2,
+   author hidden entirely (it's almost always a UUID-style string that
+   adds noise without helping scanning on a phone). */
+.construct-assets-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem 12rem 5.5rem;
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+@media (max-width: 767px) {
+  .construct-assets-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.25rem;
+  }
+  .construct-assets-row > .construct-assets-author {
+    display: none;
+  }
+  .construct-assets-row > .construct-assets-kind {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .construct-assets-row > .construct-assets-created {
+    grid-row: 1;
+    grid-column: 2;
+    text-align: right;
+  }
+}
+
 .construct-table thead th {
   text-align: left;
   font-size: 0.68rem;

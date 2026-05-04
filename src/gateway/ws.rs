@@ -717,13 +717,16 @@ async fn process_chat_message(
         String::new()
     } else {
         let workspace_dir = state.config.lock().workspace_dir.clone();
+        // Uploads land in `<workspace>/attachments/<session_id>/...` keyed
+        // on the bare session UUID — strip the gateway's `gw_` prefix from
+        // `session_key` so the resolver looks in the right directory. The
+        // earlier `rsplit(':')` was a no-op against the `gw_<uuid>` format
+        // and silently dropped every attachment on the floor.
         let session_id = session_key
-            .rsplit(':')
-            .next()
-            .unwrap_or(session_key)
-            .to_string();
+            .strip_prefix(GW_SESSION_PREFIX)
+            .unwrap_or(session_key);
         let resolved =
-            super::api_attachments::resolve_for_session(&workspace_dir, &session_id, attachments)
+            super::api_attachments::resolve_for_session(&workspace_dir, session_id, attachments)
                 .await;
         build_attachment_prefix(&resolved).await
     };
