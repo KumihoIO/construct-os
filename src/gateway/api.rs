@@ -2366,6 +2366,8 @@ mod tests {
             mcp_registry: None,
             approval_registry: crate::gateway::approval_registry::global(),
             mcp_local_url: None,
+            auth_profiles: None,
+            service_token: Arc::<str>::from(""),
             #[cfg(feature = "webauthn")]
             webauthn: None,
         }
