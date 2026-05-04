@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   Check,
@@ -159,12 +160,18 @@ function ChatPane({
   placeholder,
   config,
   colors,
+  visible,
 }: {
   sessionId: string;
   pageContext: string;
   placeholder: string;
   config: AssistantConfig;
   colors: SchemeColors;
+  /** When false the pane is `display:none` but stays mounted, so the
+   *  WebSocket stream keeps producing typing/chunk/done events into the
+   *  hook's state. Switching back instantly shows the in-flight progress
+   *  instead of unmounting + remounting + losing every event in between. */
+  visible: boolean;
 }) {
   const { open } = useV2Assistant();
   const {
@@ -256,16 +263,16 @@ function ChatPane({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [activities, messages, streamingContent, typing]);
 
-  // Focus the message input each time the panel opens. The 320ms delay
-  // matches the panel's 300ms slide-down transition (line 532) so the
-  // textarea is on screen and clickable when the cursor lands. inputRef
-  // is a stable ref so depending on `open` is what actually drives the
-  // re-focus on every dropdown.
+  // Focus the message input each time the panel opens *and* this pane
+  // is the visible one. The 320ms delay matches the panel's 300ms
+  // slide-down transition so the textarea is on screen when the cursor
+  // lands. Without the visible guard, every mounted (but hidden) chat
+  // tab would race to grab focus when the panel opens.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !visible) return;
     const id = setTimeout(() => inputRef.current?.focus(), 320);
     return () => clearTimeout(id);
-  }, [open, inputRef]);
+  }, [open, visible, inputRef]);
 
   const roleColor = useCallback(
     (role: string) => {
@@ -286,7 +293,10 @@ function ChatPane({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="min-h-0 flex-1 flex-col"
+      style={{ display: visible ? 'flex' : 'none' }}
+    >
       {typing && (
         <div className="h-[2px] overflow-hidden" style={{ background: 'var(--construct-bg-surface)' }}>
           <div
@@ -426,7 +436,7 @@ function ChatPane({
           Drag-drop and paste handlers on the wrapper accept file uploads;
           the dotted-border overlay shows up while a drag is in flight. */}
       <div
-        className="relative border-t px-4 py-3 transition-colors focus-within:bg-white/[0.015]"
+        className="relative border-t px-4 py-3"
         style={{ borderColor: 'var(--construct-border-soft)' }}
         onDragEnter={onDragEnter}
         onDragOver={(e) => {
@@ -482,8 +492,12 @@ function ChatPane({
         )}
 
         <div
-          className="flex items-end gap-2 rounded-md border px-2 py-1.5 transition-colors focus-within:border-current"
+          className="flex items-end gap-2 rounded-md border px-2 py-1.5 transition-colors"
           style={{
+            // No focus-within border highlight — users found it noisy.
+            // Border only changes on drag-hover (visible feedback while
+            // a file is being dragged in) and otherwise stays at the
+            // muted soft border throughout focus + typing.
             borderColor: dragHover ? colors.primary : 'var(--construct-border-soft)',
             background: dragHover ? 'color-mix(in srgb, var(--construct-bg-surface) 85%, transparent)' : 'transparent',
             color: colors.primary,
@@ -517,12 +531,21 @@ function ChatPane({
             onPaste={onPaste}
             placeholder={connected ? 'message…' : 'connecting…'}
             disabled={!connected}
-            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none disabled:opacity-50"
+            // `focus-visible:outline-none` overrides the global `:focus-visible`
+            // ring set in index.css (2px accent outline) — without it Tailwind's
+            // `outline-none` loses to the global selector and we end up with a
+            // cyan halo around the composer on every keypress.
+            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
             style={{
               color: 'var(--construct-text-primary)',
               caretColor: colors.cursorColor,
               maxHeight: '6rem',
-              fontSize: `${config.fontSize}px`,
+              // 16px floor specifically for the textarea so iOS Safari
+              // doesn't autozoom on focus. The user's font-size preference
+              // still applies to message scrollback above; only the input
+              // is clamped. Below 16px on form controls is the autozoom
+              // trigger across mobile WebKit.
+              fontSize: `${Math.max(16, config.fontSize)}px`,
             }}
           />
           <button
@@ -587,27 +610,59 @@ function ChatPane({
 /* ── NewTabMenu ───────────────────────────────────── */
 
 function NewTabMenu({
+  anchorRef,
   onSelect,
   onClose,
 }: {
+  anchorRef: React.RefObject<HTMLElement | null>;
   onSelect: (type: TabType) => void;
   onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Compute position from the trigger button's bounding rect and render
+  // via portal so the menu escapes the assistant panel's stacking context
+  // — `position: absolute` inside the panel was being clipped by the
+  // chat pane's `overflow-hidden`. Recomputed on scroll/resize so the
+  // menu tracks if the page reflows underneath it. The anchor button is
+  // small and the menu is short-lived, so a `getBoundingClientRect` per
+  // event is cheap.
+  useLayoutEffect(() => {
+    const update = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchorRef]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (menuRef.current && menuRef.current.contains(target)) return;
+      if (anchorRef.current && anchorRef.current.contains(target)) return;
+      onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [anchorRef, onClose]);
 
-  return (
+  if (!pos) return null;
+
+  return createPortal(
     <div
       ref={menuRef}
-      className="absolute left-0 top-full z-50 mt-1 rounded-[8px] border py-1 shadow-lg"
+      className="fixed z-[200] rounded-[8px] border py-1 shadow-lg"
       style={{
+        top: pos.top,
+        left: pos.left,
         background: 'var(--construct-bg-panel-strong)',
         borderColor: 'var(--construct-border-strong)',
         minWidth: '10rem',
@@ -640,7 +695,8 @@ function NewTabMenu({
         <Code2 className="h-3.5 w-3.5" />
         New Code
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -660,8 +716,8 @@ export default function AssistantPanel() {
   ]);
   const [activeTabId, setActiveTabId] = useState('chat-main');
   const [showNewTabMenu, setShowNewTabMenu] = useState(false);
+  const newTabBtnRef = useRef<HTMLButtonElement>(null);
   const [showConfig, setShowConfig] = useState(false);
-  const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId) ?? tabs[0], [tabs, activeTabId]);
 
   useEffect(() => {
     if (!open) return;
@@ -830,8 +886,9 @@ export default function AssistantPanel() {
               );
             })}
 
-            <div className="relative shrink-0">
+            <div className="shrink-0">
               <button
+                ref={newTabBtnRef}
                 type="button"
                 className="flex items-center gap-0.5 p-1.5 transition-colors hover:bg-white/5"
                 onClick={() => setShowNewTabMenu((prev) => !prev)}
@@ -843,6 +900,7 @@ export default function AssistantPanel() {
               </button>
               {showNewTabMenu && (
                 <NewTabMenu
+                  anchorRef={newTabBtnRef}
                   onSelect={addTab}
                   onClose={() => setShowNewTabMenu(false)}
                 />
@@ -905,17 +963,24 @@ export default function AssistantPanel() {
               />
             ))}
 
-            {/* Active chat tab */}
-            {activeTab?.type === 'chat' && (
+            {/* Chat tabs — all rendered, visibility toggled so the
+                WebSocket stream and in-flight typing/streaming state
+                survive tab switches. Otherwise asking a question, swapping
+                to a terminal/code tab, and switching back would unmount
+                the pane mid-turn — losing every event between unmount
+                and remount, so the user sees a blank pane until the next
+                history fetch (i.e. the next tab swap). */}
+            {tabs.filter((t) => t.type === 'chat').map((tab) => (
               <ChatPane
-                key={activeTab.id}
-                sessionId={activeTab.sessionId}
-                pageContext={activeTab.pageContextOverride ?? pageContext}
+                key={tab.id}
+                sessionId={tab.sessionId}
+                pageContext={tab.pageContextOverride ?? pageContext}
                 placeholder={placeholder}
                 config={config}
                 colors={colors}
+                visible={activeTabId === tab.id}
               />
-            )}
+            ))}
           </div>
         )}
       </div>
