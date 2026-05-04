@@ -6,11 +6,16 @@
  *     - id: step-1
  *       name: Greeting Task
  *       description: Send a greeting to the user
- *       action: greet
+ *       type: agent
  *       agent_hints: [coder, researcher]
  *       skills: [code-review, rust-analysis]
  *       depends_on: step-0
  *       params: { ... }
+ *
+ * NOTE: legacy YAML may contain `action: <friendly verb>` (e.g.
+ * `action: research`). On parse we map it through ACTION_TO_TYPE to a
+ * canonical `type` and drop the `action` field. The emitter only writes
+ * `type:` going forward.
  */
 
 import type { Node, Edge } from '@xyflow/react';
@@ -23,7 +28,10 @@ export interface TaskDefinition {
   id: string;
   name: string;
   description: string;
-  action: string;
+  /** Canonical step type (matches StepType in operator schema). Legacy YAML
+   *  may carry `action:` instead — the parser maps it through ACTION_TO_TYPE
+   *  and drops the `action` field, so callers should always read `type`. */
+  type: string;
   agent_hints: string[];
   skills: string[];
   depends_on: string[];
@@ -201,7 +209,9 @@ export interface StepRunInfo {
   reject_keywords?: string[];
 }
 
-/** Infer agent_type and role from action + hints (mirrors Python ACTION_DEFAULTS) */
+/** Infer agent_type and role from type + hints (mirrors Python ACTION_DEFAULTS).
+ *  Keys here are legacy `action` verbs and canonical step types alike — the
+ *  fallback handles both cleanly. */
 const ACTION_AGENT_MAP: Record<string, { agent_type: string; role: string }> = {
   research:  { agent_type: 'claude', role: 'researcher' },
   code:      { agent_type: 'codex',  role: 'coder' },
@@ -212,10 +222,11 @@ const ACTION_AGENT_MAP: Record<string, { agent_type: string; role: string }> = {
   notify:    { agent_type: 'claude', role: 'notifier' },
   summarize: { agent_type: 'claude', role: 'summarizer' },
   task:      { agent_type: 'claude', role: 'coder' },
+  agent:     { agent_type: 'claude', role: 'coder' },
 };
 
 export function inferAgentFromTask(task: TaskDefinition): { agent_type: string; role: string } {
-  const defaults = ACTION_AGENT_MAP[task.action.toLowerCase()] ?? { agent_type: 'claude', role: 'coder' };
+  const defaults = ACTION_AGENT_MAP[(task.type || '').toLowerCase()] ?? { agent_type: 'claude', role: 'coder' };
   let { agent_type, role } = defaults;
   // Agent hints override
   if (task.agent_hints.includes('codex') || task.agent_hints.includes('coder')) agent_type = 'codex';
@@ -231,7 +242,8 @@ export interface TaskNodeData {
   taskId: string;
   name: string;
   description: string;
-  action: string;
+  /** Canonical step type — see TaskDefinition.type. */
+  type: string;
   agentHints: string[];
   skills: string[];
   /** When true, executor skips the step and passes inputs straight through as output_data */
@@ -406,7 +418,7 @@ export interface WorkflowMeta {
 export interface StepNodeData {
   label: string;
   stepId: string;
-  action: string;
+  type: string;
   agent: string;
   paramCount: number;
   dependencyCount: number;
@@ -414,6 +426,31 @@ export interface StepNodeData {
 }
 
 export type ParsedStep = TaskDefinition;
+
+/** Map editor action / friendly verb to canonical executor step type.
+ *  Hoisted above the parser so YAML containing legacy `action:` can be
+ *  canonicalized at parse time. Self-mapping entries make the lookup safe
+ *  to use against either an action verb or a canonical type. */
+export const ACTION_TO_TYPE: Record<string, string> = {
+  research: 'agent', code: 'agent', review: 'agent', deploy: 'agent',
+  test: 'agent', build: 'agent', notify: 'notify', summarize: 'agent',
+  task: 'agent', approve: 'human_approval', gate: 'conditional',
+  human_input: 'human_input',
+  // Executor types map to themselves
+  agent: 'agent', parallel: 'parallel', shell: 'shell', goto: 'goto',
+  output: 'output', conditional: 'conditional', group_chat: 'group_chat',
+  supervisor: 'supervisor', map_reduce: 'map_reduce', handoff: 'handoff',
+  a2a: 'a2a', resolve: 'resolve', for_each: 'for_each',
+  human_approval: 'human_approval',
+  // New step types — see operator_mcp/workflow/schema.py
+  python: 'python', email: 'email',
+  tag: 'tag', deprecate: 'deprecate',
+};
+
+/** Resolve legacy `action:` verb or `type:` value to a canonical step type. */
+function canonicalizeType(raw: string): string {
+  return ACTION_TO_TYPE[raw] ?? raw;
+}
 
 // ---------------------------------------------------------------------------
 // YAML → Tasks parser (lightweight, no external YAML lib)
@@ -478,8 +515,13 @@ export function parseWorkflowYaml(yaml: string): TaskDefinition[] {
         current.name = value;
       } else if (key === 'description' || key === 'desc') {
         current.description = value;
-      } else if (key === 'action' || key === 'type' || key === 'task') {
-        current.action = value;
+      } else if (key === 'type' || key === 'action' || key === 'task') {
+        // `type:` wins over legacy `action:` if both appear on the same step.
+        // Canonicalize both through ACTION_TO_TYPE so callers always see a
+        // valid step type — the `action` field is dropped going forward.
+        if (key === 'type' || !current.type) {
+          current.type = canonicalizeType(value);
+        }
       } else if (key === 'condition') {
         current.condition = value;
       } else if (key === 'on_true' || key === 'onTrue') {
@@ -1189,7 +1231,7 @@ function finalizeTask(partial: Partial<TaskDefinition>, paramCount: number): Tas
     id: partial.id!,
     name: partial.name || partial.id!,
     description: partial.description || '',
-    action: partial.action || 'task',
+    type: partial.type || 'agent',
     agent_hints: partial.agent_hints || [],
     skills: partial.skills || [],
     depends_on: partial.depends_on || [],
@@ -1227,7 +1269,7 @@ export const GATE_EDGE_STYLES = {
 } as const;
 
 export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData>[]; edges: Edge[] } {
-  const isGate = (t: TaskDefinition) => t.action === 'gate';
+  const isGate = (t: TaskDefinition) => t.type === 'conditional';
 
   const nodes: Node<TaskNodeData>[] = tasks.map((task, i) => ({
     id: task.id,
@@ -1245,7 +1287,7 @@ export function tasksToFlow(tasks: TaskDefinition[]): { nodes: Node<TaskNodeData
       taskId: task.id,
       name: task.name || task.id,
       description: task.description,
-      action: task.action,
+      type: task.type,
       agentHints: task.agent_hints,
       skills: task.skills,
       disabled: task.disabled ?? false,
@@ -1526,7 +1568,7 @@ export function stepsToFlow(steps: TaskDefinition[]): { nodes: Node<StepNodeData
     data: {
       label: step.id,
       stepId: step.id,
-      action: step.action,
+      type: step.type,
       agent: step.agent_hints?.[0] || '',
       paramCount: step.params ? Object.keys(step.params).length : 0,
       dependencyCount: step.depends_on.length,
@@ -1570,7 +1612,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
   const parallelChildren = new Map<string, string[]>();
 
   const parallelNodeIds = new Set(
-    nodes.filter((n) => n.data.action === 'parallel').map((n) => n.id),
+    nodes.filter((n) => n.data.type === 'parallel').map((n) => n.id),
   );
   const nodeIdToTaskId = new Map(nodes.map((n) => [n.id, n.data.taskId]));
 
@@ -1602,17 +1644,16 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
 
   return nodes.map((node) => {
     const d = node.data;
-    const action = d.action;
-    const st = ACTION_TO_TYPE[action] || 'agent';
+    const st = d.type || 'agent';
     const base: TaskDefinition = {
       id: d.taskId,
       name: d.name,
       description: d.description,
-      action,
+      type: st,
       agent_hints: d.agentHints,
       skills: d.skills,
       depends_on: depsMap.get(node.id) || [],
-      condition: (action === 'gate' || st === 'conditional') ? d.condition : undefined,
+      condition: st === 'conditional' ? d.condition : undefined,
       on_true: trueBranch.get(node.id),
       on_false: falseBranch.get(node.id),
       channel: st === 'human_input' && d.channel
@@ -1640,7 +1681,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.assign) base.assign = d.assign;
       if (d.model) base.model = d.model;
     }
-    if (action === 'parallel') {
+    if (st === 'parallel') {
       base.parallel_join = (d.parallelJoin || 'all') as TaskDefinition['parallel_join'];
       base.parallel_max_concurrency = d.parallelMaxConcurrency || 5;
       const childrenFromEdges = parallelChildren.get(node.id);
@@ -1648,12 +1689,12 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
         base.parallel_steps = childrenFromEdges;
       }
     }
-    if (action === 'goto') {
+    if (st === 'goto') {
       if (d.gotoTarget) base.goto_target = d.gotoTarget;
       if (d.gotoMaxIterations) base.goto_max_iterations = d.gotoMaxIterations;
       if (d.gotoCondition) base.goto_condition = d.gotoCondition;
     }
-    if (action === 'group_chat') {
+    if (st === 'group_chat') {
       if (d.groupChatTopic) base.group_chat_topic = d.groupChatTopic;
       if (d.groupChatParticipants.length > 0) base.group_chat_participants = d.groupChatParticipants;
       if (d.groupChatMaxRounds) base.group_chat_max_rounds = d.groupChatMaxRounds;
@@ -1661,25 +1702,25 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.groupChatStrategy !== 'moderator_selected') base.group_chat_strategy = d.groupChatStrategy;
       if (d.groupChatTimeout !== 120) base.group_chat_timeout = d.groupChatTimeout;
     }
-    if (action === 'supervisor') {
+    if (st === 'supervisor') {
       if (d.supervisorTask) base.supervisor_task = d.supervisorTask;
       if (d.supervisorMaxIterations) base.supervisor_max_iterations = d.supervisorMaxIterations;
       if (d.supervisorType !== 'claude') base.supervisor_type = d.supervisorType;
       if (d.supervisorTimeout !== 300) base.supervisor_timeout = d.supervisorTimeout;
     }
-    if (action === 'shell') {
+    if (st === 'shell') {
       if (d.shellCommand) base.shell_command = d.shellCommand;
       if (d.shellTimeout && d.shellTimeout !== 60) base.shell_timeout = d.shellTimeout;
       if (d.shellAllowFailure) base.shell_allow_failure = true;
     }
-    if (action === 'python') {
+    if (st === 'python') {
       if (d.pythonScript) base.python_script = d.pythonScript;
       if (d.pythonCode) base.python_code = d.pythonCode;
       if (d.pythonArgs) base.python_args = d.pythonArgs;
       if (d.pythonTimeout && d.pythonTimeout !== 60) base.python_timeout = d.pythonTimeout;
       if (d.pythonAllowFailure) base.python_allow_failure = true;
     }
-    if (action === 'email') {
+    if (st === 'email') {
       if (d.emailTo) base.email_to = d.emailTo;
       if (d.emailSubject) base.email_subject = d.emailSubject;
       if (d.emailBody) base.email_body = d.emailBody;
@@ -1695,7 +1736,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.emailDryRun) base.email_dry_run = true;
       if (d.emailTimeout && d.emailTimeout !== 30) base.email_timeout = d.emailTimeout;
     }
-    if (action === 'output') {
+    if (st === 'output') {
       if (d.outputFormat) base.output_format = d.outputFormat;
       if (d.outputTemplate) base.output_template = d.outputTemplate;
       if (d.entityName) base.entity_name = d.entityName;
@@ -1704,7 +1745,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.entitySpace) base.entity_space = d.entitySpace;
       if (Object.keys(d.entityMetadata).length > 0) base.entity_metadata = d.entityMetadata;
     }
-    if (action === 'handoff') {
+    if (st === 'handoff') {
       if (d.handoffFrom) base.handoff_from = d.handoffFrom;
       if (d.handoffTo) base.handoff_to = d.handoffTo as 'claude' | 'codex';
       if (d.handoffReason) base.handoff_reason = d.handoffReason;
@@ -1735,7 +1776,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.mapReduceConcurrency !== 3) base.map_reduce_concurrency = d.mapReduceConcurrency;
       if (d.mapReduceTimeout !== 300) base.map_reduce_timeout = d.mapReduceTimeout;
     }
-    if (action === 'resolve') {
+    if (st === 'resolve') {
       if (d.resolveKind) base.resolve_kind = d.resolveKind;
       if (d.resolveTag) base.resolve_tag = d.resolveTag;
       if (d.resolveNamePattern) base.resolve_name_pattern = d.resolveNamePattern;
@@ -1744,7 +1785,7 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (d.resolveFields?.length) base.resolve_fields = d.resolveFields;
       if (d.resolveFailIfMissing === false) base.resolve_fail_if_missing = false;
     }
-    if (action === 'for_each') {
+    if (st === 'for_each') {
       if (d.forEachSteps.length > 0) base.for_each_steps = d.forEachSteps;
       if (d.forEachRange) base.for_each_range = d.forEachRange;
       if (d.forEachItems.length > 0) base.for_each_items = d.forEachItems;
@@ -1753,35 +1794,18 @@ export function flowToTasks(nodes: Node<TaskNodeData>[], edges: Edge[]): TaskDef
       if (!d.forEachFailFast) base.for_each_fail_fast = false;
       if (d.forEachMaxIterations && d.forEachMaxIterations !== 20) base.for_each_max_iterations = d.forEachMaxIterations;
     }
-    if (action === 'tag') {
+    if (st === 'tag') {
       if (d.tagItemKref) base.tag_item_kref = d.tagItemKref;
       if (d.tagValue) base.tag_value = d.tagValue;
       if (d.tagUntag) base.tag_untag = d.tagUntag;
     }
-    if (action === 'deprecate') {
+    if (st === 'deprecate') {
       if (d.deprecateItemKref) base.deprecate_item_kref = d.deprecateItemKref;
       if (d.deprecateReason) base.deprecate_reason = d.deprecateReason;
     }
     return base;
   });
 }
-
-/** Map editor action to executor step type */
-export const ACTION_TO_TYPE: Record<string, string> = {
-  research: 'agent', code: 'agent', review: 'agent', deploy: 'agent',
-  test: 'agent', build: 'agent', notify: 'notify', summarize: 'agent',
-  task: 'agent', approve: 'human_approval', gate: 'conditional',
-  human_input: 'human_input',
-  // Executor types map to themselves
-  agent: 'agent', parallel: 'parallel', shell: 'shell', goto: 'goto',
-  output: 'output', conditional: 'conditional', group_chat: 'group_chat',
-  supervisor: 'supervisor', map_reduce: 'map_reduce', handoff: 'handoff',
-  a2a: 'a2a', resolve: 'resolve', for_each: 'for_each',
-  human_approval: 'human_approval',
-  // New step types — see operator_mcp/workflow/schema.py
-  python: 'python', email: 'email',
-  tag: 'tag', deprecate: 'deprecate',
-};
 
 export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta>): string {
   const lines: string[] = [];
@@ -1847,17 +1871,17 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
     if (task.name && task.name !== task.id) {
       lines.push(`    name: ${yamlEscape(task.name)}`);
     }
-    // Emit executor-compatible type field
-    const stepType = ACTION_TO_TYPE[task.action] || 'agent';
+    // Canonical step type — `action:` is no longer emitted (legacy YAML
+    // with `action:` is still parsed and migrated to `type` on load).
+    const stepType = task.type || 'agent';
     lines.push(`    type: ${stepType}`);
-    lines.push(`    action: ${task.action}`);
     if (task.description) {
       lines.push(`    description: ${yamlEscape(task.description)}`);
     }
     if (task.retry && task.retry > 0) lines.push(`    retry: ${task.retry}`);
     if (task.retry_delay && task.retry_delay !== 5) lines.push(`    retry_delay: ${task.retry_delay}`);
     if (task.disabled === true) lines.push(`    disabled: true`);
-    if (task.action === 'gate' && task.condition) {
+    if (stepType === 'conditional' && task.condition) {
       lines.push(`    condition: ${yamlEscape(task.condition)}`);
     }
     if (task.on_true) {
@@ -1866,10 +1890,10 @@ export function tasksToYaml(tasks: TaskDefinition[], meta?: Partial<WorkflowMeta
     if (task.on_false) {
       lines.push(`    on_false: ${task.on_false}`);
     }
-    if (task.action === 'human_input' && task.channel) {
+    if (stepType === 'human_input' && task.channel) {
       lines.push(`    channel: ${task.channel}`);
     }
-    if (task.action === 'notify' && task.channels && task.channels.length > 0) {
+    if (stepType === 'notify' && task.channels && task.channels.length > 0) {
       lines.push(`    notify:`);
       lines.push(`      channels: [${dedupChannels(task.channels).join(', ')}]`);
       const notifyMessage = task.notify_message || '';

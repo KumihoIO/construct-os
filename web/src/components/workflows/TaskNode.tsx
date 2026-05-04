@@ -1,7 +1,6 @@
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
 import { Bot, Lock } from 'lucide-react';
 import type { TaskNodeData } from './yamlSync';
-import { ACTION_TO_TYPE } from './yamlSync';
 import { emitOpenAgentPicker } from '@/construct/components/workflows/stepEvents';
 
 // Action → token mapping. Maps semantic intent to Construct CSS vars.
@@ -98,10 +97,10 @@ const AGENT_TYPE_TONES: Record<string, ActionTone> = {
 };
 
 function TaskNode({ id, data, selected }: { id: string; data: TaskNodeData; selected?: boolean }) {
-  const tone = getActionTone(data.action);
+  const tone = getActionTone(data.type);
   const color = toneColorVar(tone);
   const soft = toneSoftVar(tone);
-  const isAgentStep = (ACTION_TO_TYPE[data.action] || 'agent') === 'agent';
+  const isAgentStep = (data.type || 'agent') === 'agent';
 
   const openAgentPicker = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -135,13 +134,13 @@ function TaskNode({ id, data, selected }: { id: string; data: TaskNodeData; sele
         {data.name || data.taskId}
       </div>
 
-      {/* Action badge */}
+      {/* Type badge */}
       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
         <span
           className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
           style={{ background: soft, color }}
         >
-          {data.action}
+          {data.type}
         </span>
         {data.paramCount > 0 && (
           <span

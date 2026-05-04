@@ -17,6 +17,7 @@
 import { Command } from 'cmdk';
 import { Bot, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAgentRoster } from './useAgentRoster';
 
 interface Props {
@@ -36,6 +37,8 @@ interface Props {
 const POPOVER_WIDTH = 340;
 const POPOVER_MAX_HEIGHT = 360;
 const ANCHOR_GAP = 8;
+const PICKER_BACKDROP_Z = 9000;
+const PICKER_PANEL_Z = 9001;
 
 function computeAnchoredStyle(rect: DOMRect): React.CSSProperties {
   const vw = window.innerWidth;
@@ -100,13 +103,14 @@ export default function AgentPicker({
   }, [anchorRect]);
 
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
   const handlePick = (name: string | null) => {
     onSelect(name);
     onOpenChange(false);
   };
 
-  return (
+  const content = (
     <div
       role="dialog"
       aria-modal="true"
@@ -117,7 +121,7 @@ export default function AgentPicker({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 60,
+        zIndex: PICKER_BACKDROP_Z,
         background: 'transparent',
       }}
     >
@@ -132,7 +136,7 @@ export default function AgentPicker({
           borderColor: 'var(--construct-border-strong)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.36)',
           overflow: 'hidden',
-          zIndex: 61,
+          zIndex: PICKER_PANEL_Z,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -353,4 +357,9 @@ export default function AgentPicker({
       `}</style>
     </div>
   );
+
+  // Portal to body so position:fixed escapes any ancestor with
+  // transform/filter/will-change that would otherwise become the
+  // containing block and clip the popover behind the side panel.
+  return createPortal(content, document.body);
 }

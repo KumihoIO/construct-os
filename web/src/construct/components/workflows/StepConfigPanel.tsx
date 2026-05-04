@@ -7,15 +7,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Lock, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { Link2, Link2Off, Loader2, Lock, Search, Sparkles, Trash2, X } from 'lucide-react';
 import type { Node } from '@xyflow/react';
-import { ACTION_TO_TYPE, type TaskNodeData } from '@/components/workflows/yamlSync';
+import { type TaskNodeData } from '@/components/workflows/yamlSync';
 import type { SkillDefinition } from '@/types/api';
 import { fetchSkills, getChannels } from '@/lib/api';
 import Panel from '@/construct/components/ui/Panel';
 import { STEP_TYPES_BY_TYPE } from './stepRegistry';
 import AgentPicker from './AgentPicker';
-import AuthProfilePicker from './AuthProfilePicker';
+import AuthProfilePicker, { providerLabel } from './AuthProfilePicker';
 import { useAgentRoster } from './useAgentRoster';
 import { useAuthProfiles } from './useAuthProfiles';
 
@@ -24,42 +24,36 @@ const AUTH_ELIGIBLE_STEP_TYPES = new Set(['agent', 'shell', 'python', 'email', '
 
 const AGENT_HINT_OPTIONS = ['coder', 'researcher', 'reviewer'];
 
-const ACTION_OPTIONS = [
-  'task',
-  'code',
-  'review',
-  'research',
-  'deploy',
-  'test',
-  'build',
-  'notify',
-  'approve',
-  'summarize',
-  'human_input',
-];
+// ---------------------------------------------------------------------------
+// Step ID helpers — Name → slug-id link
+// ---------------------------------------------------------------------------
 
-const EXECUTOR_STEP_TYPES = [
-  'agent',
-  'parallel',
-  'for_each',
-  'shell',
-  'python',
-  'email',
-  'notify',
-  'goto',
-  'output',
-  'conditional',
-  'human_approval',
-  'human_input',
-  'group_chat',
-  'supervisor',
-  'map_reduce',
-  'handoff',
-  'a2a',
-  'resolve',
-  'tag',
-  'deprecate',
-];
+/** ASCII-only step-id slug. Strips diacritics, lowercases, collapses any
+ *  non-`[a-z0-9]` runs to single `-`, trims edges, falls back to `step` if
+ *  empty, caps at 64 chars. */
+export function slugify(input: string): string {
+  const normalized = (input ?? '')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '');
+  const slug = normalized
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+    .replace(/-+$/g, '');
+  return slug || 'step';
+}
+
+/** Append `-2`, `-3`, … until a slug doesn't collide with `existing`. */
+export function uniqueTaskId(slug: string, existing: Iterable<string>): string {
+  const taken = new Set(existing);
+  if (!taken.has(slug)) return slug;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${slug}-${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${slug}-${Date.now()}`;
+}
 
 // ---------------------------------------------------------------------------
 // Shared style helpers — all colors via --pc-* / --construct-* tokens
@@ -115,16 +109,91 @@ function helperStyle(): React.CSSProperties {
 
 interface Props {
   node: Node<TaskNodeData>;
+  /** All current task IDs in the editor — used to resolve slug collisions
+   *  when the Name → Step ID link rewrites the id. Includes the active node. */
+  existingTaskIds: string[];
   onUpdate: (nodeId: string, updates: Partial<TaskNodeData>) => void;
+  /** Atomic step-id rename: updates node.id, data.taskId, and edge endpoints
+   *  in lockstep so depends_on round-trips correctly. */
+  onRenameStep: (oldId: string, newId: string) => void;
   onDelete: (nodeId: string) => void;
   /** Open the type-change palette */
   onChangeType: () => void;
 }
 
-export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType }: Props) {
+export default function StepConfigPanel({
+  node,
+  existingTaskIds,
+  onUpdate,
+  onRenameStep,
+  onDelete,
+  onChangeType,
+}: Props) {
   const data = node.data;
-  const stepType = ACTION_TO_TYPE[data.action] || 'agent';
+  const stepType = data.type ?? 'agent';
   const typeDef = STEP_TYPES_BY_TYPE[stepType];
+
+  // ── Name → Step ID slug-link state ──────────────────────────────────────
+  // Compute initial linked state on mount: a step is "linked" if its current
+  // id matches what slugify(name) would produce. Editor-only state, never
+  // persisted to YAML — re-derived on every load.
+  const [idLinkedToName, setIdLinkedToName] = useState<boolean>(
+    () => slugify(data.name || '') === data.taskId,
+  );
+  // If the selected node changes, re-derive the linked state for the new node.
+  useEffect(() => {
+    setIdLinkedToName(slugify(data.name || '') === data.taskId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
+
+  // Pool of existing IDs the new slug must not collide with — exclude the
+  // active node's own id so editing in place doesn't fight with itself.
+  const otherTaskIds = useMemo(
+    () => existingTaskIds.filter((id) => id !== data.taskId),
+    [existingTaskIds, data.taskId],
+  );
+
+  const handleNameChange = useCallback(
+    (nextName: string) => {
+      onUpdate(node.id, { name: nextName, label: nextName });
+      if (idLinkedToName) {
+        const nextId = uniqueTaskId(slugify(nextName), otherTaskIds);
+        if (nextId !== data.taskId) onRenameStep(data.taskId, nextId);
+      }
+    },
+    [idLinkedToName, node.id, data.taskId, otherTaskIds, onUpdate, onRenameStep],
+  );
+
+  // Local draft so typing intermediate states (uppercase, spaces) doesn't
+  // aggressively reformat under the cursor. Commits to the canvas on blur.
+  const [taskIdDraft, setTaskIdDraft] = useState<string>(data.taskId);
+  useEffect(() => {
+    setTaskIdDraft(data.taskId);
+  }, [data.taskId]);
+
+  const handleTaskIdInputChange = useCallback((next: string) => {
+    setTaskIdDraft(next);
+    // Manual touch breaks the slug-link immediately, even before commit.
+    setIdLinkedToName(false);
+  }, []);
+
+  const commitTaskIdDraft = useCallback(() => {
+    const cleaned = slugify(taskIdDraft);
+    if (cleaned === data.taskId) {
+      // Slug normalized back to current id — no rename, but keep the draft
+      // visually aligned with the stored value.
+      setTaskIdDraft(data.taskId);
+      return;
+    }
+    const unique = uniqueTaskId(cleaned, otherTaskIds);
+    onRenameStep(data.taskId, unique);
+  }, [taskIdDraft, data.taskId, otherTaskIds, onRenameStep]);
+
+  const handleRelinkId = useCallback(() => {
+    const slug = uniqueTaskId(slugify(data.name || ''), otherTaskIds);
+    if (slug !== data.taskId) onRenameStep(data.taskId, slug);
+    setIdLinkedToName(true);
+  }, [data.name, data.taskId, otherTaskIds, onRenameStep]);
 
   const [skillSearch, setSkillSearch] = useState('');
   const [showSkillPicker, setShowSkillPicker] = useState(false);
@@ -253,22 +322,95 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
         </div>
 
         <div style={{ overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Step ID (read-only) */}
+          {/* Step ID — editable; auto-slugifies from Name while linked */}
           <div>
-            <label style={labelStyle}>Step ID</label>
             <div
               style={{
-                fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                fontSize: 12,
-                padding: '6px 8px',
-                borderRadius: 8,
-                background: 'var(--pc-bg-input)',
-                color: 'var(--pc-text-muted)',
-                border: '1px solid var(--pc-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginBottom: 4,
               }}
             >
-              {data.taskId}
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Step ID</label>
+              {idLinkedToName ? (
+                <span
+                  title="Step ID auto-derives from Name. Edit it manually to break the link."
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '2px 6px',
+                    borderRadius: 999,
+                    fontSize: 9.5,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: 'var(--construct-text-faint)',
+                    background: 'color-mix(in srgb, var(--construct-text-faint) 12%, transparent)',
+                    border: '1px solid var(--construct-border-soft)',
+                  }}
+                >
+                  <Link2 size={10} />
+                  linked
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    title="Step ID was edited manually — Name changes no longer touch it."
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                      fontSize: 9.5,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: 'var(--construct-status-warning)',
+                      background: 'color-mix(in srgb, var(--construct-status-warning) 14%, transparent)',
+                      border: '1px solid color-mix(in srgb, var(--construct-status-warning) 36%, transparent)',
+                    }}
+                  >
+                    <Link2Off size={10} />
+                    manual
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRelinkId}
+                    title="Reset Step ID to slugify(Name) and re-link"
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      borderRadius: 6,
+                      border: '1px solid var(--pc-accent-dim)',
+                      background: 'transparent',
+                      color: 'var(--pc-accent-light)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Re-link
+                  </button>
+                </span>
+              )}
             </div>
+            <input
+              type="text"
+              value={taskIdDraft}
+              onChange={(e) => handleTaskIdInputChange(e.target.value)}
+              onBlur={commitTaskIdDraft}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+              }}
+              spellCheck={false}
+              style={monoInputStyle}
+            />
           </div>
 
           {/* Name */}
@@ -277,7 +419,7 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
             <input
               type="text"
               value={data.name}
-              onChange={(e) => onUpdate(node.id, { name: e.target.value, label: e.target.value })}
+              onChange={(e) => handleNameChange(e.target.value)}
               style={inputStyle}
             />
           </div>
@@ -316,37 +458,20 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
                 Change
               </button>
             </div>
+            <p
+              style={{
+                fontSize: 11,
+                fontStyle: 'italic',
+                color: 'var(--pc-text-faint)',
+                marginTop: 4,
+              }}
+            >
+              What kind of step this is — determines how it runs.
+            </p>
           </div>
 
-          {/* Action selector (legacy "action" field — hidden for gates) */}
-          {data.action !== 'gate' && (
-            <div>
-              <label style={labelStyle}>Action</label>
-              <select
-                value={data.action}
-                onChange={(e) => onUpdate(node.id, { action: e.target.value })}
-                style={inputStyle}
-              >
-                <optgroup label="Friendly actions">
-                  {ACTION_OPTIONS.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Step types">
-                  {EXECUTOR_STEP_TYPES.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-          )}
-
-          {/* Conditional / gate badge + condition */}
-          {(data.action === 'gate' || stepType === 'conditional') && (
+          {/* Conditional gate badge + condition */}
+          {stepType === 'conditional' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span
                 style={{
@@ -383,7 +508,7 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
             <textarea
               value={data.description}
               onChange={(e) => onUpdate(node.id, { description: e.target.value })}
-              placeholder={data.action === 'gate' ? 'What this gate checks…' : 'What this step does…'}
+              placeholder={stepType === 'conditional' ? 'What this gate checks…' : 'What this step does…'}
               rows={3}
               style={inputStyle}
             />
@@ -1653,7 +1778,7 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
                 <Lock size={12} style={{ color: 'var(--construct-text-faint)', flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selectedAuthProfile
-                    ? `${selectedAuthProfile.provider} · ${selectedAuthProfile.profile_name}`
+                    ? `${providerLabel(selectedAuthProfile.provider)} · ${selectedAuthProfile.profile_name}`
                     : data.auth || 'None'}
                 </span>
               </button>
@@ -1694,8 +1819,7 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
             stepType !== 'human_input' &&
             stepType !== 'notify' &&
             stepType !== 'tag' &&
-            stepType !== 'deprecate' &&
-            data.action !== 'gate' && (
+            stepType !== 'deprecate' && (
               <div>
                 <label style={labelStyle}>Agent Hints</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -1731,8 +1855,7 @@ export default function StepConfigPanel({ node, onUpdate, onDelete, onChangeType
             stepType !== 'human_input' &&
             stepType !== 'notify' &&
             stepType !== 'tag' &&
-            stepType !== 'deprecate' &&
-            data.action !== 'gate' && (
+            stepType !== 'deprecate' && (
               <div>
                 <label style={labelStyle}>Skills</label>
                 {data.skills.length > 0 && (

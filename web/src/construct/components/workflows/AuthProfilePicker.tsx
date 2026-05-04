@@ -12,6 +12,7 @@
 import { Command } from 'cmdk';
 import { Lock, Search, AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AuthProfileSummary } from '@/types/api';
 import { useAuthProfiles } from './useAuthProfiles';
 
@@ -30,6 +31,33 @@ const POPOVER_WIDTH = 360;
 const POPOVER_MAX_HEIGHT = 400;
 const ANCHOR_GAP = 8;
 const NEAR_EXPIRY_HOURS = 24;
+const PICKER_BACKDROP_Z = 9000;
+const PICKER_PANEL_Z = 9001;
+
+/** Display labels for known auth providers. Falls through to the raw
+ *  provider key for anything not listed — so a typo or new provider still
+ *  renders, just unbranded. Exported so the side-panel chip can render the
+ *  same human-readable label. */
+const PROVIDER_LABELS: Record<string, string> = {
+  'openai-codex': 'OpenAI Codex',
+  'openai': 'OpenAI',
+  'anthropic': 'Anthropic',
+  'claude-code': 'Claude Code',
+  'gmail': 'Gmail',
+  'google': 'Google',
+  'slack': 'Slack',
+  'discord': 'Discord',
+  'matrix': 'Matrix',
+  'notion': 'Notion',
+  'github': 'GitHub',
+  'gitlab': 'GitLab',
+  'linear': 'Linear',
+  'jira': 'Jira',
+};
+
+export function providerLabel(p: string): string {
+  return PROVIDER_LABELS[p] ?? p;
+}
 
 function computeAnchoredStyle(rect: DOMRect): React.CSSProperties {
   const vw = window.innerWidth;
@@ -122,13 +150,14 @@ export default function AuthProfilePicker({
   }, [profiles]);
 
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
   const handlePick = (id: string | null) => {
     onSelect(id);
     onOpenChange(false);
   };
 
-  return (
+  const content = (
     <div
       role="dialog"
       aria-modal="true"
@@ -136,7 +165,7 @@ export default function AuthProfilePicker({
       onClick={(e) => {
         if (e.target === e.currentTarget) onOpenChange(false);
       }}
-      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'transparent' }}
+      style={{ position: 'fixed', inset: 0, zIndex: PICKER_BACKDROP_Z, background: 'transparent' }}
     >
       <div
         className="construct-panel"
@@ -149,7 +178,7 @@ export default function AuthProfilePicker({
           borderColor: 'var(--construct-border-strong)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.36)',
           overflow: 'hidden',
-          zIndex: 61,
+          zIndex: PICKER_PANEL_Z,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -208,7 +237,7 @@ export default function AuthProfilePicker({
             {grouped.map(([provider, list]) => (
               <Command.Group
                 key={provider}
-                heading={provider}
+                heading={providerLabel(provider)}
                 style={{
                   fontSize: 10,
                   fontWeight: 700,
@@ -272,13 +301,13 @@ export default function AuthProfilePicker({
                           <span
                             style={{
                               fontSize: 10.5,
-                              color: 'var(--construct-text-secondary)',
+                              color: 'var(--construct-text-faint)',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {p.account_id}
+                            as {p.account_id}
                           </span>
                         )}
                       </span>
@@ -395,4 +424,9 @@ export default function AuthProfilePicker({
       `}</style>
     </div>
   );
+
+  // Portal to body so position:fixed escapes any ancestor with
+  // transform/filter/will-change that would otherwise become the
+  // containing block and clip the popover behind the side panel.
+  return createPortal(content, document.body);
 }
