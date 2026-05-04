@@ -463,6 +463,39 @@ export function useAgentChatSession({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
   }, []);
 
+  /** Wipe all rendered messages + activity state without disturbing the
+   *  WebSocket session. Used by the `/clear` slash command. The session
+   *  is still alive and can receive further turns; this only clears what
+   *  the user sees. */
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setActivities([]);
+    activitiesRef.current = [];
+    setStreamingContent('');
+    setStreamingThinking('');
+    pendingContentRef.current = '';
+    pendingThinkingRef.current = '';
+    capturedThinkingRef.current = '';
+    setTyping(false);
+    setError(null);
+  }, []);
+
+  /** Inject a synthetic operator-role message into the scrollback. Used
+   *  by `/help` and other client-side commands that want to surface
+   *  output inline rather than via a modal. */
+  const appendSystemMessage = useCallback((content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: generateUUID(),
+        role: 'operator',
+        content,
+        operatorPhase: 'completed',
+        timestamp: new Date(),
+      },
+    ]);
+  }, []);
+
   const copyMessage = useCallback(async (messageId: string, content: string) => {
     if (!(await copyToClipboard(content))) return;
     setCopiedId(messageId);
@@ -473,8 +506,10 @@ export function useAgentChatSession({
     activities,
     addAttachment,
     agentEvents,
+    appendSystemMessage,
     attachments,
     clearAttachments,
+    clearMessages,
     connected,
     copiedId,
     copyMessage,
