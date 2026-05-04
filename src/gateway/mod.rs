@@ -581,6 +581,15 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             Ok(registry) => {
                 let registry = std::sync::Arc::new(registry);
                 mcp_registry_shared = Some(std::sync::Arc::clone(&registry));
+                // Registry-based probe + loud-failure warning for the
+                // high-level Kumiho memory reflexes (coherence audit row 1+13).
+                // Gateway agents built via Agent::from_config run their own
+                // probe; this fires the warning once at gateway startup so
+                // operators see it even before the first agent run.
+                let kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                    &registry.tool_names(),
+                );
+                crate::agent::kumiho::warn_if_kumiho_advanced_missing(&config, kumiho_advanced);
                 if gateway_mcp_config.deferred_loading {
                     let operator_prefix =
                         format!("{}__", crate::agent::operator::OPERATOR_SERVER_NAME);

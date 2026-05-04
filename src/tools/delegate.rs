@@ -1031,6 +1031,7 @@ impl DelegateTool {
             autonomy_level: crate::security::AutonomyLevel::default(),
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let builder = SystemPromptBuilder::default()
