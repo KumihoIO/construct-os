@@ -13,14 +13,14 @@
 
 use super::AppState;
 use super::api::require_auth;
-use crate::auth::profiles::AuthProfileKind;
+use crate::auth::profiles::{AuthProfile, AuthProfileKind, profile_id};
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const SERVICE_TOKEN_HEADER: &str = "X-Construct-Service-Token";
 
@@ -111,6 +111,172 @@ pub async fn handle_list_auth_profiles(
     });
 
     Json(serde_json::json!({ "profiles": profiles })).into_response()
+}
+
+// ── Create handler ──────────────────────────────────────────────────────
+
+/// Body for `POST /api/auth/profiles`. Only static-token / API-key flows
+/// are supported here — OAuth profiles must be created through the existing
+/// /config flow that drives the gateway's interactive consent dance.
+#[derive(Deserialize)]
+pub struct CreateAuthProfileBody {
+    pub provider: String,
+    pub profile_name: String,
+    /// Raw bearer / API key. Encrypted by the store before being persisted.
+    pub token: String,
+    #[serde(default)]
+    pub account_id: Option<String>,
+    /// Defaults to "token". "api_key" is accepted as a synonym; "oauth" is
+    /// rejected with 400 because the runtime requires a refresh-token flow.
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+/// `POST /api/auth/profiles` — bearer-auth, creates a static-token profile.
+///
+/// 201 with the new `AuthProfileSummary` on success. 400 for missing
+/// fields or unsupported `kind` (e.g. "oauth"). 409 if a profile with the
+/// same provider+name already exists. The token is encrypted by the
+/// underlying `AuthProfilesStore` before persist; the response never
+/// echoes it back.
+pub async fn handle_create_auth_profile(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateAuthProfileBody>,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+
+    // Trim early so empty-after-trim is treated as missing.
+    let provider = body.provider.trim().to_string();
+    let profile_name = body.profile_name.trim().to_string();
+    let token = body.token.clone();
+    let account_id = body.account_id.and_then(|s| {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    });
+
+    if provider.is_empty() || profile_name.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "provider and profile_name are required",
+                "code": "auth_profile_missing_fields"
+            })),
+        )
+            .into_response();
+    }
+
+    if token.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "token is required",
+                "code": "auth_profile_missing_token"
+            })),
+        )
+            .into_response();
+    }
+
+    let kind = body.kind.as_deref().unwrap_or("token").to_ascii_lowercase();
+    match kind.as_str() {
+        "token" | "api_key" => {}
+        "oauth" => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "OAuth profiles must be created via the /config flow",
+                    "code": "auth_profile_oauth_unsupported"
+                })),
+            )
+                .into_response();
+        }
+        other => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("unsupported auth profile kind: {other}"),
+                    "code": "auth_profile_invalid_kind"
+                })),
+            )
+                .into_response();
+        }
+    }
+
+    let Some(store) = state.auth_profiles.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "auth profile store not configured on this gateway",
+                "code": "auth_store_unavailable"
+            })),
+        )
+            .into_response();
+    };
+
+    // Conflict check — load existing profiles first, refuse if the id is taken.
+    // The store has no separate "create-only" entry point; reusing
+    // `upsert_profile` would silently overwrite, so we gate it explicitly.
+    let id = profile_id(&provider, &profile_name);
+    match store.load().await {
+        Ok(data) => {
+            if data.profiles.contains_key(&id) {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": format!("auth profile already exists: {id}"),
+                        "code": "auth_profile_already_exists"
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "auth-profiles create: load failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to load auth profiles",
+                    "code": "auth_store_load_failed"
+                })),
+            )
+                .into_response();
+        }
+    }
+
+    let mut profile = AuthProfile::new_token(&provider, &profile_name, token);
+    profile.account_id = account_id;
+
+    if let Err(err) = store.upsert_profile(profile.clone(), false).await {
+        tracing::warn!(error = %err, "auth-profiles create: persist failed");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Failed to save auth profile",
+                "code": "auth_store_save_failed"
+            })),
+        )
+            .into_response();
+    }
+
+    let summary = AuthProfileSummary {
+        id: profile.id.clone(),
+        provider: profile.provider.clone(),
+        profile_name: profile.profile_name.clone(),
+        kind: match profile.kind {
+            AuthProfileKind::OAuth => "oauth".to_string(),
+            AuthProfileKind::Token => "token".to_string(),
+        },
+        account_id: profile.account_id.clone(),
+        workspace_id: profile.workspace_id.clone(),
+        // Static-token profiles never carry an expires_at.
+        expires_at: None,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+    };
+
+    (StatusCode::CREATED, Json(summary)).into_response()
 }
 
 // ── Resolve handler ─────────────────────────────────────────────────────

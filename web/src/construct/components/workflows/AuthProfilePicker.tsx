@@ -15,6 +15,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AuthProfileSummary } from '@/types/api';
 import { useAuthProfiles } from './useAuthProfiles';
+import { providerLabel } from './providerLabels';
+import NewAuthProfileModal from './NewAuthProfileModal';
+
+// Re-export for legacy import sites (StepConfigPanel etc.).
+export { providerLabel } from './providerLabels';
 
 interface Props {
   open: boolean;
@@ -33,31 +38,6 @@ const ANCHOR_GAP = 8;
 const NEAR_EXPIRY_HOURS = 24;
 const PICKER_BACKDROP_Z = 9000;
 const PICKER_PANEL_Z = 9001;
-
-/** Display labels for known auth providers. Falls through to the raw
- *  provider key for anything not listed — so a typo or new provider still
- *  renders, just unbranded. Exported so the side-panel chip can render the
- *  same human-readable label. */
-const PROVIDER_LABELS: Record<string, string> = {
-  'openai-codex': 'OpenAI Codex',
-  'openai': 'OpenAI',
-  'anthropic': 'Anthropic',
-  'claude-code': 'Claude Code',
-  'gmail': 'Gmail',
-  'google': 'Google',
-  'slack': 'Slack',
-  'discord': 'Discord',
-  'matrix': 'Matrix',
-  'notion': 'Notion',
-  'github': 'GitHub',
-  'gitlab': 'GitLab',
-  'linear': 'Linear',
-  'jira': 'Jira',
-};
-
-export function providerLabel(p: string): string {
-  return PROVIDER_LABELS[p] ?? p;
-}
 
 function computeAnchoredStyle(rect: DOMRect): React.CSSProperties {
   const vw = window.innerWidth;
@@ -111,8 +91,9 @@ export default function AuthProfilePicker({
   anchorRect,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { profiles, loading } = useAuthProfiles();
+  const { profiles, loading, refresh } = useAuthProfiles();
   const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -398,14 +379,35 @@ export default function AuthProfilePicker({
             <span>
               {profiles.length} profile{profiles.length === 1 ? '' : 's'}
             </span>
-            <a
-              href="/config"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--pc-accent)', textDecoration: 'none', fontWeight: 600 }}
-            >
-              Manage auth profiles →
-            </a>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <a
+                href="/config"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  color: 'var(--construct-text-faint)',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                }}
+              >
+                Open config →
+              </a>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'var(--pc-accent)',
+                  fontWeight: 600,
+                  fontSize: 11,
+                }}
+              >
+                + New auth profile
+              </button>
+            </span>
           </div>
         </Command>
       </div>
@@ -428,5 +430,18 @@ export default function AuthProfilePicker({
   // Portal to body so position:fixed escapes any ancestor with
   // transform/filter/will-change that would otherwise become the
   // containing block and clip the popover behind the side panel.
-  return createPortal(content, document.body);
+  return (
+    <>
+      {createPortal(content, document.body)}
+      <NewAuthProfileModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={async (id) => {
+          await refresh();
+          setCreateOpen(false);
+          handlePick(id);
+        }}
+      />
+    </>
+  );
 }

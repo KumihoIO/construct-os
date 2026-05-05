@@ -1641,7 +1641,11 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // GET — bearer-auth, metadata only (token bytes never returned).
         // POST {id}/resolve — service-token-only, used by the operator-mcp
         // runtime to decrypt at step-execution time.
-        .route("/api/auth/profiles", get(api_auth_profiles::handle_list_auth_profiles))
+        .route(
+            "/api/auth/profiles",
+            get(api_auth_profiles::handle_list_auth_profiles)
+                .post(api_auth_profiles::handle_create_auth_profile),
+        )
         .route("/api/auth/profiles/{id}/resolve", post(api_auth_profiles::handle_resolve_auth_profile))
         // ── Skill management API (proxied to Kumiho FastAPI) ──
         .route("/api/skills", get(api_skills::handle_list_skills).post(api_skills::handle_create_skill))
