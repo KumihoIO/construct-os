@@ -154,7 +154,11 @@ pub async fn handle_create_auth_profile(
     let token = body.token.clone();
     let account_id = body.account_id.and_then(|s| {
         let trimmed = s.trim().to_string();
-        if trimmed.is_empty() { None } else { Some(trimmed) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
     });
 
     if provider.is_empty() || profile_name.is_empty() {
