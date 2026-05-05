@@ -6,8 +6,9 @@
 //! [`PersonalityProfile`] that the prompt builder can render.
 //!
 //! Both daemon and channel prompt-builder paths share this single loader; the
-//! channel mode supplies a denylist (`HEARTBEAT.md`) and a "conditional" list
-//! (`BOOTSTRAP.md`) via [`PersonalityLoadOptions`].
+//! channel mode supplies a denylist (`HEARTBEAT.md`) via
+//! [`PersonalityLoadOptions`]. The `conditional` list slot is currently empty
+//! after the audit-row-3 deletion of `BOOTSTRAP.md`.
 
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -17,9 +18,14 @@ pub const MAX_FILE_CHARS: usize = 20_000;
 
 /// Canonical, well-known personality files loaded from the workspace root.
 /// This is the **single source of truth** for the daemon and channel prompt
-/// builders; channel-specific behavior (HEARTBEAT.md exclusion, BOOTSTRAP.md
-/// conditional rendering) is expressed via [`PersonalityLoadOptions`] filters
-/// rather than a parallel list.
+/// builders; channel-specific behavior (HEARTBEAT.md exclusion) is expressed
+/// via [`PersonalityLoadOptions`] filters rather than a parallel list.
+///
+/// `BOOTSTRAP.md` was removed per audit row 3: the file's "first-run ritual"
+/// semantics were brittle (auto-loaded as runtime authority, then
+/// "self-deleting" prose telling the agent to delete it once it knew the
+/// user). The first-turn responsibilities now live in the runtime's Kumiho
+/// bootstrap prompt, not as a workspace file.
 pub const PERSONALITY_FILES: &[&str] = &[
     "SOUL.md",
     "IDENTITY.md",
@@ -27,7 +33,6 @@ pub const PERSONALITY_FILES: &[&str] = &[
     "AGENTS.md",
     "TOOLS.md",
     "HEARTBEAT.md",
-    "BOOTSTRAP.md",
     "MEMORY.md",
 ];
 
@@ -75,8 +80,9 @@ pub struct PersonalityLoadOptions<'a> {
     /// Channel mode passes `["HEARTBEAT.md"]` here per audit row 7 contract.
     pub exclude: &'a [&'a str],
     /// Files that render only when present on disk and never produce a
-    /// missing-file marker.  Channel mode passes `["BOOTSTRAP.md"]` (the
-    /// first-run ritual file; absence is normal).
+    /// missing-file marker. Currently empty by default; kept as a hook for
+    /// future opt-in workspace files. (`BOOTSTRAP.md` previously used this
+    /// slot before its audit-row-3 deletion.)
     pub conditional: &'a [&'a str],
     /// Per-file character cap.  Zero means "use [`MAX_FILE_CHARS`]".
     pub max_chars: usize,
@@ -214,8 +220,9 @@ pub fn load_personality_with_options(
                     profile.missing.push(filename.to_string());
                 }
                 // Conditional files that are absent on disk leave no trace —
-                // no missing entry, no marker.  Mirrors the channel builder's
-                // `BOOTSTRAP.md`-only-if-exists behavior.
+                // no missing entry, no marker.  Currently no canonical files
+                // use this slot (BOOTSTRAP.md was deleted in audit row 3);
+                // kept as a hook for future opt-in workspace files.
             }
         }
     }
@@ -417,21 +424,27 @@ mod tests {
 
     #[test]
     fn load_personality_with_options_conditional_missing_is_silent() {
+        // Verifies the `conditional` slot still works generically even though
+        // BOOTSTRAP.md (its original sole user) was deleted in audit row 3.
+        // We pass a custom `files` list with a synthetic conditional entry so
+        // the loader iterates it; absent-on-disk + listed-as-conditional
+        // should leave no trace.
         let ws = setup_workspace(&[("SOUL.md", "soul")]);
+        let custom_files: &[&str] = &["SOUL.md", "OPTIONAL.md", "IDENTITY.md"];
         let profile = load_personality_with_options(
             &ws,
             &PersonalityLoadOptions {
-                files: PERSONALITY_FILES,
+                files: custom_files,
                 exclude: &[],
-                conditional: &["BOOTSTRAP.md"],
+                conditional: &["OPTIONAL.md"],
                 max_chars: 0,
             },
         );
         assert!(
-            !profile.missing.contains(&"BOOTSTRAP.md".to_string()),
+            !profile.missing.contains(&"OPTIONAL.md".to_string()),
             "conditional+missing must not record a missing marker"
         );
-        // Other missing files are still tracked.
+        // Non-conditional missing files are still tracked.
         assert!(profile.missing.contains(&"IDENTITY.md".to_string()));
         let _ = std::fs::remove_dir_all(ws);
     }
@@ -444,13 +457,13 @@ mod tests {
             &PersonalityLoadOptions {
                 files: PERSONALITY_FILES,
                 exclude: &["HEARTBEAT.md"],
-                conditional: &["BOOTSTRAP.md"],
+                conditional: &[],
                 max_chars: 0,
             },
         );
         let rendered = profile.render_with_missing_markers(PERSONALITY_FILES);
 
-        // Canonical order: SOUL → IDENTITY → USER → AGENTS → TOOLS → (HEARTBEAT skipped) → (BOOTSTRAP cond+missing skipped) → MEMORY
+        // Canonical order: SOUL → IDENTITY → USER → AGENTS → TOOLS → (HEARTBEAT skipped) → MEMORY
         let soul_idx = rendered.find("### SOUL.md").expect("SOUL header");
         let id_idx = rendered.find("### IDENTITY.md").expect("IDENTITY marker");
         let user_idx = rendered.find("### USER.md").expect("USER header");
@@ -467,10 +480,11 @@ mod tests {
             !rendered.contains("HEARTBEAT.md"),
             "excluded file must not appear in rendered output"
         );
-        // Conditional+missing file never appears.
+        // BOOTSTRAP.md is gone (audit row 3) — no longer in PERSONALITY_FILES,
+        // so the loader doesn't process it and it never appears anywhere.
         assert!(
             !rendered.contains("BOOTSTRAP.md"),
-            "conditional+missing file must be silent (no header, no marker)"
+            "deleted file must never appear in rendered output"
         );
         // Missing-on-disk files surface markers.
         assert!(rendered.contains("[File not found: IDENTITY.md]"));

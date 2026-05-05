@@ -20,9 +20,10 @@ pub const BOOTSTRAP_MAX_CHARS: usize = MAX_FILE_CHARS;
 pub const DEFAULT_CHANNEL_EXCLUDED_FILES: &[&str] = &["HEARTBEAT.md"];
 
 /// Files that channel mode renders only when present on disk and never
-/// surfaces a missing-file marker for.  `BOOTSTRAP.md` is the first-run
-/// ritual file; absence is normal.
-pub const DEFAULT_CHANNEL_CONDITIONAL_FILES: &[&str] = &["BOOTSTRAP.md"];
+/// surfaces a missing-file marker for. Currently empty — `BOOTSTRAP.md`
+/// (the prior sole occupant) was deleted per audit row 3. Kept as a hook
+/// for future opt-in workspace files.
+pub const DEFAULT_CHANNEL_CONDITIONAL_FILES: &[&str] = &[];
 
 /// Tool listing variant accepted by the prompt builder.  The daemon path
 /// supplies the rich [`Tool`] trait objects (with parameter schemas); the
@@ -279,9 +280,9 @@ impl PromptSection for DateTimeSection {
 // ── Identity ────────────────────────────────────────────────────────────────
 //
 // Both modes share a single bootstrap-file loader (`personality.rs`).  The
-// channel mode supplies a denylist (`HEARTBEAT.md`) and a "conditional" list
-// (`BOOTSTRAP.md`) via [`PersonalityLoadOptions`].  The shared canonical file
-// list is [`personality::PERSONALITY_FILES`] — there is no channel-specific
+// channel mode supplies a denylist (`HEARTBEAT.md`) via
+// [`PersonalityLoadOptions`].  The shared canonical file list is
+// [`personality::PERSONALITY_FILES`] — there is no channel-specific
 // file-order constant.
 
 impl PromptSection for IdentitySection {
@@ -1199,17 +1200,17 @@ mod tests {
             "HEARTBEAT.md must stay out of channel prompts (audit row 7)"
         );
         // Canonical order: SOUL → IDENTITY → USER → AGENTS → TOOLS →
-        // (HEARTBEAT excluded) → (BOOTSTRAP conditional+missing → silent) →
-        // MEMORY.  Markers must appear for non-conditional missing files,
-        // interleaved with the loaded SOUL header.
+        // (HEARTBEAT excluded) → MEMORY.  Markers must appear for missing
+        // files, interleaved with the loaded SOUL header.
         assert!(prompt.contains("[File not found: IDENTITY.md]"));
         assert!(prompt.contains("[File not found: USER.md]"));
         assert!(prompt.contains("[File not found: AGENTS.md]"));
         assert!(prompt.contains("[File not found: TOOLS.md]"));
         assert!(prompt.contains("[File not found: MEMORY.md]"));
+        // BOOTSTRAP.md was deleted in audit row 3 — must never appear.
         assert!(
             !prompt.contains("BOOTSTRAP.md"),
-            "conditional+missing BOOTSTRAP.md must be silent"
+            "deleted BOOTSTRAP.md must never appear in rendered output"
         );
 
         let _ = std::fs::remove_dir_all(workspace);

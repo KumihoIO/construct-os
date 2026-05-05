@@ -6080,23 +6080,9 @@ async fn scaffold_workspace(
          ---\n\
          *Add whatever helps you do your job. This is your cheat sheet.*\n";
 
-    let bootstrap = format!(
-        "# BOOTSTRAP.md — Hello, World\n\n\
-         *You just woke up. Time to figure out who you are.*\n\n\
-         Your human's name is **{user}** (timezone: {tz}).\n\
-         They prefer: {comm_style}\n\n\
-         ## First Conversation\n\n\
-         Don't interrogate. Don't be robotic. Just... talk.\n\
-         Introduce yourself as {agent} and get to know each other.\n\n\
-         ## After You Know Each Other\n\n\
-         Update these files with what you learned:\n\
-         - `IDENTITY.md` — your name, vibe, emoji\n\
-         - `USER.md` — their preferences, work context\n\
-         - `SOUL.md` — boundaries and behavior\n\n\
-         ## When You're Done\n\n\
-         Delete this file. You don't need a bootstrap script anymore —\n\
-         you're you now.\n"
-    );
+    // BOOTSTRAP.md generation removed per audit row 3. The file's first-run
+    // ritual responsibilities are now handled by the runtime's Kumiho
+    // bootstrap prompt (see `KUMIHO_BOOTSTRAP_PROMPT` in `agent::kumiho`).
 
     let memory = "\
          # MEMORY.md — Long-Term Memory\n\n\
@@ -6126,7 +6112,6 @@ async fn scaffold_workspace(
         ("SOUL.md", soul),
         ("USER.md", user_md),
         ("TOOLS.md", tools.to_string()),
-        ("BOOTSTRAP.md", bootstrap),
     ];
     if memory_backend != "none" {
         files.push(("MEMORY.md", memory.to_string()));
@@ -6759,12 +6744,16 @@ mod tests {
             "SOUL.md",
             "USER.md",
             "TOOLS.md",
-            "BOOTSTRAP.md",
             "MEMORY.md",
         ];
         for f in &expected {
             assert!(tmp.path().join(f).exists(), "missing file: {f}");
         }
+        // BOOTSTRAP.md was deleted per audit row 3 — must NOT be generated.
+        assert!(
+            !tmp.path().join("BOOTSTRAP.md").exists(),
+            "BOOTSTRAP.md must not be scaffolded (audit row 3)"
+        );
     }
 
     #[tokio::test]
@@ -6800,14 +6789,6 @@ mod tests {
             user_md.contains("**Name:** Alice"),
             "USER.md should contain user name"
         );
-
-        let bootstrap = tokio::fs::read_to_string(tmp.path().join("BOOTSTRAP.md"))
-            .await
-            .unwrap();
-        assert!(
-            bootstrap.contains("**Alice**"),
-            "BOOTSTRAP.md should contain user name"
-        );
     }
 
     #[tokio::test]
@@ -6827,14 +6808,6 @@ mod tests {
         assert!(
             user_md.contains("**Timezone:** US/Pacific"),
             "USER.md should contain timezone"
-        );
-
-        let bootstrap = tokio::fs::read_to_string(tmp.path().join("BOOTSTRAP.md"))
-            .await
-            .unwrap();
-        assert!(
-            bootstrap.contains("US/Pacific"),
-            "BOOTSTRAP.md should contain timezone"
         );
     }
 
@@ -6880,14 +6853,6 @@ mod tests {
             heartbeat.contains("Crabby"),
             "HEARTBEAT.md should contain agent name"
         );
-
-        let bootstrap = tokio::fs::read_to_string(tmp.path().join("BOOTSTRAP.md"))
-            .await
-            .unwrap();
-        assert!(
-            bootstrap.contains("Introduce yourself as Crabby"),
-            "BOOTSTRAP.md should contain agent name"
-        );
     }
 
     #[tokio::test]
@@ -6915,14 +6880,6 @@ mod tests {
         assert!(
             user_md.contains("Be technical and detailed."),
             "USER.md should contain communication style"
-        );
-
-        let bootstrap = tokio::fs::read_to_string(tmp.path().join("BOOTSTRAP.md"))
-            .await
-            .unwrap();
-        assert!(
-            bootstrap.contains("Be technical and detailed."),
-            "BOOTSTRAP.md should contain communication style"
         );
     }
 
@@ -7049,7 +7006,6 @@ mod tests {
             "SOUL.md",
             "USER.md",
             "TOOLS.md",
-            "BOOTSTRAP.md",
             "MEMORY.md",
         ] {
             let content = tokio::fs::read_to_string(tmp.path().join(f)).await.unwrap();
@@ -7222,13 +7178,6 @@ mod tests {
             .await
             .unwrap();
         assert!(agents.contains("Claw Personal Assistant"));
-
-        let bootstrap = tokio::fs::read_to_string(tmp.path().join("BOOTSTRAP.md"))
-            .await
-            .unwrap();
-        assert!(bootstrap.contains("**Kave**"));
-        assert!(bootstrap.contains("US/Eastern"));
-        assert!(bootstrap.contains("Introduce yourself as Claw"));
 
         let heartbeat = tokio::fs::read_to_string(tmp.path().join("HEARTBEAT.md"))
             .await
