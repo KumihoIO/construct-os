@@ -359,6 +359,28 @@ function WorkflowEditorInner({
     [selectedNodeId, nodes],
   );
 
+  // ── DAG context for ${...} expression autocomplete in textareas ─────────
+  // Step IDs come from the live xyflow nodes; workflow inputs from the
+  // parsed workflowMeta; trigger fields are common defaults plus any keys
+  // surfaced by the workflow's declared trigger inputMap.
+  const dagContext = useMemo(() => {
+    const stepIds = nodes
+      .map((n) => (n.data as TaskNodeData).taskId)
+      .filter((id): id is string => Boolean(id));
+    const workflowInputs = workflowMeta.inputs.map((i) => i.name).filter(Boolean);
+    const defaultTriggerFields = ['entity_kref', 'kind', 'tag', 'name', 'metadata'];
+    const triggerInputKeys = new Set<string>();
+    for (const t of workflowMeta.triggers) {
+      for (const key of Object.keys(t.inputMap || {})) {
+        if (key && !key.startsWith('__')) triggerInputKeys.add(key);
+      }
+    }
+    const triggerFields = Array.from(
+      new Set([...defaultTriggerFields, ...triggerInputKeys]),
+    );
+    return { stepIds, workflowInputs, triggerFields };
+  }, [nodes, workflowMeta.inputs, workflowMeta.triggers]);
+
   // ── Position helpers ────────────────────────────────────────────────────
   const getViewportCenter = useCallback(() => {
     const el = canvasRef.current;
@@ -1538,6 +1560,7 @@ function WorkflowEditorInner({
               setPaletteContext(undefined);
               setPaletteOpen(true);
             }}
+            dagContext={dagContext}
           />
         ) : (
           <WorkflowSettingsPanel meta={workflowMeta} setMeta={setWorkflowMeta} />
