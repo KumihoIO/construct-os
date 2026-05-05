@@ -79,6 +79,11 @@ pub struct Agent {
     /// Whether Kumiho memory is enabled — used to append the session-bootstrap
     /// prompt to the system prompt so the agent knows how to use Kumiho MCP tools.
     kumiho_enabled: bool,
+    /// Whether the high-level Kumiho memory tools (`kumiho_memory_engage`,
+    /// `reflect`, `recall`, `consolidate`, `dream_state`) are registered in
+    /// the sidecar — i.e. whether the `kumiho_memory` Python package is
+    /// installed in the venv. Drives lite-vs-full bootstrap prompt selection.
+    kumiho_memory_advanced_available: bool,
     /// Whether Operator orchestration is enabled — used to append the operator
     /// prompt so the agent knows how to delegate to sub-agents.
     operator_enabled: bool,
@@ -118,6 +123,7 @@ pub struct AgentBuilder {
     autonomy_level: Option<crate::security::AutonomyLevel>,
     activated_tools: Option<Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>>,
     kumiho_enabled: bool,
+    kumiho_memory_advanced_available: bool,
     operator_enabled: bool,
     skill_effectiveness: Option<Arc<crate::skills::EffectivenessCache>>,
 }
@@ -152,6 +158,7 @@ impl AgentBuilder {
             autonomy_level: None,
             activated_tools: None,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
             operator_enabled: false,
             skill_effectiveness: None,
         }
@@ -304,6 +311,15 @@ impl AgentBuilder {
         self
     }
 
+    /// Mark whether the high-level Kumiho memory tools (engage / reflect /
+    /// recall / consolidate / dream_state) are registered in the sidecar.
+    /// When `false`, the lite bootstrap prompt is used instead of the full
+    /// one — see [`crate::agent::kumiho::registry_has_advanced_kumiho_tools`].
+    pub fn kumiho_memory_advanced_available(mut self, available: bool) -> Self {
+        self.kumiho_memory_advanced_available = available;
+        self
+    }
+
     pub fn operator_enabled(mut self, enabled: bool) -> Self {
         self.operator_enabled = enabled;
         self
@@ -378,6 +394,7 @@ impl AgentBuilder {
                 .unwrap_or(crate::security::AutonomyLevel::Supervised),
             activated_tools: self.activated_tools,
             kumiho_enabled: self.kumiho_enabled,
+            kumiho_memory_advanced_available: self.kumiho_memory_advanced_available,
             operator_enabled: self.operator_enabled,
             skill_effectiveness: self.skill_effectiveness,
         })
@@ -484,6 +501,7 @@ impl Agent {
         // and webhook paths (loop_.rs) so that the WebSocket/daemon UI
         // path also has access to MCP tools.
         let mut activated_tools: Option<Arc<std::sync::Mutex<tools::ActivatedToolSet>>> = None;
+        let mut kumiho_advanced = false;
         if config.mcp.enabled && !config.mcp.servers.is_empty() {
             tracing::info!(
                 "Initializing MCP client — {} server(s) configured",
@@ -492,6 +510,14 @@ impl Agent {
             match tools::McpRegistry::connect_all(&config.mcp.servers).await {
                 Ok(registry) => {
                     let registry = std::sync::Arc::new(registry);
+                    // Registry-based probe for the high-level Kumiho memory
+                    // reflexes. See coherence audit row 1 + 13: the prompt
+                    // gate must reflect actual runtime tool availability,
+                    // not a filesystem heuristic.
+                    kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                        &registry.tool_names(),
+                    );
+                    crate::agent::kumiho::warn_if_kumiho_advanced_missing(config, kumiho_advanced);
                     if config.mcp.deferred_loading {
                         let operator_prefix =
                             format!("{}__", crate::agent::operator::OPERATOR_SERVER_NAME);
@@ -652,6 +678,7 @@ impl Agent {
             .autonomy_level(config.autonomy.level)
             .activated_tools(activated_tools)
             .kumiho_enabled(config.kumiho.enabled)
+            .kumiho_memory_advanced_available(kumiho_advanced)
             .operator_enabled(config.operator.enabled)
             .build()
     }
@@ -702,6 +729,7 @@ impl Agent {
             autonomy_level: self.autonomy_level,
             operator_enabled: self.operator_enabled,
             kumiho_enabled: self.kumiho_enabled,
+            kumiho_memory_advanced_available: self.kumiho_memory_advanced_available,
         };
         self.prompt_builder.build(&ctx)
     }

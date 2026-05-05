@@ -41,6 +41,15 @@ pub struct PromptContext<'a> {
     pub operator_enabled: bool,
     /// Whether Kumiho memory is enabled.
     pub kumiho_enabled: bool,
+    /// Whether the high-level Kumiho memory tools (`kumiho_memory_engage`,
+    /// `reflect`, `recall`, `consolidate`, `dream_state`) are actually
+    /// registered in the runtime — i.e. whether the `kumiho_memory` Python
+    /// package is installed in the sidecar venv. When `false`, the
+    /// [`KumihoBootstrapSection`] emits the **lite** variant of the prompt
+    /// that does not mandate those tools.
+    ///
+    /// Ignored when `kumiho_enabled` is `false`.
+    pub kumiho_memory_advanced_available: bool,
 }
 
 pub trait PromptSection: Send + Sync {
@@ -127,7 +136,16 @@ impl PromptSection for KumihoBootstrapSection {
         if !ctx.kumiho_enabled {
             return Ok(String::new());
         }
-        Ok(crate::agent::kumiho::KUMIHO_BOOTSTRAP_PROMPT.to_string())
+        // When the high-level memory tools are not registered in the
+        // sidecar runtime, fall back to the lite variant of the prompt so
+        // we don't mandate engage/reflect/etc. into the void. Row 1 + 13
+        // remediation (coherence audit 2026-05).
+        let template = if ctx.kumiho_memory_advanced_available {
+            crate::agent::kumiho::KUMIHO_BOOTSTRAP_PROMPT
+        } else {
+            crate::agent::kumiho::KUMIHO_BOOTSTRAP_PROMPT_LITE
+        };
+        Ok(template.to_string())
     }
 }
 
@@ -414,6 +432,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let section = IdentitySection;
@@ -448,6 +467,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
         let prompt = SystemPromptBuilder::with_defaults().build(&ctx).unwrap();
         assert!(prompt.contains("## Tools"));
@@ -489,6 +509,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SkillsSection.build(&ctx).unwrap();
@@ -534,6 +555,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SkillsSection.build(&ctx).unwrap();
@@ -565,6 +587,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let rendered = DateTimeSection.build(&ctx).unwrap();
@@ -609,6 +632,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let prompt = SystemPromptBuilder::with_defaults().build(&ctx).unwrap();
@@ -646,6 +670,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SafetySection.build(&ctx).unwrap();
@@ -684,6 +709,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SafetySection.build(&ctx).unwrap();
@@ -714,6 +740,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Full,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SafetySection.build(&ctx).unwrap();
@@ -752,6 +779,7 @@ mod tests {
             autonomy_level: AutonomyLevel::Supervised,
             operator_enabled: false,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
         };
 
         let output = SafetySection.build(&ctx).unwrap();
@@ -762,6 +790,89 @@ mod tests {
         assert!(
             output.contains("bypass oversight"),
             "supervised should include 'bypass oversight' instructions"
+        );
+    }
+
+    fn kumiho_test_ctx<'a>(
+        tools: &'a [Box<dyn Tool>],
+        kumiho_enabled: bool,
+        advanced: bool,
+    ) -> PromptContext<'a> {
+        PromptContext {
+            workspace_dir: Path::new("/tmp"),
+            model_name: "test-model",
+            tools,
+            skills: &[],
+            skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skill_effectiveness: None,
+            identity_config: None,
+            dispatcher_instructions: "",
+            tool_descriptions: None,
+            security_summary: None,
+            autonomy_level: AutonomyLevel::Supervised,
+            operator_enabled: false,
+            kumiho_enabled,
+            kumiho_memory_advanced_available: advanced,
+        }
+    }
+
+    #[test]
+    fn kumiho_bootstrap_section_disabled_yields_empty() {
+        let tools: Vec<Box<dyn Tool>> = vec![];
+        let ctx = kumiho_test_ctx(&tools, false, false);
+        let out = KumihoBootstrapSection.build(&ctx).unwrap();
+        assert!(out.is_empty(), "section must be empty when kumiho disabled");
+    }
+
+    #[test]
+    fn kumiho_bootstrap_section_lite_when_advanced_unavailable() {
+        let tools: Vec<Box<dyn Tool>> = vec![];
+        let ctx = kumiho_test_ctx(&tools, true, false);
+        let out = KumihoBootstrapSection.build(&ctx).unwrap();
+
+        // Lite variant must mention the always-available pair so the
+        // model knows what it CAN call.
+        assert!(out.contains("kumiho_memory_store"));
+        assert!(out.contains("kumiho_memory_retrieve"));
+
+        // Lite variant must NOT name any high-level reflex tool, even in
+        // negative phrasing — naming them primes the model to call them.
+        // Plain substring check, not a phrase match.
+        assert!(
+            !out.contains("kumiho_memory_engage"),
+            "lite must not name kumiho_memory_engage"
+        );
+        assert!(
+            !out.contains("kumiho_memory_reflect"),
+            "lite must not name kumiho_memory_reflect"
+        );
+        assert!(
+            !out.contains("kumiho_memory_recall"),
+            "lite must not name kumiho_memory_recall"
+        );
+        assert!(
+            !out.contains("kumiho_memory_consolidate"),
+            "lite must not name kumiho_memory_consolidate"
+        );
+        assert!(
+            !out.contains("kumiho_memory_dream_state"),
+            "lite must not name kumiho_memory_dream_state"
+        );
+    }
+
+    #[test]
+    fn kumiho_bootstrap_section_full_when_advanced_available() {
+        let tools: Vec<Box<dyn Tool>> = vec![];
+        let ctx = kumiho_test_ctx(&tools, true, true);
+        let out = KumihoBootstrapSection.build(&ctx).unwrap();
+
+        assert!(out.contains("SESSION-START INSTRUCTION (kumiho-memory"));
+        // Full variant references the high-level reflexes.
+        assert!(out.contains("kumiho_memory_engage"));
+        assert!(out.contains("kumiho_memory_reflect"));
+        assert!(
+            !out.contains("lite mode"),
+            "full variant must not be the lite prompt"
         );
     }
 }

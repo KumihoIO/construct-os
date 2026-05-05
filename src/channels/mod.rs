@@ -5218,6 +5218,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
     > = None;
     let mut ch_mcp_registry: Option<Arc<crate::tools::McpRegistry>> = None;
+    let mut kumiho_advanced = false;
     if config.mcp.enabled && !config.mcp.servers.is_empty() {
         tracing::info!(
             "Initializing MCP client — {} server(s) configured",
@@ -5227,6 +5228,10 @@ pub async fn start_channels(config: Config) -> Result<()> {
             Ok(registry) => {
                 let registry = std::sync::Arc::new(registry);
                 ch_mcp_registry = Some(std::sync::Arc::clone(&registry));
+                kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                    &registry.tool_names(),
+                );
+                crate::agent::kumiho::warn_if_kumiho_advanced_missing(&config, kumiho_advanced);
                 if config.mcp.deferred_loading {
                     // Hybrid: eagerly load essential tools, defer the rest.
                     //
@@ -5455,7 +5460,14 @@ pub async fn start_channels(config: Config) -> Result<()> {
     // Append lightweight Kumiho + Operator bootstraps (~400 tokens total).
     // Full instructions are loaded on-demand via MCP skill on first turn,
     // following OpenClaw's one-shot pattern — no bloat on every message.
-    crate::agent::kumiho::append_kumiho_channel_bootstrap(&mut system_prompt, &config, false);
+    // The `kumiho_advanced` flag was set above from the live MCP registry
+    // probe — see coherence audit row 1+13.
+    crate::agent::kumiho::append_kumiho_channel_bootstrap(
+        &mut system_prompt,
+        &config,
+        false,
+        kumiho_advanced,
+    );
     crate::agent::operator::append_operator_channel_prompt(
         &mut system_prompt,
         &config,

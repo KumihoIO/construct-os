@@ -3742,6 +3742,7 @@ pub async fn run(
     let mut activated_handle: Option<
         std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
     > = None;
+    let mut kumiho_advanced = false;
     if config.mcp.enabled && !config.mcp.servers.is_empty() {
         tracing::info!(
             "Initializing MCP client — {} server(s) configured",
@@ -3750,6 +3751,13 @@ pub async fn run(
         match crate::tools::McpRegistry::connect_all(&config.mcp.servers).await {
             Ok(registry) => {
                 let registry = std::sync::Arc::new(registry);
+                // Registry-based probe for the high-level Kumiho memory
+                // reflexes (engage / reflect / recall / consolidate /
+                // dream_state). Drives lite-vs-full bootstrap selection.
+                kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                    &registry.tool_names(),
+                );
+                crate::agent::kumiho::warn_if_kumiho_advanced_missing(&config, kumiho_advanced);
                 if config.mcp.deferred_loading {
                     // Hybrid path: eagerly load essential tools, defer the rest.
                     //
@@ -4071,8 +4079,16 @@ pub async fn run(
         system_prompt.push_str(&deferred_section);
     }
 
-    // Append Kumiho memory session-bootstrap instructions
-    crate::agent::kumiho::append_kumiho_bootstrap(&mut system_prompt, &config, false);
+    // Append Kumiho memory session-bootstrap instructions. The `advanced`
+    // flag was set above from the live MCP registry probe — full variant
+    // when the high-level reflexes are registered, lite otherwise.
+    // See coherence audit row 1 + 13.
+    crate::agent::kumiho::append_kumiho_bootstrap(
+        &mut system_prompt,
+        &config,
+        false,
+        kumiho_advanced,
+    );
 
     // Append Operator orchestration instructions
     crate::agent::operator::append_operator_prompt(&mut system_prompt, &config, false, &model_name);
@@ -4757,6 +4773,7 @@ pub async fn process_message(
     let mut activated_handle_pm: Option<
         std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
     > = None;
+    let mut kumiho_advanced = false;
     if config.mcp.enabled && !config.mcp.servers.is_empty() {
         tracing::info!(
             "Initializing MCP client — {} server(s) configured",
@@ -4765,6 +4782,10 @@ pub async fn process_message(
         match crate::tools::McpRegistry::connect_all(&config.mcp.servers).await {
             Ok(registry) => {
                 let registry = std::sync::Arc::new(registry);
+                kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                    &registry.tool_names(),
+                );
+                crate::agent::kumiho::warn_if_kumiho_advanced_missing(&config, kumiho_advanced);
                 if config.mcp.deferred_loading {
                     // Hybrid: eagerly load operator tools, defer the rest.
                     let operator_prefix =
@@ -4992,8 +5013,14 @@ pub async fn process_message(
         system_prompt.push_str(&deferred_section);
     }
 
-    // Append Kumiho memory session-bootstrap instructions
-    crate::agent::kumiho::append_kumiho_bootstrap(&mut system_prompt, &config, false);
+    // Append Kumiho memory session-bootstrap instructions (lite vs. full
+    // variant chosen by the live MCP registry probe set above).
+    crate::agent::kumiho::append_kumiho_bootstrap(
+        &mut system_prompt,
+        &config,
+        false,
+        kumiho_advanced,
+    );
 
     // Append Operator orchestration instructions
     crate::agent::operator::append_operator_prompt(&mut system_prompt, &config, false, &model_name);
