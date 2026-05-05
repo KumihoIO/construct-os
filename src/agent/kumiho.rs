@@ -399,7 +399,7 @@ pub fn kumiho_mcp_server_config(kumiho_cfg: &KumihoConfig) -> McpServerConfig {
 ///
 /// The bootstrap system-prompt text is handled separately: call
 /// [`append_kumiho_bootstrap`] on the assembled `system_prompt` string in the
-/// agent run loop (after `build_system_prompt_with_mode_and_autonomy`).
+/// agent run loop (after `build_channel_system_prompt`).
 ///
 /// Internal agents (is_internal = true) are left untouched.
 ///
