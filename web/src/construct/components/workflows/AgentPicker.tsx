@@ -19,6 +19,7 @@ import { Bot, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAgentRoster } from './useAgentRoster';
+import NewPoolAgentModal from './NewPoolAgentModal';
 
 interface Props {
   open: boolean;
@@ -73,8 +74,9 @@ export default function AgentPicker({
   anchorRect,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { agents, loading } = useAgentRoster();
+  const { agents, loading, refresh } = useAgentRoster();
   const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Autofocus the search input on open. Reset search each open.
   useEffect(() => {
@@ -330,18 +332,35 @@ export default function AgentPicker({
             }}
           >
             <span>{agents.length} agent{agents.length === 1 ? '' : 's'}</span>
-            <a
-              href="/agents"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                color: 'var(--pc-accent)',
-                textDecoration: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Create pool agent →
-            </a>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <a
+                href="/agents"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  color: 'var(--construct-text-faint)',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                }}
+              >
+                Open agents page →
+              </a>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'var(--pc-accent)',
+                  fontWeight: 600,
+                  fontSize: 11,
+                }}
+              >
+                + New pool agent
+              </button>
+            </span>
           </div>
         </Command>
       </div>
@@ -361,5 +380,18 @@ export default function AgentPicker({
   // Portal to body so position:fixed escapes any ancestor with
   // transform/filter/will-change that would otherwise become the
   // containing block and clip the popover behind the side panel.
-  return createPortal(content, document.body);
+  return (
+    <>
+      {createPortal(content, document.body)}
+      <NewPoolAgentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={async (agent) => {
+          await refresh();
+          setCreateOpen(false);
+          handlePick(agent.item_name);
+        }}
+      />
+    </>
+  );
 }

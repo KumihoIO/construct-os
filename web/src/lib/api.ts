@@ -536,6 +536,30 @@ export async function fetchAuthProfiles(): Promise<AuthProfileSummary[]> {
   return data.profiles ?? [];
 }
 
+export interface CreateAuthProfileRequest {
+  provider: string;
+  profile_name: string;
+  /** Raw bearer / API key. Encrypted on the gateway before persist. */
+  token: string;
+  account_id?: string;
+  /** "token" by default; OAuth flows must go through /config. */
+  kind?: 'token' | 'api_key';
+}
+
+/** POST a new static-token auth profile. Returns metadata only — the
+ *  response never includes the token bytes. */
+export async function createAuthProfile(
+  body: CreateAuthProfileRequest,
+): Promise<AuthProfileSummary> {
+  return apiFetch<AuthProfileSummary | { profile: AuthProfileSummary }>(
+    '/api/auth/profiles',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  ).then((data) => unwrapField(data, 'profile'));
+}
+
 // ---------------------------------------------------------------------------
 // Skills
 // ---------------------------------------------------------------------------

@@ -15,9 +15,11 @@ import { fetchSkills, getChannels } from '@/lib/api';
 import Panel from '@/construct/components/ui/Panel';
 import { STEP_TYPES_BY_TYPE } from './stepRegistry';
 import AgentPicker from './AgentPicker';
-import AuthProfilePicker, { providerLabel } from './AuthProfilePicker';
+import AuthProfilePicker from './AuthProfilePicker';
+import { providerLabel } from './providerLabels';
 import { useAgentRoster } from './useAgentRoster';
 import { useAuthProfiles } from './useAuthProfiles';
+import { slugify as slugifyShared, uniqueSlug } from './slugify';
 
 /** Step types that surface the encrypted auth-profile dropdown. */
 const AUTH_ELIGIBLE_STEP_TYPES = new Set(['agent', 'shell', 'python', 'email', 'a2a']);
@@ -28,31 +30,15 @@ const AGENT_HINT_OPTIONS = ['coder', 'researcher', 'reviewer'];
 // Step ID helpers — Name → slug-id link
 // ---------------------------------------------------------------------------
 
-/** ASCII-only step-id slug. Strips diacritics, lowercases, collapses any
- *  non-`[a-z0-9]` runs to single `-`, trims edges, falls back to `step` if
- *  empty, caps at 64 chars. */
+/** ASCII-only step-id slug. See `./slugify` for the shared implementation —
+ *  re-exported here so existing import sites keep compiling. */
 export function slugify(input: string): string {
-  const normalized = (input ?? '')
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '');
-  const slug = normalized
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64)
-    .replace(/-+$/g, '');
-  return slug || 'step';
+  return slugifyShared(input, 'step');
 }
 
 /** Append `-2`, `-3`, … until a slug doesn't collide with `existing`. */
 export function uniqueTaskId(slug: string, existing: Iterable<string>): string {
-  const taken = new Set(existing);
-  if (!taken.has(slug)) return slug;
-  for (let i = 2; i < 1000; i++) {
-    const candidate = `${slug}-${i}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${slug}-${Date.now()}`;
+  return uniqueSlug(slug, existing);
 }
 
 // ---------------------------------------------------------------------------
