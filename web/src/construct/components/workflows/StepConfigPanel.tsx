@@ -17,6 +17,7 @@ import { STEP_TYPES_BY_TYPE } from './stepRegistry';
 import AgentPicker from './AgentPicker';
 import AuthProfilePicker from './AuthProfilePicker';
 import { providerLabel } from './providerLabels';
+import ExpressionTextarea from './ExpressionTextarea';
 import { useAgentRoster } from './useAgentRoster';
 import { useAuthProfiles } from './useAuthProfiles';
 import { slugify as slugifyShared, uniqueSlug } from './slugify';
@@ -93,6 +94,13 @@ function helperStyle(): React.CSSProperties {
   return { fontSize: 10, color: 'var(--pc-text-faint)', marginTop: 2 };
 }
 
+/** DAG context surfaced to ExpressionTextarea for ${...} autocomplete. */
+export interface DagContext {
+  stepIds: string[];
+  workflowInputs: string[];
+  triggerFields: string[];
+}
+
 interface Props {
   node: Node<TaskNodeData>;
   /** All current task IDs in the editor — used to resolve slug collisions
@@ -105,6 +113,8 @@ interface Props {
   onDelete: (nodeId: string) => void;
   /** Open the type-change palette */
   onChangeType: () => void;
+  /** Available references for ${...} autocomplete in expression textareas. */
+  dagContext?: DagContext;
 }
 
 export default function StepConfigPanel({
@@ -114,7 +124,11 @@ export default function StepConfigPanel({
   onRenameStep,
   onDelete,
   onChangeType,
+  dagContext,
 }: Props) {
+  const dagStepIds = dagContext?.stepIds ?? [];
+  const dagInputs = dagContext?.workflowInputs ?? [];
+  const dagTriggerFields = dagContext?.triggerFields ?? [];
   const data = node.data;
   const stepType = data.type ?? 'agent';
   const typeDef = STEP_TYPES_BY_TYPE[stepType];
@@ -640,12 +654,15 @@ export default function StepConfigPanel({
 
               <div>
                 <label style={labelStyle}>Prompt</label>
-                <textarea
+                <ExpressionTextarea
                   value={data.prompt}
-                  onChange={(e) => onUpdate(node.id, { prompt: e.target.value })}
+                  onChange={(next) => onUpdate(node.id, { prompt: next })}
                   placeholder="Agent prompt template (supports ${step_id.output} interpolation)"
                   rows={6}
                   style={monoInputStyle}
+                  stepIds={dagStepIds}
+                  workflowInputs={dagInputs}
+                  triggerFields={dagTriggerFields}
                 />
               </div>
             </div>
@@ -1053,12 +1070,15 @@ export default function StepConfigPanel({
               </div>
               <div>
                 <label style={labelStyle}>Body (plain text)</label>
-                <textarea
+                <ExpressionTextarea
                   value={data.emailBody || ''}
-                  onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })}
+                  onChange={(next) => onUpdate(node.id, { emailBody: next })}
                   rows={5}
                   placeholder="Hi there,&#10;&#10;Saw you're working on…"
                   style={inputStyle}
+                  stepIds={dagStepIds}
+                  workflowInputs={dagInputs}
+                  triggerFields={dagTriggerFields}
                 />
               </div>
               <div>
@@ -1162,12 +1182,15 @@ export default function StepConfigPanel({
               </div>
               <div>
                 <label style={labelStyle}>Template</label>
-                <textarea
+                <ExpressionTextarea
                   value={data.outputTemplate}
-                  onChange={(e) => onUpdate(node.id, { outputTemplate: e.target.value })}
+                  onChange={(next) => onUpdate(node.id, { outputTemplate: next })}
                   placeholder="Output template with ${step_id.output} interpolation"
                   rows={6}
                   style={monoInputStyle}
+                  stepIds={dagStepIds}
+                  workflowInputs={dagInputs}
+                  triggerFields={dagTriggerFields}
                 />
               </div>
 
@@ -1663,12 +1686,15 @@ export default function StepConfigPanel({
               </div>
               <div>
                 <label style={labelStyle}>Notify Message</label>
-                <textarea
+                <ExpressionTextarea
                   value={data.notifyMessage ?? ''}
-                  onChange={(e) => onUpdate(node.id, { notifyMessage: e.target.value })}
+                  onChange={(next) => onUpdate(node.id, { notifyMessage: next })}
                   placeholder="Body — supports ${step_id.output} templating"
                   rows={6}
                   style={monoInputStyle}
+                  stepIds={dagStepIds}
+                  workflowInputs={dagInputs}
+                  triggerFields={dagTriggerFields}
                 />
               </div>
             </>
