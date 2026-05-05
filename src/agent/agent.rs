@@ -715,7 +715,7 @@ impl Agent {
         let ctx = PromptContext {
             workspace_dir: &self.workspace_dir,
             model_name: &self.model_name,
-            tools: &self.tools,
+            tools: crate::agent::prompt::PromptTools::Full(&self.tools),
             skills: &self.skills,
             skills_prompt_mode: self.skills_prompt_mode,
             skill_effectiveness: self
@@ -730,6 +730,7 @@ impl Agent {
             operator_enabled: self.operator_enabled,
             kumiho_enabled: self.kumiho_enabled,
             kumiho_memory_advanced_available: self.kumiho_memory_advanced_available,
+            mode: crate::agent::prompt::BuilderMode::Daemon,
         };
         self.prompt_builder.build(&ctx)
     }
