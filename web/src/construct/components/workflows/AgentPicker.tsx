@@ -215,6 +215,17 @@ export default function AgentPicker({
                     ...(agent.expertise ?? []),
                   ]}
                   onSelect={() => handlePick(agent.item_name)}
+                  // Direct click handler — cmdk's internal `onSelect` is
+                  // unreliable on mouse-click in the React 19 + cmdk 1.1 +
+                  // portal combination this picker uses (keyboard / Enter
+                  // path still works via `onSelect`).  Without this fallback
+                  // the canvas badge silently fails to update when an agent
+                  // is clicked in the popover.
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handlePick(agent.item_name);
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
