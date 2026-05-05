@@ -3671,6 +3671,7 @@ fn setup_project_context() -> Result<ProjectContext> {
     let tz_eu_london = t!("ctx-tz-eu-london");
     let tz_eu_berlin = t!("ctx-tz-eu-berlin");
     let tz_asia_tokyo = t!("ctx-tz-asia-tokyo");
+    let tz_asia_seoul = t!("ctx-tz-asia-seoul");
     let tz_utc = t!("ctx-tz-utc");
     let tz_other = t!("ctx-tz-other");
     let tz_options = [
@@ -3681,6 +3682,7 @@ fn setup_project_context() -> Result<ProjectContext> {
         tz_eu_london.as_str(),
         tz_eu_berlin.as_str(),
         tz_asia_tokyo.as_str(),
+        tz_asia_seoul.as_str(),
         tz_utc.as_str(),
         tz_other.as_str(),
     ];
@@ -3694,6 +3696,7 @@ fn setup_project_context() -> Result<ProjectContext> {
         "Europe/London",
         "Europe/Berlin",
         "Asia/Tokyo",
+        "Asia/Seoul",
         "UTC",
         "", // Other — handled below
     ];
