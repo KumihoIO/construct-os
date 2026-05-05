@@ -8586,23 +8586,28 @@ BTC is currently around $65,000 based on latest tool output."#
     }
 
     #[test]
-    fn prompt_bootstrap_only_if_exists() {
+    fn prompt_never_injects_bootstrap_md() {
+        // BOOTSTRAP.md was deleted from PERSONALITY_FILES per audit row 3.
+        // Even if a user creates one manually in their workspace, the loader
+        // must NOT pick it up — the personality block should be silent on it.
         let ws = make_workspace();
-        // No BOOTSTRAP.md — should not appear
         let prompt = build_system_prompt(ws.path(), "model", &[], &[], None, None);
         assert!(
-            !prompt.contains("### BOOTSTRAP.md"),
-            "BOOTSTRAP.md should not appear when missing"
+            !prompt.contains("BOOTSTRAP.md"),
+            "BOOTSTRAP.md should never appear (audit row 3 — deleted)"
         );
 
-        // Create BOOTSTRAP.md — should appear
+        // Even with a BOOTSTRAP.md present on disk, it stays out.
         std::fs::write(ws.path().join("BOOTSTRAP.md"), "# Bootstrap\nFirst run.").unwrap();
         let prompt2 = build_system_prompt(ws.path(), "model", &[], &[], None, None);
         assert!(
-            prompt2.contains("### BOOTSTRAP.md"),
-            "BOOTSTRAP.md should appear when present"
+            !prompt2.contains("BOOTSTRAP.md"),
+            "user-created BOOTSTRAP.md must not be loaded (audit row 3)"
         );
-        assert!(prompt2.contains("First run"));
+        assert!(
+            !prompt2.contains("First run"),
+            "BOOTSTRAP.md content must not bleed into the prompt"
+        );
     }
 
     #[test]
