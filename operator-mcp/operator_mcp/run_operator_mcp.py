@@ -30,14 +30,49 @@ def _requirements_hash() -> str:
         return ""
 
 
+def _venv_python(venv_dir: pathlib.Path) -> pathlib.Path:
+    """Return the path to the venv's Python interpreter, platform-aware.
+
+    Windows venvs put executables under Scripts/ with a .exe suffix; POSIX
+    (Linux, macOS, BSD) under bin/. Hardcoding the POSIX layout caused the
+    existence check to fail on Windows even when the shared venv had been
+    created by the kumiho-memory sidecar — leading the operator to attempt
+    a re-create that then failed with PermissionError on the locked
+    python.exe.
+    """
+    if sys.platform == "win32":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python3"
+
+
 def ensure_deps():
-    python = VENV_DIR / "bin" / "python3"
+    python = _venv_python(VENV_DIR)
     if not python.exists():
         # Shared venv doesn't exist yet — the kumiho-memory runner
-        # normally creates it.  Create a minimal one here as fallback.
+        # normally creates it.  We may be racing it on first install,
+        # so wait briefly before falling back to creating one ourselves.
+        import time
+        for _ in range(20):  # up to ~2 seconds
+            if python.exists():
+                break
+            time.sleep(0.1)
+
+    if not python.exists():
         print("[operator] Creating shared venv...", file=sys.stderr)
-        import venv
-        venv.create(str(VENV_DIR), with_pip=True)
+        try:
+            import venv
+            venv.create(str(VENV_DIR), with_pip=True)
+        except (PermissionError, OSError) as e:
+            # Likely racing with another process or python.exe is locked
+            # by a running kumiho-memory. Re-check; if it now exists we
+            # can proceed.
+            if not python.exists():
+                print(f"[operator] venv creation failed: {e}", file=sys.stderr)
+                print(
+                    f"[operator] If this persists, delete {VENV_DIR} and retry.",
+                    file=sys.stderr,
+                )
+                raise
         subprocess.run(
             [str(python), "-m", "pip", "install", "-q", "--upgrade", "pip"],
             stdout=sys.stderr, stderr=sys.stderr,
