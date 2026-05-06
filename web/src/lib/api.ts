@@ -32,6 +32,8 @@ import type {
   WorkflowDashboard,
   MemoryGraphResponse,
   AuthProfileSummary,
+  RevisionOperation,
+  ReviseWorkflowResponse,
 } from '../types/api';
 import { clearToken, getToken, setToken } from './auth';
 import { apiOrigin, basePath } from './basePath';
@@ -807,6 +809,26 @@ export async function runWorkflow(
       body: JSON.stringify(body),
     },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Architect (workflow revision)
+// ---------------------------------------------------------------------------
+
+/** POST /api/architect/revise — gateway forwards to operator-mcp's
+ *  `revise_workflow` MCP tool. The Architect chat panel doesn't call this
+ *  directly in Stage B.1 (the Operator does it via tool-call inside the
+ *  agent loop), but the wrapper is here so Stage B.2's revision-history
+ *  strip + revert path can consume it without re-deriving the contract. */
+export async function reviseWorkflow(body: {
+  workflow_kref: string;
+  operations: RevisionOperation[];
+  rationale?: string;
+}): Promise<ReviseWorkflowResponse> {
+  return apiFetch<ReviseWorkflowResponse>('/api/architect/revise', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export interface AgentActivity {

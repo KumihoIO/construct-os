@@ -413,6 +413,45 @@ export function useAgentChatSession({
     return true;
   }, [attachments, clearDraftStore, input, pageContext, uploadingCount]);
 
+  /** Send an arbitrary text turn without going through the textarea. Used
+   *  by slash commands like `/architect` whose handler synthesizes a
+   *  user-visible prompt rather than echoing the literal command. The
+   *  message bubble is rendered in scrollback exactly the same way
+   *  `handleSend` would render it. Attachments are NOT consumed — this
+   *  path is purely for synthetic, no-attachment turns. */
+  const submitMessage = useCallback(
+    (text: string): boolean => {
+      const trimmed = text.trim();
+      if (!trimmed || !wsRef.current?.connected) return false;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: generateUUID(),
+          role: 'user',
+          content: trimmed,
+          timestamp: new Date(),
+        },
+      ]);
+
+      try {
+        wsRef.current.sendMessage(trimmed, pageContext, []);
+        onUserMessageRef.current?.(trimmed);
+        setTyping(true);
+        pendingContentRef.current = '';
+        pendingThinkingRef.current = '';
+        capturedThinkingRef.current = '';
+        activitiesRef.current = [];
+        setActivities([]);
+      } catch {
+        setError(t('agent.send_error'));
+        return false;
+      }
+      return true;
+    },
+    [pageContext],
+  );
+
   /** Upload a file to the session's attachment store and stage it for
    *  the next send. For images we also generate a client-side data URL
    *  preview so the chip strip can show a thumbnail. */
@@ -523,6 +562,7 @@ export function useAgentChatSession({
     setInput,
     streamingContent,
     streamingThinking,
+    submitMessage,
     typing,
     uploadingCount,
   };
