@@ -14,11 +14,10 @@ import type { SkillDefinition } from '@/types/api';
 import { fetchSkills, getChannels } from '@/lib/api';
 import Panel from '@/construct/components/ui/Panel';
 import { STEP_TYPES_BY_TYPE } from './stepRegistry';
-import AgentPicker from './AgentPicker';
 import AuthProfilePicker from './AuthProfilePicker';
 import { providerLabel } from './providerLabels';
 import ExpressionTextarea from './ExpressionTextarea';
-import { useAgentRoster } from './useAgentRoster';
+import { emitOpenAgentPicker } from './stepEvents';
 import { useAuthProfiles } from './useAuthProfiles';
 import { slugify as slugifyShared, uniqueSlug } from './slugify';
 
@@ -201,10 +200,9 @@ export default function StepConfigPanel({
   const [skillLoading, setSkillLoading] = useState(false);
   const [channelOptions, setChannelOptions] = useState<string[]>(['dashboard']);
 
-  // Pool-agent picker — shared component anchored to the field button below.
-  const { agents: poolAgents } = useAgentRoster();
-  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [agentAnchorRect, setAgentAnchorRect] = useState<DOMRect | null>(null);
+  // Pool-agent picker — single shared mount lives in WorkflowEditor. The
+  // "Choose agent…" button below dispatches OPEN_AGENT_PICKER_EVENT instead
+  // of mounting its own picker, so two AgentPickers can never both be open.
 
   // Auth-profile picker — bound encrypted credential for external API calls.
   const { profiles: authProfiles } = useAuthProfiles();
@@ -545,14 +543,17 @@ export default function StepConfigPanel({
             <div style={sectionShellStyle}>
               <div style={sectionTitleStyle}>Agent Config</div>
 
-              {/* Pool Agent — opens shared AgentPicker anchored to the field */}
+              {/* Pool Agent — dispatches OPEN_AGENT_PICKER_EVENT so the
+                  single editor-level AgentPicker mount opens anchored here. */}
               <div>
                 <label style={labelStyle}>Pool Agent</label>
                 <button
                   type="button"
                   onClick={(e) => {
-                    setAgentAnchorRect(e.currentTarget.getBoundingClientRect());
-                    setAgentPickerOpen(true);
+                    emitOpenAgentPicker({
+                      taskId: node.id,
+                      anchorRect: e.currentTarget.getBoundingClientRect(),
+                    });
                   }}
                   style={{
                     ...monoInputStyle,
@@ -585,24 +586,6 @@ export default function StepConfigPanel({
                     {data.assign}
                   </div>
                 )}
-                <AgentPicker
-                  open={agentPickerOpen}
-                  onOpenChange={setAgentPickerOpen}
-                  value={data.assign}
-                  anchorRect={agentAnchorRect}
-                  onSelect={(name) => {
-                    if (name === null) {
-                      onUpdate(node.id, { assign: '' });
-                      return;
-                    }
-                    const picked = poolAgents.find((a) => a.item_name === name);
-                    onUpdate(node.id, {
-                      assign: name,
-                      agentType: picked?.agent_type || data.agentType || 'claude',
-                      role: picked?.role || data.role || 'coder',
-                    });
-                  }}
-                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
