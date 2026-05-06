@@ -47,8 +47,19 @@ function isCurrentlyPublished(rev: RevisionSummary): boolean {
 }
 
 function rationaleOf(rev: RevisionSummary): string | null {
-  const v = rev.metadata?.rationale;
-  if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+  // Prefer metadata.rationale (in case future code stores it there);
+  // fall back to scanning tags for a `rationale:<text>` entry, which is
+  // how Stage A.1's `revise_workflow` actually persists it today.
+  const fromMeta = rev.metadata?.rationale;
+  if (typeof fromMeta === 'string' && fromMeta.trim().length > 0) {
+    return fromMeta.trim();
+  }
+  for (const tag of rev.tags) {
+    if (tag.startsWith('rationale:')) {
+      const value = tag.slice('rationale:'.length).trim();
+      return value.length > 0 ? value : null;
+    }
+  }
   return null;
 }
 

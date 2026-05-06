@@ -236,14 +236,58 @@ pub async fn handle_republish_revision(
             // poll reflects the newly-published revision.
             super::api_workflows::invalidate_cache();
 
-            // Notify open editor tabs via P1.2 SSE.
+            // Emit the canonical `workflow.revision.published` event so the
+            // editor's `useWorkflowEvents` hook picks the revert up and
+            // refreshes the canvas/YAML. Strip's `useRevisionEvents` matches
+            // this event too, so the history strip still updates.
+            //
+            // Payload shape mirrors `api_workflows::broadcast_revision_published`:
+            //   workflow_kref       — item kref (no `?r=N`)
+            //   revision_kref       — full revision kref
+            //   revision_number     — parsed from the `?r=N` segment
+            //   name                — derived from the kref's last segment
+            //   published_at        — current UTC time (re-tagging is "now")
+            //   originating_session — null (republish is system-initiated)
+            let workflow_kref = revision_kref
+                .split_once("?r=")
+                .map(|(base, _)| base.to_string())
+                .unwrap_or_else(|| revision_kref.clone());
+
+            let revision_number: i32 = revision_kref
+                .split_once("?r=")
+                .and_then(|(_, n)| n.split('&').next())
+                .and_then(|n| n.parse::<i32>().ok())
+                .unwrap_or(0);
+
+            // Derive the name from the kref's last segment
+            // (item kref pattern: `kref://Project/Workflows/<name>`).
+            // Mirrors the same derivation in api_workflows.rs ~L1547.
+            // RevisionResponse has no `name` field and there's no client.get_item
+            // method, so the kref's last segment is the canonical source.
+            let name = workflow_kref
+                .rsplit('/')
+                .next()
+                .map(|seg| {
+                    seg.rsplit_once('.')
+                        .map(|(n, _)| n)
+                        .unwrap_or(seg)
+                        .to_string()
+                })
+                .unwrap_or_default();
+
+            let published_at = chrono::Utc::now().to_rfc3339();
+
             let payload = serde_json::json!({
-                "type": "workflow.revision.republished",
+                "type": "workflow.revision.published",
+                "workflow_kref": workflow_kref,
                 "revision_kref": revision_kref.clone(),
-                "tagged_at": chrono::Utc::now().to_rfc3339(),
+                "revision_number": revision_number,
+                "name": name,
+                "published_at": published_at,
+                "originating_session": serde_json::Value::Null,
             });
             if let Err(err) = state.event_tx.send(payload) {
-                tracing::debug!("workflow.revision.republished broadcast skipped: {err}");
+                tracing::debug!("workflow.revision.published broadcast skipped: {err}");
             }
 
             Json(serde_json::json!({
