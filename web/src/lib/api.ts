@@ -34,6 +34,7 @@ import type {
   AuthProfileSummary,
   RevisionOperation,
   ReviseWorkflowResponse,
+  RevisionListResponse,
 } from '../types/api';
 import { clearToken, getToken, setToken } from './auth';
 import { apiOrigin, basePath } from './basePath';
@@ -829,6 +830,31 @@ export async function reviseWorkflow(body: {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/** GET /api/architect/revisions?workflow_kref=... — list Kumiho revisions
+ *  for a workflow item. Returns a thin summary (kref, number, created_at,
+ *  tags, metadata). Used by the editor's revision history strip. */
+export async function listRevisions(
+  workflowKref: string,
+): Promise<RevisionListResponse> {
+  const params = new URLSearchParams({ workflow_kref: workflowKref });
+  return apiFetch<RevisionListResponse>(`/api/architect/revisions?${params}`);
+}
+
+/** POST /api/architect/republish — re-tag the chosen revision as
+ *  `published`. The gateway emits `workflow.revision.republished` on
+ *  success, which the editor's SSE subscription auto-applies. */
+export async function republishRevision(
+  revisionKref: string,
+): Promise<{ ok: boolean; revision_kref: string }> {
+  return apiFetch<{ ok: boolean; revision_kref: string }>(
+    '/api/architect/republish',
+    {
+      method: 'POST',
+      body: JSON.stringify({ revision_kref: revisionKref }),
+    },
+  );
 }
 
 export interface AgentActivity {
