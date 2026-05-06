@@ -9,6 +9,7 @@
 
 pub mod api;
 pub mod api_agents;
+pub mod api_architect;
 pub mod api_artifact_body;
 pub mod api_attachments;
 pub mod api_auth_profiles;
@@ -1664,6 +1665,10 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/api/teams", get(api_teams::handle_list_teams).post(api_teams::handle_create_team))
         .route("/api/teams/deprecate", post(api_teams::handle_deprecate_team))
         .route("/api/teams/{*kref}", get(api_teams::handle_get_team).put(api_teams::handle_update_team).delete(api_teams::handle_delete_team))
+        // ── Architect: workflow revision via Operator (P2) ──
+        .route("/api/architect/revise", post(api_architect::handle_architect_revise))
+        .route("/api/architect/revisions", get(api_architect::handle_list_workflow_revisions))
+        .route("/api/architect/republish", post(api_architect::handle_republish_revision))
         // ── Workflow management API (proxied to Kumiho FastAPI) ──
         .route("/api/workflows", get(api_workflows::handle_list_workflows).post(api_workflows::handle_create_workflow))
         .route("/api/workflows/deprecate", post(api_workflows::handle_deprecate_workflow))
