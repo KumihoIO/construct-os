@@ -44,7 +44,9 @@ _USER_DIR = os.path.expanduser("~/.construct/workflows")
 
 def load_workflow_from_yaml(path: str) -> WorkflowDef:
     """Parse a YAML file into a WorkflowDef. Raises on parse errors."""
-    with open(path, "r") as f:
+    # Pin UTF-8 explicitly so loading on Windows (default cp949 on Korean
+    # locales) doesn't blow up on non-ASCII workflow YAML.
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):
@@ -350,7 +352,7 @@ def save_workflow_yaml(wf: WorkflowDef, directory: str | None = None) -> str:
             if val == "" or val == []:
                 del step_data[key]
 
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     _log(f"workflow_loader: saved '{wf.name}' → {path}")

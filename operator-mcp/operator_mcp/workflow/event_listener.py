@@ -50,6 +50,10 @@ def _log(msg: str) -> None:
     _logger.info(msg)
 
 
+def _debug(msg: str) -> None:
+    _logger.debug(msg)
+
+
 # ---------------------------------------------------------------------------
 # TriggerRule (lightweight dataclass — one per TriggerDef registration)
 # ---------------------------------------------------------------------------
@@ -418,12 +422,15 @@ class WorkflowEventListener:
                 )
                 return
 
-            _log(f"Event received: kind={kind} tag={tag} name={name} space={space}")
+            _debug(f"Event received: kind={kind} tag={tag} name={name} space={space}")
 
             # -- 4. Match against registry ---------------------------------
+            # Non-matching events are the common case (every workflow run
+            # emits running/completed events that aren't entity triggers).
+            # Log at DEBUG so the daemon log isn't dominated by them.
             matches = self._registry.match(kind, tag, name, space)
             if not matches:
-                _log(f"Event skipped: no trigger match for kind={kind} tag={tag}")
+                _debug(f"Event skipped: no trigger match for kind={kind} tag={tag}")
                 return
 
             # -- 5. Read entity metadata -----------------------------------

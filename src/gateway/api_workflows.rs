@@ -87,7 +87,7 @@ fn set_cached(workflows: &[WorkflowResponse], include_deprecated: bool) {
     });
 }
 
-fn invalidate_cache() {
+pub(super) fn invalidate_cache() {
     if let Some(lock) = WORKFLOW_CACHE.get() {
         let mut cache = lock.lock();
         // Mark as expired but keep stale data for fallback on API errors
@@ -1132,6 +1132,43 @@ fn validation_error_response(
     )
 }
 
+/// Broadcast a `workflow.revision.published` event to all SSE subscribers.
+///
+/// Echoes the optional `X-Construct-Session` request header back as
+/// `originating_session` so the editor can suppress events it itself caused.
+/// Failures on the broadcast channel are non-fatal (subscriber lag).
+fn broadcast_revision_published(
+    state: &AppState,
+    headers: &HeaderMap,
+    workflow_kref: &str,
+    rev: &RevisionResponse,
+    name: &str,
+) {
+    let originating_session = headers
+        .get("x-construct-session")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let published_at = rev
+        .created_at
+        .clone()
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+    let payload = serde_json::json!({
+        "type": "workflow.revision.published",
+        "workflow_kref": workflow_kref,
+        "revision_kref": rev.kref,
+        "revision_number": rev.number,
+        "name": name,
+        "published_at": published_at,
+        "originating_session": originating_session,
+    });
+
+    if let Err(err) = state.event_tx.send(payload) {
+        tracing::debug!("workflow.revision.published broadcast skipped: {err}");
+    }
+}
+
 /// POST /api/workflows
 pub async fn handle_create_workflow(
     State(state): State<AppState>,
@@ -1193,6 +1230,8 @@ pub async fn handle_create_workflow(
     invalidate_cache();
     sync_cron_for_workflow(&state, &body.name, &body.definition);
 
+    broadcast_revision_published(&state, &headers, &item.kref, &rev, &body.name);
+
     let workflow = to_workflow_response(&item, Some(&rev));
     (
         StatusCode::CREATED,
@@ -1249,6 +1288,8 @@ pub async fn handle_update_workflow(
 
     invalidate_cache();
     sync_cron_for_workflow(&state, &body.name, &body.definition);
+
+    broadcast_revision_published(&state, &headers, &kref, &rev, &body.name);
 
     let item = items.iter().find(|i| i.kref == kref);
     match item {

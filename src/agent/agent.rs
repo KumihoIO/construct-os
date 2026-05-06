@@ -39,6 +39,51 @@ pub enum TurnEvent {
     OperatorStatus { phase: String, detail: String },
 }
 
+/// Substring the Architect frontend embeds in `page_context` on every chat
+/// turn (see `web/src/construct/components/workflows/ArchitectPanel.tsx`).
+/// The gateway forwards `page_context` containing this marker into the user
+/// message before the agent turn starts.  Regular Operator chats never carry
+/// the marker, so its presence is a reliable per-turn Architect signal.
+pub(crate) const ARCHITECT_EDITOR_STATE_MARKER: &str = "<editor-state>";
+
+/// Tools that persist workflow state outside the editor's control (writing
+/// files, creating Kumiho revisions, kicking off runs, etc.).  In Architect
+/// mode the only legitimate proposal channel is `propose_workflow_yaml`, so
+/// we strip these from the tool list advertised to the LLM — the LLM cannot
+/// call what it cannot see.  Names match the bare operator-mcp tool name;
+/// the `construct-operator__` prefix is stripped before comparison.
+pub(crate) const ARCHITECT_DENIED_TOOLS: &[&str] = &[
+    "create_workflow",
+    "revise_workflow",
+    "register_workflow",
+    "save_workflow_yaml",
+    "save_workflow_preset",
+    "run_workflow",
+    "delete_workflow",
+    "deprecate_workflow",
+];
+
+/// True when the current turn's user message carries the Architect
+/// editor-state marker.  See [`ARCHITECT_EDITOR_STATE_MARKER`].
+pub(crate) fn is_architect_turn(user_message: &str) -> bool {
+    user_message.contains(ARCHITECT_EDITOR_STATE_MARKER)
+}
+
+/// Filter Architect-denied persistence tools out of `tool_specs` when the
+/// turn is operating in Architect mode.  No-op for regular operator chats.
+pub(crate) fn filter_tool_specs_for_architect(tool_specs: &mut Vec<ToolSpec>, user_message: &str) {
+    if !is_architect_turn(user_message) {
+        return;
+    }
+    tool_specs.retain(|spec| {
+        // MCP tools come prefixed with `construct-operator__`; bare tools
+        // (built into the gateway) appear with their plain name.  Match
+        // against the suffix after the last `__` so both forms are caught.
+        let bare = spec.name.rsplit("__").next().unwrap_or(spec.name.as_str());
+        !ARCHITECT_DENIED_TOOLS.contains(&bare)
+    });
+}
+
 pub struct Agent {
     provider: Box<dyn Provider>,
     /// Logical provider name (e.g. "anthropic", "openrouter") used for cost
@@ -79,6 +124,11 @@ pub struct Agent {
     /// Whether Kumiho memory is enabled — used to append the session-bootstrap
     /// prompt to the system prompt so the agent knows how to use Kumiho MCP tools.
     kumiho_enabled: bool,
+    /// Whether the high-level Kumiho memory tools (`kumiho_memory_engage`,
+    /// `reflect`, `recall`, `consolidate`, `dream_state`) are registered in
+    /// the sidecar — i.e. whether the `kumiho_memory` Python package is
+    /// installed in the venv. Drives lite-vs-full bootstrap prompt selection.
+    kumiho_memory_advanced_available: bool,
     /// Whether Operator orchestration is enabled — used to append the operator
     /// prompt so the agent knows how to delegate to sub-agents.
     operator_enabled: bool,
@@ -118,6 +168,7 @@ pub struct AgentBuilder {
     autonomy_level: Option<crate::security::AutonomyLevel>,
     activated_tools: Option<Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>>,
     kumiho_enabled: bool,
+    kumiho_memory_advanced_available: bool,
     operator_enabled: bool,
     skill_effectiveness: Option<Arc<crate::skills::EffectivenessCache>>,
 }
@@ -152,6 +203,7 @@ impl AgentBuilder {
             autonomy_level: None,
             activated_tools: None,
             kumiho_enabled: false,
+            kumiho_memory_advanced_available: false,
             operator_enabled: false,
             skill_effectiveness: None,
         }
@@ -304,6 +356,15 @@ impl AgentBuilder {
         self
     }
 
+    /// Mark whether the high-level Kumiho memory tools (engage / reflect /
+    /// recall / consolidate / dream_state) are registered in the sidecar.
+    /// When `false`, the lite bootstrap prompt is used instead of the full
+    /// one — see [`crate::agent::kumiho::registry_has_advanced_kumiho_tools`].
+    pub fn kumiho_memory_advanced_available(mut self, available: bool) -> Self {
+        self.kumiho_memory_advanced_available = available;
+        self
+    }
+
     pub fn operator_enabled(mut self, enabled: bool) -> Self {
         self.operator_enabled = enabled;
         self
@@ -378,6 +439,7 @@ impl AgentBuilder {
                 .unwrap_or(crate::security::AutonomyLevel::Supervised),
             activated_tools: self.activated_tools,
             kumiho_enabled: self.kumiho_enabled,
+            kumiho_memory_advanced_available: self.kumiho_memory_advanced_available,
             operator_enabled: self.operator_enabled,
             skill_effectiveness: self.skill_effectiveness,
         })
@@ -484,6 +546,7 @@ impl Agent {
         // and webhook paths (loop_.rs) so that the WebSocket/daemon UI
         // path also has access to MCP tools.
         let mut activated_tools: Option<Arc<std::sync::Mutex<tools::ActivatedToolSet>>> = None;
+        let mut kumiho_advanced = false;
         if config.mcp.enabled && !config.mcp.servers.is_empty() {
             tracing::info!(
                 "Initializing MCP client — {} server(s) configured",
@@ -492,6 +555,14 @@ impl Agent {
             match tools::McpRegistry::connect_all(&config.mcp.servers).await {
                 Ok(registry) => {
                     let registry = std::sync::Arc::new(registry);
+                    // Registry-based probe for the high-level Kumiho memory
+                    // reflexes. See coherence audit row 1 + 13: the prompt
+                    // gate must reflect actual runtime tool availability,
+                    // not a filesystem heuristic.
+                    kumiho_advanced = crate::agent::kumiho::registry_has_advanced_kumiho_tools(
+                        &registry.tool_names(),
+                    );
+                    crate::agent::kumiho::warn_if_kumiho_advanced_missing(config, kumiho_advanced);
                     if config.mcp.deferred_loading {
                         let operator_prefix =
                             format!("{}__", crate::agent::operator::OPERATOR_SERVER_NAME);
@@ -652,6 +723,7 @@ impl Agent {
             .autonomy_level(config.autonomy.level)
             .activated_tools(activated_tools)
             .kumiho_enabled(config.kumiho.enabled)
+            .kumiho_memory_advanced_available(kumiho_advanced)
             .operator_enabled(config.operator.enabled)
             .build()
     }
@@ -688,7 +760,7 @@ impl Agent {
         let ctx = PromptContext {
             workspace_dir: &self.workspace_dir,
             model_name: &self.model_name,
-            tools: &self.tools,
+            tools: crate::agent::prompt::PromptTools::Full(&self.tools),
             skills: &self.skills,
             skills_prompt_mode: self.skills_prompt_mode,
             skill_effectiveness: self
@@ -702,6 +774,8 @@ impl Agent {
             autonomy_level: self.autonomy_level,
             operator_enabled: self.operator_enabled,
             kumiho_enabled: self.kumiho_enabled,
+            kumiho_memory_advanced_available: self.kumiho_memory_advanced_available,
+            mode: crate::agent::prompt::BuilderMode::Daemon,
         };
         self.prompt_builder.build(&ctx)
     }
@@ -933,6 +1007,13 @@ impl Agent {
                 }
             }
 
+            // Architect-mode runtime guard: when the gateway forwards an
+            // `<editor-state>` block in the user message, hide the workflow
+            // persistence tools so the LLM literally cannot call them. The
+            // documented Architect contract is to PROPOSE YAML via
+            // `propose_workflow_yaml` and let the editor own persistence.
+            filter_tool_specs_for_architect(&mut iter_tool_specs, user_message);
+
             let response = match self
                 .provider
                 .chat(
@@ -1122,6 +1203,13 @@ impl Agent {
                     iter_tool_specs.push(spec);
                 }
             }
+
+            // Architect-mode runtime guard: when the gateway forwards an
+            // `<editor-state>` block in the user message, hide the workflow
+            // persistence tools so the LLM literally cannot call them. The
+            // documented Architect contract is to PROPOSE YAML via
+            // `propose_workflow_yaml` and let the editor own persistence.
+            filter_tool_specs_for_architect(&mut iter_tool_specs, user_message);
 
             let stream_opts = crate::providers::traits::StreamOptions::new(true);
             let mut stream = self.provider.stream_chat(

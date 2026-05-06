@@ -1673,6 +1673,71 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="revise_workflow",
+            description=(
+                "Apply a list of structured operations (add_step / edit_step / "
+                "delete_step / reorder / wire / unwire / insert_into_parallel / "
+                "extract_from_parallel / rename_step) to a workflow's current "
+                "revision and emit a new Kumiho revision tagged 'published'. "
+                "Returns success, the new revision kref, applied_count, and a "
+                "list of SkippedItem entries with typed reasons (step_not_found, "
+                "duplicate_id, reference_broken, cycle_detected, validation_failed, "
+                "…) so the LLM can repair instead of re-prompt blind. Kumiho is "
+                "revision-native — there is no in-place edit; every change "
+                "produces a new immutable revision."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "workflow_kref": {
+                        "type": "string",
+                        "description": "kref of the workflow item, e.g. kref://Construct/Workflows/foo.workflow.",
+                    },
+                    "operations": {
+                        "type": "array",
+                        "description": "Ordered list of revision ops. Each item: {op, step_id?, new_id?, step_def?, target_step_id?, parallel_id?, position?, position_after?}.",
+                        "items": {"type": "object"},
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "Optional human-readable rationale stored on the new revision as a tag.",
+                    },
+                },
+                "required": ["workflow_kref", "operations"],
+            },
+        ),
+        Tool(
+            name="propose_workflow_yaml",
+            description=(
+                "Architect-only: validate a proposed workflow YAML and echo "
+                "it back with a structured response. NEVER persists to disk "
+                "or Kumiho — the editor frontend pipes the YAML into the "
+                "editor's in-memory definition state and the user decides "
+                "when to Save. Returns {yaml, summary, valid, errors, "
+                "warnings, added_step_ids, modified_step_ids, "
+                "removed_step_ids}. When base_yaml is provided, computes a "
+                "step-ID diff so the caller can render added/changed steps."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposed_yaml": {
+                        "type": "string",
+                        "description": "The complete proposed workflow YAML.",
+                    },
+                    "intent_summary": {
+                        "type": "string",
+                        "description": "One-line description of what the user asked for.",
+                    },
+                    "base_yaml": {
+                        "type": "string",
+                        "description": "Current editor YAML if extending; omit or empty for a fresh workflow.",
+                    },
+                },
+                "required": ["proposed_yaml"],
+            },
+        ),
+        Tool(
             name="create_workflow",
             description="Create a new workflow definition and save as YAML to ~/.construct/workflows/.",
             inputSchema={
@@ -1859,6 +1924,28 @@ async def list_tools() -> list[Tool]:
                     "cwd": {
                         "type": "string",
                         "description": "Project directory for workflow discovery.",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="get_workflow_metadata",
+            description=(
+                "Return the editor-relevant primitives a workflow can use: step types "
+                "(with config-field schemas + example YAML), pool agents, auth profiles, "
+                "skills, and channels. Use before proposing a workflow revision so step "
+                "types, agent slugs, and skill IDs are grounded in what's available."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Categories to return. Default: all of "
+                            "['step_types', 'agents', 'auth_profiles', 'skills', 'channels']."
+                        ),
                     },
                 },
             },
@@ -2452,6 +2539,12 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "validate_workflow":
         from .tool_handlers.workflows import tool_validate_workflow
         return await tool_validate_workflow(args)
+    if name == "revise_workflow":
+        from .tool_handlers.workflow_revisions import tool_revise_workflow
+        return await tool_revise_workflow(args)
+    if name == "propose_workflow_yaml":
+        from .tool_handlers.architect_propose import tool_propose_workflow_yaml
+        return await tool_propose_workflow_yaml(args)
     if name == "create_workflow":
         from .tool_handlers.workflows import tool_create_workflow
         return await tool_create_workflow(args)
@@ -2499,6 +2592,9 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
         else:
             return {"valid": False, "errors": [{"message": "workflow or workflow_def required"}]}
         return dry_run_workflow(wf, inputs)
+    if name == "get_workflow_metadata":
+        from .tool_handlers.workflow_discovery import tool_get_workflow_metadata
+        return await tool_get_workflow_metadata(args)
     if name == "system_dashboard":
         from .tool_handlers.dashboard import tool_system_dashboard
         return await tool_system_dashboard(args)

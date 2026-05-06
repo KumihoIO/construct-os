@@ -694,7 +694,7 @@ export default function WorkflowRuns() {
                       <span className="text-sm font-semibold" style={{ color: 'var(--construct-text-primary)' }}>{selectedTask.name || selectedTask.id}</span>
                       {selectedStep ? <StatusPill status={selectedStep.status} /> : null}
                     </div>
-                    <div className="text-xs uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>{selectedTask.action}</div>
+                    <div className="text-xs uppercase tracking-[0.12em]" style={{ color: 'var(--construct-text-faint)' }}>{selectedTask.type}</div>
                     <p className="text-sm leading-6" style={{ color: 'var(--construct-text-secondary)' }}>{selectedTask.description || t('runs.detail.no_description')}</p>
                     <div className="text-xs" style={{ color: 'var(--construct-text-secondary)' }}>
                       {tpl('runs.detail.depends_on', { list: selectedTask.depends_on.join(', ') || t('runs.detail.depends_none') })}
