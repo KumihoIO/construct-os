@@ -385,6 +385,67 @@ export interface WorkflowDashboard {
 }
 
 // ---------------------------------------------------------------------------
+// Architect (workflow revision) — mirrors operator-mcp `revise_workflow`.
+// ---------------------------------------------------------------------------
+
+/** Operation kinds the `revise_workflow` MCP tool understands. Mirrors
+ *  `RevisionOpType` in operator-mcp/operator_mcp/tool_handlers/workflow_revisions.py. */
+export type RevisionOpKind =
+  | 'add_step'
+  | 'edit_step'
+  | 'delete_step'
+  | 'reorder'
+  | 'wire'
+  | 'unwire'
+  | 'insert_into_parallel'
+  | 'extract_from_parallel'
+  | 'rename_step';
+
+/** A single revision operation. Fields are op-specific; the tool ignores
+ *  fields irrelevant to the chosen `op`. Mirrors `RevisionOp` in
+ *  operator-mcp. */
+export interface RevisionOperation {
+  op: RevisionOpKind;
+  step_id?: string;
+  new_id?: string;
+  step_def?: Record<string, unknown>;
+  target_step_id?: string;
+  parallel_id?: string;
+  position?: number;
+  position_after?: string;
+}
+
+/** Reasons the tool can skip an individual operation. Mirrors
+ *  `SkippedReason` in operator-mcp. */
+export type SkippedReason =
+  | 'step_not_found'
+  | 'duplicate_id'
+  | 'invalid_yaml'
+  | 'missing_required_field'
+  | 'cycle_detected'
+  | 'unknown_step_type'
+  | 'reference_broken'
+  | 'invalid_position'
+  | 'parallel_not_found'
+  | 'validation_failed';
+
+export interface SkippedItem {
+  op_index: number;
+  op: RevisionOpKind;
+  reason: SkippedReason;
+  details: string;
+  target_step_id?: string | null;
+}
+
+export interface ReviseWorkflowResponse {
+  success: boolean;
+  new_revision_kref: string | null;
+  applied_count: number;
+  skipped_items: SkippedItem[];
+  errors: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Asset Browser (Kumiho)
 // ---------------------------------------------------------------------------
 

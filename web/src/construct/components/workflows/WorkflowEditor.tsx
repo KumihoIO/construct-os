@@ -24,6 +24,7 @@ import {
   LayoutGrid,
   Plus,
   Radio,
+  Wand2,
   X,
   Zap,
 } from 'lucide-react';
@@ -64,6 +65,7 @@ import EditorCommandList from './EditorCommandList';
 import StepConfigPanel from './StepConfigPanel';
 import StepTypePalette from './StepTypePalette';
 import AgentPicker from './AgentPicker';
+import ArchitectPanel from './ArchitectPanel';
 import { useAgentRoster } from './useAgentRoster';
 import {
   ADD_STEP_EVENT,
@@ -302,6 +304,8 @@ function WorkflowEditorInner({
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Architect chat panel — toggled by ⌘J or the Wand2 toolbar button.
+  const [architectPanelOpen, setArchitectPanelOpen] = useState(false);
   const [paletteContext, setPaletteContext] = useState<
     Pick<AddStepDetail, 'position' | 'source' | 'target'> | undefined
   >(undefined);
@@ -589,7 +593,7 @@ function WorkflowEditorInner({
   // is declared) can dispatch to the latest callback.
   const openYamlPanelRef = useRef<() => void>(() => {});
 
-  // ── ⌘K / ⌘I shortcuts ───────────────────────────────────────────────────
+  // ── ⌘K / ⌘I / ⌘J shortcuts ──────────────────────────────────────────────
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -599,9 +603,26 @@ function WorkflowEditorInner({
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
           target.isContentEditable);
+      // ⌘J should toggle the Architect panel even from inside the editor's
+      // own input fields — but never from inside the panel's own composer
+      // (otherwise pressing ⌘J inside the textarea would close the panel
+      // mid-typing). The panel renders into a portal-like fixed aside so
+      // we filter by an ancestor data-attribute.
+      const mod = isMac ? event.metaKey : event.ctrlKey;
+      const isJ = mod && event.key.toLowerCase() === 'j';
+      if (isJ) {
+        // Architect tools need a saved workflow (kref) to operate on; if
+        // we're in create-new mode there's nothing to revise yet, so the
+        // shortcut quietly does nothing rather than opening an unwirable
+        // panel.
+        if (!workflow?.kref) return;
+        event.preventDefault();
+        setArchitectPanelOpen((prev) => !prev);
+        return;
+      }
+
       if (inField) return;
 
-      const mod = isMac ? event.metaKey : event.ctrlKey;
       if (mod && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPaletteContext(undefined);
@@ -614,7 +635,7 @@ function WorkflowEditorInner({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isMac]);
+  }, [isMac, workflow?.kref]);
 
   // ── React Flow handlers ─────────────────────────────────────────────────
   const onConnect = useCallback(
@@ -1436,6 +1457,18 @@ function WorkflowEditorInner({
               >
                 <Code size={14} />
               </button>
+              {workflow ? (
+                <button
+                  type="button"
+                  onClick={() => setArchitectPanelOpen((prev) => !prev)}
+                  className="construct-button"
+                  data-variant={architectPanelOpen ? 'primary' : undefined}
+                  title={`Architect (${isMac ? '⌘' : 'Ctrl'}+J)`}
+                  style={{ padding: '6px 10px' }}
+                >
+                  <Wand2 size={14} />
+                </button>
+              ) : null}
             </div>
 
             {/* Canvas + side YAML */}
@@ -1627,6 +1660,17 @@ function WorkflowEditorInner({
             : undefined
         }
       />
+
+      {/* Architect — editor-scoped chat panel. Only mounted once a
+          workflow item exists (architect tools need a workflow_kref). */}
+      {workflow?.kref ? (
+        <ArchitectPanel
+          open={architectPanelOpen}
+          onOpenChange={setArchitectPanelOpen}
+          workflowKref={workflow.kref}
+          workflowName={workflow.name || name || 'workflow'}
+        />
+      ) : null}
 
       {/* Shared agent picker — single mount for the entire editor.
           Opened by canvas badge clicks, auto-open after creating a new

@@ -27,6 +27,13 @@ export type SlashTabType = 'chat' | 'terminal' | 'code';
 /** Theme names recognized by `useTheme`. */
 export type SlashThemeName = 'dark' | 'light' | 'system' | 'oled';
 
+/** Surface a slash command can show up on. `global` is the default and
+ *  covers the dashboard assistant panel; `workflow_editor` is for the
+ *  Architect chat panel mounted inside the workflow editor (only visible
+ *  there because it needs a workflow_kref to act on). Multi-scope
+ *  commands list every surface they support. */
+export type SlashCommandScope = 'global' | 'workflow_editor';
+
 /** Normalized lookup key — lowercase, no leading slash. */
 function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/^\//, '');
@@ -59,6 +66,20 @@ export interface SlashCommandContext {
   setLang: (code: string) => void | Promise<void>;
   /** Switch theme. */
   setTheme: (theme: SlashThemeName) => void;
+
+  // ── Workflow-editor scope (Architect panel) ───────────────────
+  /** Send a synthesized chat message on the active session. Only present
+   *  when the host surface (e.g. ArchitectPanel) wires it; commands that
+   *  rely on it should defensively no-op when undefined and surface a
+   *  system message so the user knows they're invoking on the wrong
+   *  surface. */
+  submitMessage?: (text: string) => boolean;
+  /** kref of the workflow currently open in the editor — set by the
+   *  Architect panel so commands can include it in their generated
+   *  prompts. Undefined on the dashboard assistant. */
+  workflowKref?: string;
+  /** Display name of that workflow. */
+  workflowName?: string;
 }
 
 export interface SlashCommand {
@@ -74,6 +95,10 @@ export interface SlashCommand {
   args?: string;
   /** Optional usage example shown in `/help` output. */
   example?: string;
+  /** Surfaces this command is visible on. Defaults to `['global']`.
+   *  `matchCommands` and `resolveCommand` accept an optional active
+   *  scope and filter to commands that include it. */
+  scopes?: SlashCommandScope[];
   /** Async or sync handler. Errors are caught by the caller and surfaced
    *  on the chat error banner. */
   handler: (ctx: SlashCommandContext, args: string) => void | Promise<void>;
@@ -189,18 +214,51 @@ export const SLASH_COMMANDS: SlashCommand[] = [
       ctx.closeActiveTab();
     },
   },
+  {
+    name: 'architect',
+    description: 'Architect — describe a workflow change',
+    args: '<description of the change>',
+    example: '/architect add a python step that prints hello',
+    scopes: ['workflow_editor'],
+    handler: (ctx, args) => {
+      const desc = args.trim();
+      if (!desc) {
+        ctx.appendSystemMessage('Usage: /architect <describe the change you want>');
+        return;
+      }
+      if (!ctx.submitMessage) {
+        ctx.appendSystemMessage(
+          'The /architect command only works inside the workflow editor (open a workflow and press ⌘J).',
+        );
+        return;
+      }
+      const sent = ctx.submitMessage(`Please apply this change: ${desc}`);
+      if (!sent) {
+        ctx.appendSystemMessage('Could not send — chat is not connected yet.');
+      }
+    },
+  },
 ];
 
 // ── Lookup helpers ────────────────────────────────────────────────
 
-/** Return commands whose canonical name starts with the query (after
- *  the leading `/`). Empty query returns the full list. Aliases are
- *  matched too — but the matched entry is still keyed by canonical
- *  name, so `/?` and `/help` produce the same single row. */
-export function matchCommands(query: string): SlashCommand[] {
+/** Return commands visible in the given scope whose canonical name
+ *  starts with the query (after the leading `/`). Empty query returns
+ *  the full list. Aliases are matched too — but the matched entry is
+ *  still keyed by canonical name, so `/?` and `/help` produce the same
+ *  single row.
+ *
+ *  Scope defaults to `'global'`. A command without a `scopes` field is
+ *  visible everywhere (it's a "vanilla" command — `/help`, `/clear`,
+ *  etc. apply to any chat surface). A command that *does* list scopes
+ *  is restricted to those scopes only — so `/architect` with
+ *  `scopes: ['workflow_editor']` is hidden from the dashboard assistant. */
+export function matchCommands(query: string, scope: SlashCommandScope = 'global'): SlashCommand[] {
   const q = normalize(query);
-  if (q === '') return SLASH_COMMANDS;
-  return SLASH_COMMANDS.filter((cmd) => {
+  const inScope = (cmd: SlashCommand) => !cmd.scopes || cmd.scopes.includes(scope);
+  const visible = SLASH_COMMANDS.filter(inScope);
+  if (q === '') return visible;
+  return visible.filter((cmd) => {
     if (cmd.name.startsWith(q)) return true;
     if (cmd.aliases?.some((a) => a.startsWith(q))) return true;
     return false;
