@@ -237,7 +237,7 @@ export default function Workflows() {
 
   /* ---- CRUD handlers ---- */
 
-  const handleSaveWorkflow = async (values: WorkflowFormValues) => {
+  const handleSaveWorkflow = async (values: WorkflowFormValues): Promise<void> => {
     setSaving(true);
     setError(null);
     try {
@@ -272,6 +272,11 @@ export default function Workflows() {
       const message = formatWorkflowError(err, t('workflows.save_failure'));
       setError(message);
       setNotice({ tone: 'error', message });
+      // Re-throw so the editor (rendered as a fixed-overlay above the page-
+      // level notice) can surface the message inline. Without this, clicks on
+      // Save appear to do nothing because the page notice is hidden behind
+      // the editor.
+      throw new Error(message);
     } finally {
       setSaving(false);
     }

@@ -94,7 +94,11 @@ interface WorkflowFormData {
 
 interface WorkflowEditorProps {
   workflow: WorkflowDefinition | null;
-  onSave: (data: WorkflowFormData) => void;
+  // Returns a promise that rejects with an Error whose `.message` is a
+  // human-readable summary (multi-line ok). The editor surfaces the message
+  // inline so server-side validation errors are visible while the editor
+  // overlay is open.
+  onSave: (data: WorkflowFormData) => Promise<void>;
   onCancel: () => void;
   saving: boolean;
   mode?: 'create' | 'edit' | 'duplicate';
@@ -1061,7 +1065,11 @@ function WorkflowEditorInner({
   });
 
   // ── Save ────────────────────────────────────────────────────────────────
-  const handleSave = useCallback(() => {
+  // Awaits the parent's onSave and surfaces any rejection as an inline error.
+  // Without this, server-side validation failures (e.g. shell step missing
+  // command) only set page-level state hidden behind this fixed-overlay editor
+  // — clicks would appear to do nothing.
+  const handleSave = useCallback(async () => {
     setError(null);
     setWarning(null);
     if (!name.trim()) return setError('Workflow name is required.');
@@ -1075,13 +1083,18 @@ function WorkflowEditorInner({
       name: name.trim(),
       description: description.trim(),
     });
-    onSave({
-      name: name.trim(),
-      description: description.trim(),
-      definition,
-      version: workflowMeta.version || '',
-      tags,
-    });
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim(),
+        definition,
+        version: workflowMeta.version || '',
+        tags,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Save failed.';
+      setError(message);
+    }
   }, [name, description, tags, nodes, edges, workflowMeta, onSave]);
 
   // ── Sync YAML when toggling drawer ──────────────────────────────────────
