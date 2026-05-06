@@ -236,120 +236,130 @@ export default function AuthProfilePicker({
                       value={`${p.provider} ${p.profile_name} ${p.id} ${p.account_id ?? ''}`}
                       keywords={[p.kind, p.provider, p.account_id ?? '']}
                       onSelect={() => handlePick(p.id)}
-                      // cmdk 1.1 + React 19 + portal: cmdk's internal onPointerDown
-                      // preventDefault suppresses the subsequent click event, so a React
-                      // onClick handler never fires. onPointerDown runs BEFORE the
-                      // preventDefault and reliably reaches our handler. Keyboard
-                      // selection still goes through cmdk's onSelect above.
-                      onPointerDown={(e) => {
-                        // Only main-button pointers (left mouse / single touch / pen tip).
-                        if (e.button !== 0) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handlePick(p.id);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        color: 'var(--construct-text-primary)',
-                      }}
+                      asChild
                     >
-                      <span
+                      {/*
+                        cmdk's Item overwrites user-passed onClick with its own
+                        handler. With asChild, the role/data-selected/cmdk-item
+                        attrs forward onto this <button>, which fires a real
+                        native click that our onClick reliably hears. Keyboard
+                        Enter still goes through cmdk's onSelect above.
+                      */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handlePick(p.id);
+                        }}
                         style={{
-                          display: 'inline-flex',
+                          display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 24,
-                          height: 24,
-                          borderRadius: 6,
-                          background: isSelected
-                            ? 'var(--construct-signal-network-soft)'
-                            : 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
-                          color: isSelected
-                            ? 'var(--construct-signal-network)'
-                            : 'var(--pc-accent)',
-                          flexShrink: 0,
+                          gap: 10,
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          color: 'var(--construct-text-primary)',
+                          width: '100%',
+                          textAlign: 'left',
+                          background: 'transparent',
+                          border: 0,
+                          font: 'inherit',
                         }}
                       >
-                        <Lock size={13} />
-                      </span>
-                      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                         <span
                           style={{
-                            fontSize: 12.5,
-                            fontWeight: 600,
-                            fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            background: isSelected
+                              ? 'var(--construct-signal-network-soft)'
+                              : 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
+                            color: isSelected
+                              ? 'var(--construct-signal-network)'
+                              : 'var(--pc-accent)',
+                            flexShrink: 0,
                           }}
                         >
-                          {p.profile_name}
+                          <Lock size={13} />
                         </span>
-                        {p.account_id && (
+                        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                           <span
                             style={{
-                              fontSize: 10.5,
-                              color: 'var(--construct-text-faint)',
+                              fontSize: 12.5,
+                              fontWeight: 600,
+                              fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            as {p.account_id}
+                            {p.profile_name}
                           </span>
-                        )}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                          fontSize: 9.5,
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                          background: 'var(--pc-hover)',
-                          color: 'var(--construct-text-faint)',
-                          flexShrink: 0,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {p.kind}
-                      </span>
-                      {chip && (
+                          {p.account_id && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                color: 'var(--construct-text-faint)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              as {p.account_id}
+                            </span>
+                          )}
+                        </span>
                         <span
-                          title={
-                            chip.tone === 'danger'
-                              ? `Expired at ${p.expires_at}`
-                              : `Expires at ${p.expires_at}`
-                          }
                           style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
+                            fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
                             fontSize: 9.5,
                             padding: '2px 6px',
                             borderRadius: 4,
-                            background:
-                              chip.tone === 'danger'
-                                ? 'color-mix(in srgb, var(--construct-status-danger) 18%, transparent)'
-                                : 'color-mix(in srgb, var(--construct-status-warning) 18%, transparent)',
-                            color:
-                              chip.tone === 'danger'
-                                ? 'var(--construct-status-danger)'
-                                : 'var(--construct-status-warning)',
+                            background: 'var(--pc-hover)',
+                            color: 'var(--construct-text-faint)',
                             flexShrink: 0,
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
                           }}
                         >
-                          <AlertTriangle size={9} />
-                          {chip.label}
+                          {p.kind}
                         </span>
-                      )}
+                        {chip && (
+                          <span
+                            title={
+                              chip.tone === 'danger'
+                                ? `Expired at ${p.expires_at}`
+                                : `Expires at ${p.expires_at}`
+                            }
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              fontSize: 9.5,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              background:
+                                chip.tone === 'danger'
+                                  ? 'color-mix(in srgb, var(--construct-status-danger) 18%, transparent)'
+                                  : 'color-mix(in srgb, var(--construct-status-warning) 18%, transparent)',
+                              color:
+                                chip.tone === 'danger'
+                                  ? 'var(--construct-status-danger)'
+                                  : 'var(--construct-status-warning)',
+                              flexShrink: 0,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            <AlertTriangle size={9} />
+                            {chip.label}
+                          </span>
+                        )}
+                      </button>
                     </Command.Item>
                   );
                 })}
