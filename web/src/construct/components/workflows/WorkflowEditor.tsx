@@ -616,11 +616,6 @@ function WorkflowEditorInner({
       const mod = isMac ? event.metaKey : event.ctrlKey;
       const isJ = mod && event.key.toLowerCase() === 'j';
       if (isJ) {
-        // Architect tools need a saved workflow (kref) to operate on; if
-        // we're in create-new mode there's nothing to revise yet, so the
-        // shortcut quietly does nothing rather than opening an unwirable
-        // panel.
-        if (!workflow?.kref) return;
         event.preventDefault();
         setArchitectPanelOpen((prev) => !prev);
         return;
@@ -640,7 +635,7 @@ function WorkflowEditorInner({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isMac, workflow?.kref]);
+  }, [isMac]);
 
   // ── React Flow handlers ─────────────────────────────────────────────────
   const onConnect = useCallback(
@@ -1474,19 +1469,14 @@ function WorkflowEditorInner({
               <button
                 type="button"
                 onClick={() => setArchitectPanelOpen((prev) => !prev)}
-                disabled={!workflow?.kref}
                 className="construct-button"
                 data-variant={architectPanelOpen ? 'primary' : undefined}
                 title={
                   workflow?.kref
                     ? `Architect (${isMac ? '⌘' : 'Ctrl'}+J)`
-                    : 'Save the workflow first to use Architect'
+                    : 'Architect — save the workflow first to start revising'
                 }
-                style={{
-                  padding: '6px 10px',
-                  opacity: workflow?.kref ? 1 : 0.5,
-                  cursor: workflow?.kref ? 'pointer' : 'not-allowed',
-                }}
+                style={{ padding: '6px 10px' }}
               >
                 <Wand2 size={14} />
               </button>
@@ -1689,16 +1679,15 @@ function WorkflowEditorInner({
         }
       />
 
-      {/* Architect — editor-scoped chat panel. Only mounted once a
-          workflow item exists (architect tools need a workflow_kref). */}
-      {workflow?.kref ? (
-        <ArchitectPanel
-          open={architectPanelOpen}
-          onOpenChange={setArchitectPanelOpen}
-          workflowKref={workflow.kref}
-          workflowName={workflow.name || name || 'workflow'}
-        />
-      ) : null}
+      {/* Architect — editor-scoped chat panel. Always mounted; when no
+          workflow.kref exists, the panel renders a Save-first inline
+          state instead of the chat surface. */}
+      <ArchitectPanel
+        open={architectPanelOpen}
+        onOpenChange={setArchitectPanelOpen}
+        workflowKref={workflow?.kref ?? null}
+        workflowName={workflow?.name ?? name ?? null}
+      />
 
       {/* Shared agent picker — single mount for the entire editor.
           Opened by canvas badge clicks, auto-open after creating a new

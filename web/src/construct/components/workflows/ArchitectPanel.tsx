@@ -22,6 +22,13 @@
  * client — the Operator does it via the registered MCP tool, and the
  * editor's existing `useWorkflowEvents` SSE subscription auto-applies the
  * resulting revision. That keeps this panel a pure chat surface.
+ *
+ * When `workflowKref` is null (the user has opened the editor on a fresh
+ * canvas and not yet saved), the panel still mounts and the toolbar
+ * button is still clickable — but the body renders a quiet "Save your
+ * workflow first" inline state instead of the chat surface, and the
+ * chat-surface hooks (which depend on the kref) are not called. The
+ * chat surface is a sub-component so all its hooks remain unconditional.
  */
 
 import {
@@ -49,10 +56,12 @@ import { copyToClipboard } from '@/construct/lib/clipboard';
 interface ArchitectPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** kref of the workflow currently open in the editor. */
-  workflowKref: string;
-  /** Display name — surfaced in the header badge and the context preface. */
-  workflowName: string;
+  /** kref of the workflow currently open in the editor, or null when
+   *  the user hasn't saved the workflow yet. */
+  workflowKref: string | null;
+  /** Display name — surfaced in the header badge and the context preface.
+   *  Null when the workflow has no name yet. */
+  workflowName: string | null;
 }
 
 /** Stable session id per workflow kref. Persisted in sessionStorage so
@@ -88,12 +97,49 @@ function buildContextPreface(workflowName: string, workflowKref: string): string
   ].join('\n');
 }
 
-export default function ArchitectPanel({
+/** Inline state shown when the user opens the panel before saving the
+ *  workflow. The chat surface depends on `workflowKref` for session id,
+ *  pageContext, and the context preface — none of those exist yet. */
+function SaveFirstState() {
+  return (
+    <div
+      style={{
+        padding: '32px 24px',
+        textAlign: 'center',
+        color: 'var(--pc-text-secondary)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        alignItems: 'center',
+      }}
+    >
+      <Wand2 size={28} style={{ color: 'var(--pc-accent)' }} />
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--pc-text-primary)' }}>
+        Save your workflow first
+      </div>
+      <div style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 320 }}>
+        Architect proposes revisions to a saved workflow. Give your workflow a
+        name and click Save in the toolbar — then come back and I'll help you
+        build it out.
+      </div>
+    </div>
+  );
+}
+
+/** The live chat surface — all hooks that depend on `workflowKref` live
+ *  here so the parent can mount this conditionally without violating
+ *  the rules of hooks. */
+function ArchitectChatSurface({
   open,
   onOpenChange,
   workflowKref,
   workflowName,
-}: ArchitectPanelProps) {
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workflowKref: string;
+  workflowName: string;
+}) {
   const sessionId = useMemo(() => architectSessionIdFor(workflowKref), [workflowKref]);
   const pageContext = `v2:workflow_editor:architect:${workflowKref}`;
   const { setTheme } = useTheme();
@@ -256,27 +302,311 @@ export default function ArchitectPanel({
     return () => clearTimeout(id);
   }, [open, inputRef]);
 
-  // Esc closes the panel — same affordance the dashboard AssistantPanel
-  // uses. Listener is only registered while open so it doesn't intercept
-  // Esc on other surfaces.
-  useEffect(() => {
-    if (!open) return undefined;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // Don't fight the slash menu — its own Esc handler clears
-        // `slashDismissed` first; only close when the menu is gone.
-        if (slashMatches.length === 0) onOpenChange(false);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, slashMatches.length, onOpenChange]);
-
   const copyMessage = useCallback(async (id: string, text: string) => {
     if (!(await copyToClipboard(text))) return;
     setCopiedId(id);
     setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 1200);
   }, []);
+
+  return (
+    <>
+      {/* Connection status pill — sits as a slim row at the top of the
+          chat surface (the wrapper's header is layout-fixed and doesn't
+          have access to `connected`). Visually merges into the header
+          via shared border + surface background. */}
+      <div
+        className="flex items-center justify-end border-b px-3 py-1"
+        style={{
+          borderColor: 'var(--construct-border-soft)',
+          background: 'var(--construct-bg-surface)',
+        }}
+      >
+        <span
+          className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+          style={{ color: 'var(--construct-text-faint)' }}
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{
+              background: connected
+                ? 'var(--construct-status-success)'
+                : 'var(--construct-status-danger)',
+            }}
+          />
+          {connected ? 'live' : 'offline'}
+        </span>
+      </div>
+
+      {/* Typing sweep */}
+      {typing && (
+        <div className="h-[2px] overflow-hidden" style={{ background: 'var(--construct-bg-surface)' }}>
+          <div
+            className="h-full"
+            style={{
+              background: 'var(--construct-signal-network)',
+              width: '40%',
+              animation: 'construct-architect-sweep 1.4s ease-in-out infinite alternate',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Error banner */}
+      {error && (
+        <div
+          className="border-b px-3 py-2 text-xs"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--construct-status-danger) 32%, transparent)',
+            background: 'color-mix(in srgb, var(--construct-status-danger) 10%, transparent)',
+            color: 'var(--construct-status-danger)',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Scrollback */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 font-mono leading-6"
+        style={{ fontSize: 13 }}
+      >
+        {messages.length === 0 && !typing ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <pre className="text-xs" style={{ color: 'var(--construct-text-faint)' }}>
+{`┌──────────────────────────────┐
+│  architect ready · describe  │
+│  a change to "${workflowName.length > 14 ? workflowName.slice(0, 12) + '…' : workflowName.padEnd(14)}" │
+└──────────────────────────────┘`}
+            </pre>
+            <p
+              className="mt-3 max-w-xs text-xs leading-5"
+              style={{ color: 'var(--construct-text-muted)' }}
+            >
+              Try /architect add a python step that prints hello
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {messages.map((msg) => {
+              const prefix = msg.role === 'user' ? 'you' : msg.role === 'operator' ? 'sys' : 'op';
+              const color =
+                msg.role === 'user'
+                  ? 'var(--construct-text-secondary)'
+                  : msg.role === 'operator'
+                    ? 'var(--construct-signal-network)'
+                    : 'var(--construct-signal-live)';
+              const copied = copiedId === msg.id;
+              return (
+                <div key={msg.id} className="group">
+                  {msg.activityLog && msg.activityLog.length > 0 && (
+                    <div className="mb-1 space-y-0.5">
+                      {msg.activityLog.map((evt) => (
+                        <ActivityCard
+                          key={evt.id}
+                          event={evt}
+                          accent={
+                            evt.kind === 'tool_result'
+                              ? 'var(--construct-status-success)'
+                              : 'var(--construct-signal-network)'
+                          }
+                          fontSize={13}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words">
+                    <span style={{ color, fontWeight: 600 }}>{prefix} {'>'} </span>
+                    <span style={{ color }}>{msg.content}</span>
+                  </div>
+                  <div
+                    className="mt-0.5 flex items-center justify-end gap-2 text-[10px]"
+                    style={{ color: 'var(--construct-text-faint)' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(msg.id, msg.content)}
+                      aria-label={copied ? 'Copied' : 'Copy message'}
+                      title={copied ? 'Copied' : 'Copy'}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 opacity-50 transition-all hover:bg-white/5 hover:opacity-100 group-hover:opacity-80"
+                      style={{ color: 'var(--construct-text-muted)' }}
+                    >
+                      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>{copied ? 'copied' : 'copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {typing && activities.length > 0 && (
+              <div className="space-y-0.5">
+                {activities.map((evt) => (
+                  <ActivityCard
+                    key={evt.id}
+                    event={evt}
+                    accent={
+                      evt.kind === 'tool_result'
+                        ? 'var(--construct-status-success)'
+                        : evt.kind === 'thinking'
+                          ? 'var(--construct-text-faint)'
+                          : 'var(--construct-signal-network)'
+                    }
+                    fontSize={13}
+                  />
+                ))}
+              </div>
+            )}
+
+            {typing && (streamingContent || streamingThinking) && (
+              <div className="whitespace-pre-wrap break-words">
+                <span
+                  style={{ color: 'var(--construct-signal-live)', fontWeight: 600 }}
+                >
+                  op {'>'}{' '}
+                </span>
+                <span style={{ color: 'var(--construct-signal-live)' }}>
+                  {streamingContent || '…'}
+                </span>
+              </div>
+            )}
+
+            {typing && !streamingContent && !streamingThinking && activities.length === 0 && (
+              <div
+                className="animate-pulse"
+                style={{ color: 'var(--construct-signal-live)' }}
+              >
+                op {'>'} <Loader2 className="inline h-3 w-3 animate-spin" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Composer */}
+      <div
+        ref={composerRef}
+        className="relative border-t px-3 py-2"
+        style={{ borderColor: 'var(--construct-border-soft)' }}
+      >
+        <div
+          className="flex items-end gap-2 rounded-md border px-2 py-1.5"
+          style={{
+            borderColor: 'var(--construct-border-soft)',
+            color: 'var(--construct-signal-network)',
+          }}
+        >
+          <span
+            className="shrink-0 pb-[3px] font-mono text-sm font-semibold"
+            style={{ color: 'var(--construct-signal-network)' }}
+          >
+            {'>'}<span className="construct-cursor-blink">_</span>
+          </span>
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={input}
+            onChange={handleTextareaChange}
+            onKeyDown={(e) => {
+              const menuOpen = slashMatches.length > 0;
+              if (menuOpen) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSlashSelectedIndex((i) => (i + 1) % slashMatches.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSlashSelectedIndex(
+                    (i) => (i - 1 + slashMatches.length) % slashMatches.length,
+                  );
+                  return;
+                }
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  pickSlashCommand(slashSelectedIndex);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setSlashDismissed(true);
+                  return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  pickSlashCommand(slashSelectedIndex);
+                  return;
+                }
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (runSlashFromInput()) return;
+                handleSend();
+              }
+            }}
+            placeholder={
+              connected
+                ? 'Describe a change… (try /architect)'
+                : 'connecting…'
+            }
+            disabled={!connected}
+            className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
+            style={{
+              color: 'var(--construct-text-primary)',
+              caretColor: 'var(--construct-signal-network)',
+              maxHeight: '6rem',
+              fontSize: 16,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => handleSend()}
+            disabled={!connected || !input.trim()}
+            aria-label="Send message"
+            title={connected ? 'Send (Enter)' : 'Disconnected'}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+            style={{
+              color: input.trim() && connected
+                ? 'var(--construct-signal-network)'
+                : 'var(--construct-text-faint)',
+            }}
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <SlashCommandMenu
+          anchorRef={composerRef}
+          matches={slashMatches}
+          selectedIndex={slashSelectedIndex}
+          onPick={pickSlashCommand}
+        />
+      </div>
+    </>
+  );
+}
+
+export default function ArchitectPanel({
+  open,
+  onOpenChange,
+  workflowKref,
+  workflowName,
+}: ArchitectPanelProps) {
+  // Esc closes the panel — same affordance the dashboard AssistantPanel
+  // uses. Listener is only registered while open so it doesn't intercept
+  // Esc on other surfaces. Lives in the wrapper so it works regardless
+  // of whether the chat surface is mounted (e.g. in the Save-first
+  // state, the user can still hit Esc to dismiss).
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onOpenChange(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onOpenChange]);
+
+  const displayName = workflowName ?? 'workflow';
 
   return (
     <>
@@ -331,25 +661,11 @@ export default function ArchitectPanel({
               color: 'var(--construct-text-muted)',
               maxWidth: 220,
             }}
-            title={`${workflowName} · ${workflowKref}`}
+            title={workflowKref ? `${displayName} · ${workflowKref}` : displayName}
           >
-            {workflowName}
+            {displayName}
           </span>
           <div className="flex-1" />
-          <span
-            className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-            style={{ color: 'var(--construct-text-faint)' }}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{
-                background: connected
-                  ? 'var(--construct-status-success)'
-                  : 'var(--construct-status-danger)',
-              }}
-            />
-            {connected ? 'live' : 'offline'}
-          </span>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -362,251 +678,18 @@ export default function ArchitectPanel({
           </button>
         </div>
 
-        {/* Typing sweep */}
-        {typing && (
-          <div className="h-[2px] overflow-hidden" style={{ background: 'var(--construct-bg-surface)' }}>
-            <div
-              className="h-full"
-              style={{
-                background: 'var(--construct-signal-network)',
-                width: '40%',
-                animation: 'construct-architect-sweep 1.4s ease-in-out infinite alternate',
-              }}
-            />
-          </div>
-        )}
-
-        {/* Error banner */}
-        {error && (
-          <div
-            className="border-b px-3 py-2 text-xs"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--construct-status-danger) 32%, transparent)',
-              background: 'color-mix(in srgb, var(--construct-status-danger) 10%, transparent)',
-              color: 'var(--construct-status-danger)',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Scrollback */}
-        <div
-          ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 font-mono leading-6"
-          style={{ fontSize: 13 }}
-        >
-          {messages.length === 0 && !typing ? (
-            <div className="flex h-full flex-col items-center justify-center text-center">
-              <pre className="text-xs" style={{ color: 'var(--construct-text-faint)' }}>
-{`┌──────────────────────────────┐
-│  architect ready · describe  │
-│  a change to "${workflowName.length > 14 ? workflowName.slice(0, 12) + '…' : workflowName.padEnd(14)}" │
-└──────────────────────────────┘`}
-              </pre>
-              <p
-                className="mt-3 max-w-xs text-xs leading-5"
-                style={{ color: 'var(--construct-text-muted)' }}
-              >
-                Try /architect add a python step that prints hello
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {messages.map((msg) => {
-                const prefix = msg.role === 'user' ? 'you' : msg.role === 'operator' ? 'sys' : 'op';
-                const color =
-                  msg.role === 'user'
-                    ? 'var(--construct-text-secondary)'
-                    : msg.role === 'operator'
-                      ? 'var(--construct-signal-network)'
-                      : 'var(--construct-signal-live)';
-                const copied = copiedId === msg.id;
-                return (
-                  <div key={msg.id} className="group">
-                    {msg.activityLog && msg.activityLog.length > 0 && (
-                      <div className="mb-1 space-y-0.5">
-                        {msg.activityLog.map((evt) => (
-                          <ActivityCard
-                            key={evt.id}
-                            event={evt}
-                            accent={
-                              evt.kind === 'tool_result'
-                                ? 'var(--construct-status-success)'
-                                : 'var(--construct-signal-network)'
-                            }
-                            fontSize={13}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <div className="whitespace-pre-wrap break-words">
-                      <span style={{ color, fontWeight: 600 }}>{prefix} {'>'} </span>
-                      <span style={{ color }}>{msg.content}</span>
-                    </div>
-                    <div
-                      className="mt-0.5 flex items-center justify-end gap-2 text-[10px]"
-                      style={{ color: 'var(--construct-text-faint)' }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => copyMessage(msg.id, msg.content)}
-                        aria-label={copied ? 'Copied' : 'Copy message'}
-                        title={copied ? 'Copied' : 'Copy'}
-                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 opacity-50 transition-all hover:bg-white/5 hover:opacity-100 group-hover:opacity-80"
-                        style={{ color: 'var(--construct-text-muted)' }}
-                      >
-                        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                        <span>{copied ? 'copied' : 'copy'}</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {typing && activities.length > 0 && (
-                <div className="space-y-0.5">
-                  {activities.map((evt) => (
-                    <ActivityCard
-                      key={evt.id}
-                      event={evt}
-                      accent={
-                        evt.kind === 'tool_result'
-                          ? 'var(--construct-status-success)'
-                          : evt.kind === 'thinking'
-                            ? 'var(--construct-text-faint)'
-                            : 'var(--construct-signal-network)'
-                      }
-                      fontSize={13}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {typing && (streamingContent || streamingThinking) && (
-                <div className="whitespace-pre-wrap break-words">
-                  <span
-                    style={{ color: 'var(--construct-signal-live)', fontWeight: 600 }}
-                  >
-                    op {'>'}{' '}
-                  </span>
-                  <span style={{ color: 'var(--construct-signal-live)' }}>
-                    {streamingContent || '…'}
-                  </span>
-                </div>
-              )}
-
-              {typing && !streamingContent && !streamingThinking && activities.length === 0 && (
-                <div
-                  className="animate-pulse"
-                  style={{ color: 'var(--construct-signal-live)' }}
-                >
-                  op {'>'} <Loader2 className="inline h-3 w-3 animate-spin" />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Composer */}
-        <div
-          ref={composerRef}
-          className="relative border-t px-3 py-2"
-          style={{ borderColor: 'var(--construct-border-soft)' }}
-        >
-          <div
-            className="flex items-end gap-2 rounded-md border px-2 py-1.5"
-            style={{
-              borderColor: 'var(--construct-border-soft)',
-              color: 'var(--construct-signal-network)',
-            }}
-          >
-            <span
-              className="shrink-0 pb-[3px] font-mono text-sm font-semibold"
-              style={{ color: 'var(--construct-signal-network)' }}
-            >
-              {'>'}<span className="construct-cursor-blink">_</span>
-            </span>
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={handleTextareaChange}
-              onKeyDown={(e) => {
-                const menuOpen = slashMatches.length > 0;
-                if (menuOpen) {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setSlashSelectedIndex((i) => (i + 1) % slashMatches.length);
-                    return;
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setSlashSelectedIndex(
-                      (i) => (i - 1 + slashMatches.length) % slashMatches.length,
-                    );
-                    return;
-                  }
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    pickSlashCommand(slashSelectedIndex);
-                    return;
-                  }
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setSlashDismissed(true);
-                    return;
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    pickSlashCommand(slashSelectedIndex);
-                    return;
-                  }
-                }
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (runSlashFromInput()) return;
-                  handleSend();
-                }
-              }}
-              placeholder={
-                connected
-                  ? 'Describe a change… (try /architect)'
-                  : 'connecting…'
-              }
-              disabled={!connected}
-              className="min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent font-mono outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
-              style={{
-                color: 'var(--construct-text-primary)',
-                caretColor: 'var(--construct-signal-network)',
-                maxHeight: '6rem',
-                fontSize: 16,
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => handleSend()}
-              disabled={!connected || !input.trim()}
-              aria-label="Send message"
-              title={connected ? 'Send (Enter)' : 'Disconnected'}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
-              style={{
-                color: input.trim() && connected
-                  ? 'var(--construct-signal-network)'
-                  : 'var(--construct-text-faint)',
-              }}
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          <SlashCommandMenu
-            anchorRef={composerRef}
-            matches={slashMatches}
-            selectedIndex={slashSelectedIndex}
-            onPick={pickSlashCommand}
+        {workflowKref ? (
+          <ArchitectChatSurface
+            open={open}
+            onOpenChange={onOpenChange}
+            workflowKref={workflowKref}
+            workflowName={displayName}
           />
-        </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SaveFirstState />
+          </div>
+        )}
 
         {/* Footer attribution */}
         <div
