@@ -87,7 +87,7 @@ fn set_cached(workflows: &[WorkflowResponse], include_deprecated: bool) {
     });
 }
 
-fn invalidate_cache() {
+pub(super) fn invalidate_cache() {
     if let Some(lock) = WORKFLOW_CACHE.get() {
         let mut cache = lock.lock();
         // Mark as expired but keep stale data for fallback on API errors
