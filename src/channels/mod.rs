@@ -5009,8 +5009,12 @@ pub async fn start_channels(config: Config) -> Result<()> {
                         registry.server_count(),
                         is_local_provider,
                     );
+                    let server_instructions = registry.server_instructions().await;
                     deferred_section =
-                        crate::tools::mcp_deferred::build_deferred_tools_section(&deferred_set);
+                        crate::tools::mcp_deferred::build_deferred_tools_section_with_instructions(
+                            &deferred_set,
+                            &server_instructions,
+                        );
                     let activated = std::sync::Arc::new(std::sync::Mutex::new(
                         crate::tools::ActivatedToolSet::new(),
                     ));
