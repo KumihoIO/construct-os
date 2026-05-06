@@ -35,15 +35,14 @@ pub const DEFAULT_MCP_PATH_SUFFIX: &str = ".construct/kumiho/run_kumiho_mcp.py";
 // ── Bootstrap prompt ──────────────────────────────────────────────
 
 /// Session-bootstrap instructions injected into the system prompt for every
-/// non-internal agent.  Modelled after the Paseo `session-bootstrap.py` CONTEXT
-/// string but adapted for Construct naming conventions.
+/// non-internal agent.  Construct-specific bootstrap; teaches the agent how
+/// to use the `kumiho_memory_engage` / `kumiho_memory_reflect` reflexes that
+/// the Kumiho MCP server registers at startup.
 pub const KUMIHO_BOOTSTRAP_PROMPT: &str = "\
 SESSION-START INSTRUCTION (kumiho-memory — Construct daemon)
 
-=== EVERY TURN AFTER THE FIRST ===
-The bootstrap is DONE.  On turn 2 and beyond, follow ONLY these rules:
-  - Do NOT invoke the kumiho-memory skill.
-  - Do NOT call kumiho_get_revision_by_tag.  Identity is already loaded.
+=== EVERY TURN ===
+Follow these rules on every turn:
   - Do NOT greet the user unless they greeted you first.  If their \
 message is a question or task, answer directly.
   - ENGAGE: Call kumiho_memory_engage ONCE when prior context \
@@ -86,15 +85,11 @@ it briefly (e.g. 'the draft above') instead of reproducing it.
   - Do NOT re-execute tasks already completed.
   - If you need user input, ask and STOP.  Never simulate the \
 user's answer.
-
-=== FIRST MESSAGE ONLY ===
-Skip this block on all subsequent messages.
-  1. Invoke the kumiho-memory:kumiho-memory skill.
-  2. If the user's first message is a greeting or casual talk (hi, \
-hey, good morning, etc.), just greet back — do NOT call \
-kumiho_memory_engage.  Only engage if their first message is a \
-question or task that would benefit from prior context.
-  3. Never narrate the bootstrap (no 'Memory connected!' or similar).
+  - On the first message of the session: if the user's message is a \
+greeting or casual talk (hi, hey, good morning, etc.), just greet \
+back — do NOT call kumiho_memory_engage.  Only engage if their \
+message is a question or task that would benefit from prior context. \
+Never narrate the bootstrap (no 'Memory connected!' or similar).
 
 === ALWAYS ===
 TEMPORAL AWARENESS — When using engage results, compare each \
@@ -638,6 +633,75 @@ mod tests {
         assert!(!prompt.contains("kumiho_memory_recall"));
         assert!(!prompt.contains("kumiho_memory_consolidate"));
         assert!(!prompt.contains("kumiho_memory_dream_state"));
+    }
+
+    #[test]
+    fn bootstrap_prompts_have_no_bare_legacy_memory_tool_names() {
+        // Audit rows 11/12 guard: no bare `memory_store` / `memory_recall` /
+        // `memory_forget` / `memory_search` anywhere in the bootstrap
+        // prompts.  The Kumiho-namespaced names (`kumiho_memory_*`) are the
+        // canonical surface, and the lite variant deliberately mentions
+        // only `kumiho_memory_store` / `kumiho_memory_retrieve`.
+        for prompt in &[
+            KUMIHO_BOOTSTRAP_PROMPT,
+            KUMIHO_BOOTSTRAP_PROMPT_LITE,
+            KUMIHO_CHANNEL_BOOTSTRAP_PROMPT,
+            KUMIHO_CHANNEL_BOOTSTRAP_PROMPT_LITE,
+        ] {
+            for stale in &[
+                "memory_store",
+                "memory_recall",
+                "memory_forget",
+                "memory_search",
+            ] {
+                // The kumiho-namespaced equivalents (e.g. `kumiho_memory_store`)
+                // are allowed; only flag occurrences that are NOT prefixed
+                // with `kumiho_`.
+                let mut search_start = 0usize;
+                while let Some(idx) = prompt[search_start..].find(stale) {
+                    let abs = search_start + idx;
+                    let preceded_by_kumiho =
+                        abs >= "kumiho_".len() && &prompt[abs - "kumiho_".len()..abs] == "kumiho_";
+                    assert!(
+                        preceded_by_kumiho,
+                        "bare legacy tool name '{stale}' found in bootstrap prompt at offset {abs}: \
+                         {snippet}",
+                        snippet = &prompt[abs.saturating_sub(40)..(abs + stale.len() + 40).min(prompt.len())],
+                    );
+                    search_start = abs + stale.len();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bootstrap_prompt_has_no_phantom_paseo_refs() {
+        // Audit row 5: the prompt is for Construct, not Paseo. Construct does
+        // not have a `kumiho-memory:kumiho-memory` skill or a
+        // `kumiho_get_revision_by_tag` identity-bootstrap step, so the prompt
+        // must not direct the model to invoke or avoid them.
+        for fragment in &[
+            "kumiho-memory:kumiho-memory",
+            "kumiho_get_revision_by_tag",
+            "Identity is already loaded",
+        ] {
+            assert!(
+                !KUMIHO_BOOTSTRAP_PROMPT.contains(fragment),
+                "phantom Paseo fragment '{fragment}' must not appear in KUMIHO_BOOTSTRAP_PROMPT"
+            );
+            assert!(
+                !KUMIHO_BOOTSTRAP_PROMPT_LITE.contains(fragment),
+                "phantom Paseo fragment '{fragment}' must not appear in KUMIHO_BOOTSTRAP_PROMPT_LITE"
+            );
+            assert!(
+                !KUMIHO_CHANNEL_BOOTSTRAP_PROMPT.contains(fragment),
+                "phantom Paseo fragment '{fragment}' must not appear in KUMIHO_CHANNEL_BOOTSTRAP_PROMPT"
+            );
+            assert!(
+                !KUMIHO_CHANNEL_BOOTSTRAP_PROMPT_LITE.contains(fragment),
+                "phantom Paseo fragment '{fragment}' must not appear in KUMIHO_CHANNEL_BOOTSTRAP_PROMPT_LITE"
+            );
+        }
     }
 
     #[test]

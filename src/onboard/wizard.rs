@@ -5911,11 +5911,11 @@ async fn scaffold_workspace(
         "## Memory System\n\n\
          memory.backend = \"kumiho\" — graph-native cognitive memory via Kumiho MCP.\n\n\
          Memory is provided by the **Kumiho MCP server** (auto-injected). Use these tools:\n\n\
-         - **`kumiho_memory_engage`** — retrieve relevant memories by query (call BEFORE responding)\n\
-         - **`kumiho_memory_reflect`** — save durable decisions, preferences, facts, and outcomes worth remembering\n\
-         - **`kumiho_memory_store`** — directly store a memory item\n\
-         - **`kumiho_memory_recall`** — directly recall memory items\n\n\
-         **Do NOT use** `memory_store` / `memory_recall` / `memory_forget` — those are disabled when Kumiho is active.\n\n\
+         - **`kumiho_memory_engage`** — canonical reflex for recall. Call BEFORE responding when prior context might matter; returns aggregated relevant memories in a single call.\n\
+         - **`kumiho_memory_reflect`** — canonical reflex for capture. Save durable decisions, preferences, facts, lessons, and outcomes worth remembering after a substantive turn.\n\
+         - **`kumiho_memory_store`** — low-level write of a single memory item. Prefer `reflect` for normal capture; use `store` only for explicit \"remember this\" requests with a hand-written title.\n\
+         - **`kumiho_memory_recall`** — low-level fuzzy lookup by query. Prefer `engage` for routine recall; use `recall` only when you already know exactly which item-kind / bundle to query.\n\n\
+         Default to `engage` + `reflect`. They are the canonical persistence API when Kumiho is active.\n\n\
          Capture what matters: decisions, user preferences, project context, lessons learned.\n\
          Skip secrets unless explicitly asked to store them.\n\
          Memory persists across sessions — you don't wake up blank.\n\n"
@@ -5940,7 +5940,7 @@ async fn scaffold_workspace(
     } else {
         "1. Read `SOUL.md` — this is who you are\n\
          2. Read `USER.md` — this is who you're helping\n\
-         3. Use `memory_recall` for recent context (daily notes are on-demand)\n\
+         3. Read recent daily notes in `memory/` for context (on-demand)\n\
          4. If in MAIN SESSION (direct chat): `MEMORY.md` is already injected\n\n"
     };
 
@@ -6068,15 +6068,15 @@ async fn scaffold_workspace(
          - **file_write** — Write file contents\n\
            - Use when: applying focused edits, scaffolding files, or updating docs/code.\n\
            - Don't use when: unsure about side effects or when the file should remain user-owned.\n\
-         - **memory_store** — Save to memory\n\
-           - Use when: preserving durable preferences, decisions, or key context.\n\
-           - Don't use when: info is transient, noisy, or sensitive without explicit need.\n\
-         - **memory_recall** — Search memory\n\
+         - **kumiho_memory_engage** — Recall relevant prior context\n\
            - Use when: you need prior decisions, user preferences, or historical context.\n\
            - Don't use when: the answer is already in current files/conversation.\n\
-         - **memory_forget** — Delete a memory entry\n\
-           - Use when: memory is incorrect, stale, or explicitly requested to be removed.\n\
-           - Don't use when: uncertain about impact; verify before deleting.\n\n\
+         - **kumiho_memory_reflect** — Capture durable memories after a substantive turn\n\
+           - Use when: preserving decisions, preferences, lessons, or significant outcomes.\n\
+           - Don't use when: info is transient, noisy, or sensitive without explicit need.\n\
+         - **kumiho_memory_store** — Directly write a memory item to the graph\n\
+           - Use when: an explicit \"remember this\" request (an absolute date in the title).\n\
+           - Don't use when: a normal `kumiho_memory_reflect` will do.\n\n\
          ---\n\
          *Add whatever helps you do your job. This is your cheat sheet.*\n";
 
@@ -7055,7 +7055,7 @@ mod tests {
         );
     }
 
-    // ── scaffold_workspace: TOOLS.md lists memory_forget ────────
+    // ── scaffold_workspace: TOOLS.md lists built-in + kumiho-memory tools ──
 
     #[tokio::test]
     async fn tools_md_lists_all_builtin_tools() {
@@ -7072,13 +7072,22 @@ mod tests {
             "shell",
             "file_read",
             "file_write",
-            "memory_store",
-            "memory_recall",
-            "memory_forget",
+            "kumiho_memory_engage",
+            "kumiho_memory_reflect",
+            "kumiho_memory_store",
         ] {
             assert!(
                 tools.contains(tool),
-                "TOOLS.md should list built-in tool: {tool}"
+                "TOOLS.md should list tool: {tool}"
+            );
+        }
+        // Audit row 11: bare `memory_*` tool names must not appear in TOOLS.md
+        // — they have no native impl in Construct and the bootstrap prompt
+        // teaches the model to use the kumiho-namespaced tools instead.
+        for stale in &["memory_recall", "memory_forget"] {
+            assert!(
+                !tools.contains(stale),
+                "TOOLS.md must not advertise legacy bare tool '{stale}'"
             );
         }
         assert!(

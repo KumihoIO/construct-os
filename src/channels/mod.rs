@@ -5065,7 +5065,12 @@ pub async fn start_channels(config: Config) -> Result<()> {
     let i18n_search_dirs = crate::i18n::default_search_dirs(&workspace);
     let i18n_descs = crate::i18n::ToolDescriptions::load(&i18n_locale, &i18n_search_dirs);
 
-    // Collect tool descriptions for the prompt
+    // Collect tool descriptions for the prompt.
+    //
+    // Audit row 11: bare `memory_*` tool names are intentionally not listed
+    // here — there is no native `impl Tool` for them. Channel agents reach
+    // memory via the Kumiho MCP (kumiho_memory_engage / reflect / store /
+    // retrieve), advertised through the channel bootstrap prompt.
     let mut tool_descs: Vec<(&str, &str)> = vec![
         (
             "shell",
@@ -5078,18 +5083,6 @@ pub async fn start_channels(config: Config) -> Result<()> {
         (
             "file_write",
             "Write file contents. Use when: applying focused edits, scaffolding files, updating docs/code. Don't use when: side effects are unclear or file ownership is uncertain.",
-        ),
-        (
-            "memory_store",
-            "Save to memory. Use when: preserving durable preferences, decisions, key context. Don't use when: information is transient/noisy/sensitive without need.",
-        ),
-        (
-            "memory_recall",
-            "Search memory. Use when: retrieving prior decisions, user preferences, historical context. Don't use when: answer is already in current context.",
-        ),
-        (
-            "memory_forget",
-            "Delete a memory entry. Use when: memory is incorrect/stale or explicitly requested for removal. Don't use when: impact is uncertain.",
         ),
     ];
 
@@ -8509,13 +8502,13 @@ BTC is currently around $65,000 based on latest tool output."#
         let ws = make_workspace();
         let tools = vec![
             ("shell", "Run commands"),
-            ("memory_recall", "Search memory"),
+            ("file_read", "Read files"),
         ];
         let prompt = build_system_prompt(ws.path(), "gpt-4o", &tools, &[], None, None);
 
         assert!(prompt.contains("**shell**"));
         assert!(prompt.contains("Run commands"));
-        assert!(prompt.contains("**memory_recall**"));
+        assert!(prompt.contains("**file_read**"));
     }
 
     #[test]
