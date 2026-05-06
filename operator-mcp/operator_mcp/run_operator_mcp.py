@@ -64,6 +64,16 @@ def main() -> "None":
     parent_dir = str(SCRIPT_DIR.parent)
     env = os.environ.copy()
     env["PYTHONPATH"] = parent_dir + (os.pathsep + env.get("PYTHONPATH", ""))
+
+    # IMPORTANT: switch cwd to the parent before exec'ing. install-sidecars
+    # flattens the package directly into OPERATOR_DIR (which contains both
+    # __init__.py AND operator_mcp.py). If Python's sys.path[0] is OPERATOR_DIR
+    # itself, `python -m operator_mcp` resolves to the inner module file
+    # instead of the package, and its relative imports fail with
+    # "attempted relative import with no known parent package". Setting
+    # cwd to the parent forces Python to resolve operator_mcp as a package.
+    os.chdir(parent_dir)
+
     os.execve(
         str(python),
         [str(python), "-m", "operator_mcp"] + sys.argv[1:],
