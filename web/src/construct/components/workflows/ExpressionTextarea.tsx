@@ -377,9 +377,10 @@ export default function ExpressionTextarea({
   }, [refreshFromCaret]);
 
   const handleBlur = useCallback(() => {
-    // Defer so a click inside the popover (which steals focus briefly) still
-    // gets a chance to fire its handler before we close.
-    setTimeout(() => setOpen(false), 100);
+    // Popover items use `onMouseDown={(e) => e.preventDefault()}` to keep
+    // focus on the textarea, so blur during a click is already prevented —
+    // close synchronously here.
+    setOpen(false);
   }, []);
 
   // Reposition popover when window resizes / scrolls while open.

@@ -208,6 +208,15 @@ export default function StepConfigPanel({
   const { profiles: authProfiles } = useAuthProfiles();
   const [authPickerOpen, setAuthPickerOpen] = useState(false);
   const [authAnchorRect, setAuthAnchorRect] = useState<DOMRect | null>(null);
+
+  // Reset the auth picker when the user clicks a different node — without
+  // this, opening the picker on node A and then clicking node B before
+  // selecting leaves the picker mounted with a stale anchor (same class as
+  // the AgentPicker double-mount issue).
+  useEffect(() => {
+    setAuthPickerOpen(false);
+    setAuthAnchorRect(null);
+  }, [node.id]);
   const showAuthField = AUTH_ELIGIBLE_STEP_TYPES.has(stepType);
   const selectedAuthProfile = useMemo(
     () => authProfiles.find((p) => p.id === data.auth) ?? null,

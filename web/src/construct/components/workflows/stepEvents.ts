@@ -11,6 +11,10 @@ export interface AddStepDetail {
   position?: { x: number; y: number };
   /** When emitted from a noodle-drop, the source node + handle to wire from. */
   source?: { taskId: string; handle?: 'true' | 'false' | null };
+  /** When emitted from a reverse-noodle-drop (target handle dragged onto
+   *  empty canvas), the target node id to wire INTO. The new node becomes
+   *  the upstream source: `new node → target node`. */
+  target?: { taskId: string };
   /** Optional preset skill name to assign to the new node. */
   presetSkill?: string;
 }

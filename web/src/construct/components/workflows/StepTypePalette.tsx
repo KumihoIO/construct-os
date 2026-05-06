@@ -24,7 +24,7 @@ const PICKER_PANEL_Z = 9001;
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  context?: Pick<AddStepDetail, 'position' | 'source' | 'presetSkill'>;
+  context?: Pick<AddStepDetail, 'position' | 'source' | 'target' | 'presetSkill'>;
   /** Override label of the action button — default "Add Step" */
   actionLabel?: string;
   /** Custom emit handler — when provided the palette calls this instead of
