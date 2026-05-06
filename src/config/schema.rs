@@ -8953,18 +8953,23 @@ impl Config {
             warn_on_legacy_memory_tool_names(&config);
 
             // Detect unknown top-level config keys by comparing the raw
-            // TOML table keys against what Config actually deserializes.
-            // This replaces the previous serde_ignored-based approach which
-            // had false-positive issues with #[serde(default)] nested structs.
+            // TOML table keys against the JSON schema for `Config`.
+            //
+            // Earlier versions built the known-key set from a default `Config`
+            // round-tripped through TOML, but any field marked
+            // `#[serde(skip_serializing_if = "Option::is_none")]` is dropped
+            // when its default is `None` — so legitimate top-level keys like
+            // `language` were warned about as unknown. The JSON schema from
+            // `schemars` reflects every declared field regardless of default.
             if let Ok(raw) = contents.parse::<toml::Table>() {
-                // Build the set of known top-level keys from a default Config
-                // serialization round-trip.  This is computed once and cached.
                 static KNOWN_KEYS: OnceLock<Vec<String>> = OnceLock::new();
                 let known = KNOWN_KEYS.get_or_init(|| {
-                    toml::to_string(&Config::default())
+                    let schema = schemars::schema_for!(Config);
+                    serde_json::to_value(&schema)
                         .ok()
-                        .and_then(|s| s.parse::<toml::Table>().ok())
-                        .map(|t| t.keys().cloned().collect())
+                        .and_then(|v| v.get("properties").cloned())
+                        .and_then(|props| props.as_object().cloned())
+                        .map(|obj| obj.keys().cloned().collect())
                         .unwrap_or_default()
                 });
                 for key in raw.keys() {
