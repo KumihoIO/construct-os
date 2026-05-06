@@ -477,13 +477,14 @@ async def tool_create_workflow(args: dict[str, Any]) -> dict[str, Any]:
         try:
             with open(path) as f:
                 yaml_text = f.read()
-            registered = await _gateway.register_workflow(
+            kref = await _gateway.register_workflow(
                 name=wf.name,
                 description=wf.description,
                 definition_yaml=yaml_text,
                 version=wf.version,
                 tags=wf.tags or None,
             )
+            registered = bool(kref)
         except Exception as exc:
             _log(f"workflow_create: gateway sync failed (non-fatal): {exc}")
 

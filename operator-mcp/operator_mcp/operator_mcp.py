@@ -1673,6 +1673,40 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="revise_workflow",
+            description=(
+                "Apply a list of structured operations (add_step / edit_step / "
+                "delete_step / reorder / wire / unwire / insert_into_parallel / "
+                "extract_from_parallel / rename_step) to a workflow's current "
+                "revision and emit a new Kumiho revision tagged 'published'. "
+                "Returns success, the new revision kref, applied_count, and a "
+                "list of SkippedItem entries with typed reasons (step_not_found, "
+                "duplicate_id, reference_broken, cycle_detected, validation_failed, "
+                "…) so the LLM can repair instead of re-prompt blind. Kumiho is "
+                "revision-native — there is no in-place edit; every change "
+                "produces a new immutable revision."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "workflow_kref": {
+                        "type": "string",
+                        "description": "kref of the workflow item, e.g. kref://Construct/Workflows/foo.workflow.",
+                    },
+                    "operations": {
+                        "type": "array",
+                        "description": "Ordered list of revision ops. Each item: {op, step_id?, new_id?, step_def?, target_step_id?, parallel_id?, position?, position_after?}.",
+                        "items": {"type": "object"},
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "Optional human-readable rationale stored on the new revision as a tag.",
+                    },
+                },
+                "required": ["workflow_kref", "operations"],
+            },
+        ),
+        Tool(
             name="create_workflow",
             description="Create a new workflow definition and save as YAML to ~/.construct/workflows/.",
             inputSchema={
@@ -2452,6 +2486,9 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "validate_workflow":
         from .tool_handlers.workflows import tool_validate_workflow
         return await tool_validate_workflow(args)
+    if name == "revise_workflow":
+        from .tool_handlers.workflow_revisions import tool_revise_workflow
+        return await tool_revise_workflow(args)
     if name == "create_workflow":
         from .tool_handlers.workflows import tool_create_workflow
         return await tool_create_workflow(args)
