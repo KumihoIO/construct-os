@@ -316,7 +316,8 @@ function WorkflowEditorInner({
   } | null>(null);
 
   // Prime the agent roster cache so the picker opens instantly on first click.
-  useAgentRoster();
+  // Roster is also read below to enrich `assign` writes with agentType/role.
+  const { agents: poolAgents } = useAgentRoster();
 
   const taskIdCounter = useRef(0);
   const connectingFrom = useRef<{ nodeId: string; handleType: string; handleId: string | null } | null>(null);
@@ -1584,8 +1585,11 @@ function WorkflowEditorInner({
         }
       />
 
-      {/* Shared agent picker — anchored from canvas badges or auto-opened
-          after creating a new agent step. Side panel mounts its own. */}
+      {/* Shared agent picker — single mount for the entire editor.
+          Opened by canvas badge clicks, auto-open after creating a new
+          agent step, AND the side panel "Choose agent…" button (which
+          dispatches OPEN_AGENT_PICKER_EVENT). Single source of truth so
+          two pickers can never be open simultaneously. */}
       <AgentPicker
         open={agentPickerState !== null}
         onOpenChange={(o) => {
@@ -1599,7 +1603,21 @@ function WorkflowEditorInner({
         anchorRect={agentPickerState?.anchorRect ?? null}
         onSelect={(name) => {
           if (!agentPickerState) return;
-          handleNodeUpdate(agentPickerState.taskId, { assign: name ?? '' });
+          if (name === null) {
+            handleNodeUpdate(agentPickerState.taskId, { assign: '' });
+            return;
+          }
+          // Enrich with agentType + role from the picked roster entry,
+          // matching the behaviour the side-panel mount used to have.
+          const picked = poolAgents.find((a) => a.item_name === name);
+          const current = nodes.find((n) => n.id === agentPickerState.taskId)?.data as
+            | TaskNodeData
+            | undefined;
+          handleNodeUpdate(agentPickerState.taskId, {
+            assign: name,
+            agentType: picked?.agent_type || current?.agentType || 'claude',
+            role: picked?.role || current?.role || 'coder',
+          });
         }}
       />
     </div>
