@@ -271,8 +271,6 @@ export default function AgentPicker({
                       data-active={isActive}
                       onMouseEnter={() => setActiveIndex(i)}
                       onClick={(e) => {
-                        // TODO: remove after click bug confirmed fixed
-                        console.log('[AgentPicker] click', agent.item_name);
                         e.preventDefault();
                         e.stopPropagation();
                         handlePick(agent.item_name);

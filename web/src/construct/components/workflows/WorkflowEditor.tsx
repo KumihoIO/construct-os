@@ -727,20 +727,11 @@ function WorkflowEditorInner({
   // ── Side panel updates ──────────────────────────────────────────────────
   const handleNodeUpdate = useCallback(
     (nodeId: string, updates: Partial<TaskNodeData>) => {
-      // TODO: remove after assignment bug confirmed fixed
-      console.log('[handleNodeUpdate] called', { id: nodeId, partial: updates });
-      setNodes((nds) => {
-        // TODO: remove after assignment bug confirmed fixed
-        console.log(
-          '[handleNodeUpdate] node found?',
-          !!nds.find((n) => n.id === nodeId),
-        );
-        return nds.map((n) =>
+      setNodes((nds) =>
+        nds.map((n) =>
           n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n,
-        );
-      });
-      // TODO: remove after assignment bug confirmed fixed
-      console.log('[handleNodeUpdate] setNodes dispatched');
+        ),
+      );
     },
     [setNodes],
   );
@@ -1613,12 +1604,6 @@ function WorkflowEditorInner({
         }
         anchorRect={agentPickerState?.anchorRect ?? null}
         onSelect={(name) => {
-          // TODO: remove after assignment bug confirmed fixed
-          console.log('[AgentPicker] onSelect fired', {
-            name,
-            taskId: agentPickerState?.taskId,
-            hasState: !!agentPickerState,
-          });
           if (!agentPickerState) return;
           if (name === null) {
             handleNodeUpdate(agentPickerState.taskId, { assign: '' });
