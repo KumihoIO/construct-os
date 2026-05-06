@@ -77,14 +77,22 @@ class ConstructGatewayClient:
         *,
         version: str = "1.0",
         tags: list[str] | None = None,
-    ) -> bool:
+    ) -> str | None:
         """Register a workflow definition with the gateway REST API.
 
         This syncs disk-saved workflows to Kumiho so the dashboard can see them.
-        Returns True if the workflow was registered successfully.
+        Returns the workflow item kref on success (e.g. ``kref://Construct/Workflows/foo.workflow``)
+        and ``None`` on any failure. Callers that only care about success/failure
+        can use ``bool(kref)`` — ``None`` is falsy, a non-empty kref is truthy.
+
+        Note: the Rust gateway endpoint creates a NEW revision and tags it
+        ``published`` on every call. To get the revision_kref the caller
+        should query Kumiho for the latest published revision of the returned
+        item kref (this client deliberately stays thin and avoids Kumiho SDK
+        coupling).
         """
         if not self._available:
-            return False
+            return None
         try:
             body: dict[str, Any] = {
                 "name": name,
@@ -101,13 +109,22 @@ class ConstructGatewayClient:
                     headers=self._headers(),
                 )
                 if resp.status_code in (200, 201):
-                    _log(f"Workflow '{name}' registered with gateway")
-                    return True
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        data = {}
+                    item_kref = ""
+                    if isinstance(data, dict):
+                        wf = data.get("workflow") or {}
+                        if isinstance(wf, dict):
+                            item_kref = str(wf.get("kref", "") or "")
+                    _log(f"Workflow '{name}' registered with gateway (kref={item_kref or '?'})")
+                    return item_kref or None
                 _log(f"Gateway register_workflow {resp.status_code}: {resp.text[:200]}")
-                return False
+                return None
         except Exception as e:
             _log(f"Gateway register_workflow failed: {e}")
-            return False
+            return None
 
     async def get_agents(self, include_deprecated: bool = False) -> list[dict[str, Any]] | None:
         """List pool agents from the gateway.
