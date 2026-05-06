@@ -6,6 +6,7 @@ mod gemini_capabilities;
 mod install_sidecars_kumiho_memory;
 mod kumiho_prompt_tool_contract;
 mod no_legacy_memory_tool_advertisements;
+mod operator_prompt_tool_contract;
 mod otel_dependency_feature_regression;
 mod provider_resolution;
 mod provider_schema;
