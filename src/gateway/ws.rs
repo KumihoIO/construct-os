@@ -425,6 +425,20 @@ async fn handle_socket(
     }
 }
 
+/// Extract the Architect's `<editor-state>...</editor-state>` block from a
+/// `page_context` string, if present.  The Architect frontend embeds this
+/// block on every chat turn so the LLM sees the current YAML and the
+/// agent's runtime guard knows to hide workflow persistence tools.  Returns
+/// `None` for non-Architect chats (no marker present) or malformed input
+/// (open tag without a matching close tag).
+fn architect_editor_state_block(page: &str) -> Option<String> {
+    let open = "<editor-state>";
+    let close = "</editor-state>";
+    let start = page.find(open)?;
+    let end = page[start..].find(close)? + start + close.len();
+    Some(page[start..end].to_string())
+}
+
 /// Build a context-aware system hint based on the dashboard page the user is viewing.
 ///
 /// Returns `None` for unknown pages or the main chat — only Agent Pool and
@@ -739,6 +753,14 @@ async fn process_chat_message(
 
     let content_owned = if let Some(hint) = page_context.and_then(page_context_hint) {
         format!("{hint}{content_with_attachments}")
+    } else if let Some(architect_block) = page_context.and_then(architect_editor_state_block) {
+        // Architect mode: embed the editor-state block so (a) the LLM sees
+        // the editor's current YAML as documented in the Architect system
+        // preface, and (b) the agent loop's runtime tool guard can detect
+        // Architect mode via the `<editor-state>` substring and strip the
+        // workflow persistence tools from the spec list. Regular Operator
+        // chats never carry the marker, so this branch is a no-op for them.
+        format!("{architect_block}\n\n{content_with_attachments}")
     } else {
         content_with_attachments
     };
@@ -955,5 +977,25 @@ mod tests {
             "construct.v1, bearer.zc_tok, other".parse().unwrap(),
         );
         assert_eq!(extract_ws_token(&headers, None), Some("zc_tok"));
+    }
+
+    #[test]
+    fn architect_editor_state_block_extracts_marker_from_page_context() {
+        // Mirrors what `web/src/construct/components/workflows/ArchitectPanel.tsx`
+        // sends as `page_context` on every Architect chat turn.
+        let page_context = "v2:workflow_editor:architect\n<editor-state>\n  <workflow_name>foo</workflow_name>\n  <current_yaml>\n    name: foo\n  </current_yaml>\n</editor-state>";
+        let block = architect_editor_state_block(page_context).expect("marker present");
+        assert!(block.starts_with("<editor-state>"));
+        assert!(block.ends_with("</editor-state>"));
+        assert!(block.contains("<workflow_name>foo</workflow_name>"));
+    }
+
+    #[test]
+    fn architect_editor_state_block_returns_none_for_regular_chats() {
+        assert!(architect_editor_state_block("agent_pool").is_none());
+        assert!(architect_editor_state_block("").is_none());
+        assert!(architect_editor_state_block("some random text").is_none());
+        // Open without close is malformed and must not match.
+        assert!(architect_editor_state_block("<editor-state>oops").is_none());
     }
 }
