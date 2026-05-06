@@ -303,7 +303,7 @@ function WorkflowEditorInner({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteContext, setPaletteContext] = useState<
-    Pick<AddStepDetail, 'position' | 'source'> | undefined
+    Pick<AddStepDetail, 'position' | 'source' | 'target'> | undefined
   >(undefined);
   const [changeTypeFor, setChangeTypeFor] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -427,6 +427,7 @@ function WorkflowEditorInner({
       };
 
       // If a source was provided, also create an edge from source → new node.
+      // If a target was provided (reverse drop), create an edge new node → target.
       let newEdge: Edge | null = null;
       if (detail.source?.taskId) {
         const handle = detail.source.handle ?? null;
@@ -448,12 +449,43 @@ function WorkflowEditorInner({
             ? { label: handle, labelStyle: { fill: edgeColor, fontSize: 10, fontWeight: 600 } }
             : {}),
         };
+      } else if (detail.target?.taskId) {
+        const edgeStyle = GATE_EDGE_STYLES.default;
+        const edgeColor = edgeStyle.stroke;
+        newEdge = {
+          id: `${id}->${detail.target.taskId}`,
+          source: id,
+          target: detail.target.taskId,
+          sourceHandle: null,
+          type: 'default',
+          animated: true,
+          selectable: true,
+          interactionWidth: 20,
+          style: edgeStyle,
+          markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
+        };
       }
 
       setNodes((nds) => {
-        if (newEdge && !newEdge.sourceHandle) {
-          // Bump dependency count for the new node
+        if (newEdge && !newEdge.sourceHandle && newEdge.target === id) {
+          // Forward drop: bump dependency count for the new node.
           newNode.data = { ...newNode.data, dependencyCount: 1 };
+        }
+        // Reverse drop: bump dependency count on the original target.
+        if (newEdge && newEdge.source === id && newEdge.target !== id) {
+          return nds
+            .map((n) =>
+              n.id === newEdge!.target
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      dependencyCount: (n.data as TaskNodeData).dependencyCount + 1,
+                    },
+                  }
+                : n,
+            )
+            .concat(newNode);
         }
         return [...nds, newNode];
       });
@@ -662,14 +694,23 @@ function WorkflowEditorInner({
       const clientY = touch ? touch.clientY : (event as MouseEvent).clientY;
       const position = screenToFlowPosition({ x: clientX, y: clientY });
 
-      // Only "from source" handles auto-wire the new node as a downstream
-      // dependency. Reverse drops (target → empty) are out of P0 scope.
-      if (from.handleType !== 'source') return;
-
-      setPaletteContext({
-        position,
-        source: { taskId: from.nodeId, handle: from.handleId as 'true' | 'false' | null },
-      });
+      // Forward: source-handle drop → new node is wired AS A DOWNSTREAM
+      // dependency of the dragged-from node (source → new).
+      // Reverse: target-handle drop → new node is wired AS THE UPSTREAM
+      // dependency of the dragged-from node (new → target).
+      if (from.handleType === 'source') {
+        setPaletteContext({
+          position,
+          source: { taskId: from.nodeId, handle: from.handleId as 'true' | 'false' | null },
+        });
+      } else if (from.handleType === 'target') {
+        setPaletteContext({
+          position,
+          target: { taskId: from.nodeId },
+        });
+      } else {
+        return;
+      }
       setChangeTypeFor(null);
       setPaletteOpen(true);
     },

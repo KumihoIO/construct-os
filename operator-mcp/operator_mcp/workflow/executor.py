@@ -994,10 +994,14 @@ async def _exec_email(step: StepDef, state: WorkflowState) -> StepResult:
             error=f"Email send timed out after {cfg.timeout}s",
         )
     except Exception as exc:
+        # Don't echo the raw exception to step output — smtplib can include
+        # server-returned text in some edge cases. Log the full repr for
+        # operator inspection; surface a generic message to the workflow.
+        _log(f"SMTP send: {exc!r}")
         return StepResult(
             step_id=step.id,
             status="failed",
-            error=f"SMTP send failed: {exc}"[:2000],
+            error="SMTP send failed (see logs)",
         )
 
     output_data["sent"] = True

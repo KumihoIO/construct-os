@@ -496,11 +496,14 @@ pub async fn handle_update_agent(
             Json(serde_json::json!({ "agent": agent })).into_response()
         }
         None => {
-            // Item was found (revision succeeded) but not in list — build a minimal response
+            // Item was found (revision succeeded) but not in list — build a minimal response.
+            // `item_name` is the slug (kref-safe identifier), not the human display
+            // name; mirror the create handler's slugify(body.name) here so this rare
+            // fallback path can't drop a "Pretty Name" string into a slug field.
             let fallback = ItemResponse {
                 kref: kref.clone(),
                 name: body.name.clone(),
-                item_name: body.name.clone(),
+                item_name: slugify(&body.name),
                 kind: "agent".to_string(),
                 deprecated: false,
                 created_at: None,

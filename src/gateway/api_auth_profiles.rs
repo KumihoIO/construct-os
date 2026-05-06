@@ -13,14 +13,16 @@
 
 use super::AppState;
 use super::api::require_auth;
+use super::client_key_from_request;
 use crate::auth::profiles::{AuthProfile, AuthProfileKind, profile_id};
 use axum::{
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 const SERVICE_TOKEN_HEADER: &str = "X-Construct-Service-Token";
 
@@ -139,14 +141,44 @@ pub struct CreateAuthProfileBody {
 /// same provider+name already exists. The token is encrypted by the
 /// underlying `AuthProfilesStore` before persist; the response never
 /// echoes it back.
+///
+/// Rate-limited via the shared `AuthRateLimiter` (see `auth_rate_limit.rs`,
+/// 10 attempts per 60s window per peer IP, then a 5-minute lockout). The
+/// 409-on-duplicate response is otherwise a weak `{provider, profile_name}`
+/// enumeration oracle. Loopback peers are exempt — the limiter only
+/// trusts the socket peer, never `X-Forwarded-For`.
 pub async fn handle_create_auth_profile(
     State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(body): Json<CreateAuthProfileBody>,
 ) -> impl IntoResponse {
     if let Err(e) = require_auth(&state, &headers) {
         return e.into_response();
     }
+
+    // Rate-limit before any work — applies even to authenticated callers
+    // because the duplicate-detection response (409) is a side-channel.
+    let rate_key = client_key_from_request(Some(peer_addr), &headers, state.trust_forwarded_headers);
+    let peer_is_loopback = peer_addr.ip().is_loopback();
+    if let Err(e) = state
+        .auth_limiter
+        .check_rate_limit(&rate_key, peer_is_loopback)
+    {
+        tracing::warn!("auth-profiles create: rate limit exceeded for {rate_key}");
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "error": format!("Too many create attempts. Try again in {}s.", e.retry_after_secs),
+                "retry_after": e.retry_after_secs,
+                "code": "auth_profile_rate_limited"
+            })),
+        )
+            .into_response();
+    }
+    state
+        .auth_limiter
+        .record_attempt(&rate_key, peer_is_loopback);
 
     // Trim early so empty-after-trim is treated as missing.
     let provider = body.provider.trim().to_string();

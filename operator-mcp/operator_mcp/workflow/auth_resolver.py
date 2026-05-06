@@ -7,6 +7,11 @@ service token written to ``~/.construct/service-token`` at gateway startup.
 Failure modes are mapped to a structured ``auth_resolve_failed`` error so
 step executors can fail fast with a meaningful reason instead of leaking
 HTTP plumbing into workflow output.
+
+Configuration:
+    CONSTRUCT_AUTH_RESOLVE_TIMEOUT — float seconds for the urlopen call to
+        the gateway resolve endpoint. Defaults to 10.0. Useful in slow CI
+        environments or when running through a constrained loopback proxy.
 """
 from __future__ import annotations
 
@@ -32,6 +37,16 @@ class AuthResolveError(Exception):
     def __init__(self, message: str, code: str = "auth_resolve_failed") -> None:
         super().__init__(message)
         self.code = code
+
+
+def _resolve_timeout() -> float:
+    """Return the urlopen timeout for the gateway resolve call (seconds)."""
+    raw = os.environ.get("CONSTRUCT_AUTH_RESOLVE_TIMEOUT", "")
+    try:
+        value = float(raw) if raw else 10.0
+    except ValueError:
+        return 10.0
+    return value if value > 0 else 10.0
 
 
 def _gateway_url() -> str:
@@ -88,7 +103,7 @@ def _do_resolve_blocking(profile_id: str) -> dict[str, Any]:
         },
     )
     try:
-        with urlopen(req, timeout=10) as resp:
+        with urlopen(req, timeout=_resolve_timeout()) as resp:
             body = resp.read()
             try:
                 return json.loads(body.decode("utf-8"))
