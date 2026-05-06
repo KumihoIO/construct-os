@@ -1864,6 +1864,28 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="get_workflow_metadata",
+            description=(
+                "Return the editor-relevant primitives a workflow can use: step types "
+                "(with config-field schemas + example YAML), pool agents, auth profiles, "
+                "skills, and channels. Use before proposing a workflow revision so step "
+                "types, agent slugs, and skill IDs are grounded in what's available."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Categories to return. Default: all of "
+                            "['step_types', 'agents', 'auth_profiles', 'skills', 'channels']."
+                        ),
+                    },
+                },
+            },
+        ),
+        Tool(
             name="system_dashboard",
             description=(
                 "Unified system health dashboard. Shows active agents, workflows, cost summary, "
@@ -2499,6 +2521,9 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
         else:
             return {"valid": False, "errors": [{"message": "workflow or workflow_def required"}]}
         return dry_run_workflow(wf, inputs)
+    if name == "get_workflow_metadata":
+        from .tool_handlers.workflow_discovery import tool_get_workflow_metadata
+        return await tool_get_workflow_metadata(args)
     if name == "system_dashboard":
         from .tool_handlers.dashboard import tool_system_dashboard
         return await tool_system_dashboard(args)

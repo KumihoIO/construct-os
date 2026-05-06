@@ -109,6 +109,106 @@ class ConstructGatewayClient:
             _log(f"Gateway register_workflow failed: {e}")
             return False
 
+    async def get_agents(self, include_deprecated: bool = False) -> list[dict[str, Any]] | None:
+        """List pool agents from the gateway.
+
+        Returns the ``agents`` array from ``GET /api/agents`` (each entry has
+        ``name``, ``item_name``, ``agent_type``, ``role``, ``expertise``,
+        ``identity``, etc.) or ``None`` if the gateway is unreachable.
+        """
+        if not self._available:
+            return None
+        try:
+            params = {
+                "include_deprecated": "true" if include_deprecated else "false",
+                "page": "1",
+                "per_page": "50",  # gateway caps per_page at 50
+            }
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.gateway_url}/api/agents",
+                    params=params,
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data.get("agents", []) if isinstance(data, dict) else []
+        except Exception as e:
+            _log(f"Gateway agents query failed: {e}")
+            return None
+
+    async def get_auth_profiles(self) -> list[dict[str, Any]] | None:
+        """List auth profile metadata from the gateway.
+
+        Returns metadata-only summaries (no token bytes) from
+        ``GET /api/auth/profiles``, or ``None`` if the gateway is
+        unreachable.
+        """
+        if not self._available:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.gateway_url}/api/auth/profiles",
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data.get("profiles", []) if isinstance(data, dict) else []
+        except Exception as e:
+            _log(f"Gateway auth-profiles query failed: {e}")
+            return None
+
+    async def get_skills(self, include_deprecated: bool = False) -> list[dict[str, Any]] | None:
+        """List skills from the gateway.
+
+        Returns the ``skills`` array from ``GET /api/skills`` (each entry has
+        ``name``, ``description``, etc.) or ``None`` if the gateway is
+        unreachable.
+        """
+        if not self._available:
+            return None
+        try:
+            params = {
+                "include_deprecated": "true" if include_deprecated else "false",
+                "page": "1",
+                "per_page": "50",
+            }
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.gateway_url}/api/skills",
+                    params=params,
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data.get("skills", []) if isinstance(data, dict) else []
+        except Exception as e:
+            _log(f"Gateway skills query failed: {e}")
+            return None
+
+    async def get_channels(self) -> list[dict[str, Any]] | None:
+        """List configured channels from the gateway.
+
+        Returns the ``channels`` array from ``GET /api/channels`` (each entry
+        has ``name``, ``type``/``kind``, etc.) or ``None`` if the gateway is
+        unreachable.
+        """
+        if not self._available:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.gateway_url}/api/channels",
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data.get("channels", []) if isinstance(data, dict) else []
+        except Exception as e:
+            _log(f"Gateway channels query failed: {e}")
+            return None
+
     async def push_channel_event(self, event: dict[str, Any]) -> bool:
         """Push a structured channel event to the gateway for broadcast.
 
