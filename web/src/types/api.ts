@@ -445,6 +445,22 @@ export interface ReviseWorkflowResponse {
   errors: string[];
 }
 
+/** Mirrors `RevisionSummary` in `src/gateway/api_architect.rs`. */
+export interface RevisionSummary {
+  /** Includes `?r=N` suffix. */
+  kref: string;
+  number: number;
+  created_at: string | null;
+  /** Includes `"published"` if currently published. */
+  tags: string[];
+  /** May include `"rationale": "..."` keys. Tolerate either presence or absence. */
+  metadata: Record<string, string>;
+}
+
+export interface RevisionListResponse {
+  revisions: RevisionSummary[];
+}
+
 // ---------------------------------------------------------------------------
 // Asset Browser (Kumiho)
 // ---------------------------------------------------------------------------

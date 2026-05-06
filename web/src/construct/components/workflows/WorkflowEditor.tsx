@@ -66,6 +66,7 @@ import StepConfigPanel from './StepConfigPanel';
 import StepTypePalette from './StepTypePalette';
 import AgentPicker from './AgentPicker';
 import ArchitectPanel from './ArchitectPanel';
+import RevisionHistoryStrip from './RevisionHistoryStrip';
 import { useAgentRoster } from './useAgentRoster';
 import {
   ADD_STEP_EVENT,
@@ -1470,6 +1471,13 @@ function WorkflowEditorInner({
                 </button>
               ) : null}
             </div>
+
+            {/* Revision history strip — only meaningful for saved workflows
+                (architect/revisions endpoint requires a kref). Same gate as
+                the Architect button. */}
+            {workflow?.kref ? (
+              <RevisionHistoryStrip workflowKref={workflow.kref} />
+            ) : null}
 
             {/* Canvas + side YAML */}
             <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
