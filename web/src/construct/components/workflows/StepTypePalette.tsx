@@ -193,67 +193,77 @@ export default function StepTypePalette({
                         value={`${step.label} ${step.type} ${step.description} ${step.searchTags.join(' ')}`}
                         keywords={[step.type, ...step.searchTags]}
                         onSelect={() => handlePick(step.type)}
-                        // cmdk 1.1 + React 19 + portal: cmdk's internal onPointerDown
-                        // preventDefault suppresses the subsequent click event, so a React
-                        // onClick handler never fires. onPointerDown runs BEFORE the
-                        // preventDefault and reliably reaches our handler. Keyboard
-                        // selection still goes through cmdk's onSelect above.
-                        onPointerDown={(e) => {
-                          // Only main-button pointers (left mouse / single touch / pen tip).
-                          if (e.button !== 0) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handlePick(step.type);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          cursor: 'pointer',
-                          color: 'var(--construct-text-primary)',
-                        }}
+                        asChild
                       >
-                        <span
+                        {/*
+                          cmdk's Item overwrites user-passed onClick with its
+                          own handler. With asChild, role/data-selected attrs
+                          forward onto this <button>, which fires a real native
+                          click that our onClick reliably hears. Keyboard Enter
+                          still goes through cmdk's onSelect above.
+                        */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handlePick(step.type);
+                          }}
                           style={{
-                            display: 'inline-flex',
+                            display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            background: 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
-                            color: 'var(--pc-accent)',
-                            flexShrink: 0,
+                            gap: 12,
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            cursor: 'pointer',
+                            color: 'var(--construct-text-primary)',
+                            width: '100%',
+                            textAlign: 'left',
+                            background: 'transparent',
+                            border: 0,
+                            font: 'inherit',
                           }}
                         >
-                          <Icon size={16} />
-                        </span>
-                        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>{step.label}</span>
                           <span
                             style={{
-                              fontSize: 11.5,
-                              color: 'var(--construct-text-secondary)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              background: 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
+                              color: 'var(--pc-accent)',
+                              flexShrink: 0,
                             }}
                           >
-                            {step.description}
+                            <Icon size={16} />
                           </span>
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                            fontSize: 10,
-                            color: 'var(--construct-text-faint)',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {step.type}
-                        </span>
+                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{step.label}</span>
+                            <span
+                              style={{
+                                fontSize: 11.5,
+                                color: 'var(--construct-text-secondary)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {step.description}
+                            </span>
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
+                              fontSize: 10,
+                              color: 'var(--construct-text-faint)',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {step.type}
+                          </span>
+                        </button>
                       </Command.Item>
                     );
                   })}

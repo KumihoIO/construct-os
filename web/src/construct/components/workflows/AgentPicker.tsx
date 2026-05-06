@@ -215,96 +215,107 @@ export default function AgentPicker({
                     ...(agent.expertise ?? []),
                   ]}
                   onSelect={() => handlePick(agent.item_name)}
-                  // cmdk 1.1 + React 19 + portal: cmdk's internal onPointerDown
-                  // preventDefault suppresses the subsequent click event, so a React
-                  // onClick handler never fires. onPointerDown runs BEFORE the
-                  // preventDefault and reliably reaches our handler. Keyboard
-                  // selection still goes through cmdk's onSelect above.
-                  onPointerDown={(e) => {
-                    // Only main-button pointers (left mouse / single touch / pen tip).
-                    if (e.button !== 0) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handlePick(agent.item_name);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 10px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    color: 'var(--construct-text-primary)',
-                  }}
+                  asChild
                 >
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 24,
-                      height: 24,
-                      borderRadius: 6,
-                      background: isSelected
-                        ? 'var(--construct-signal-network-soft)'
-                        : 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
-                      color: isSelected
-                        ? 'var(--construct-signal-network)'
-                        : 'var(--pc-accent)',
-                      flexShrink: 0,
+                  {/*
+                    cmdk's Item overwrites any user-passed onClick with its own
+                    handler (which dispatches the cmdk-item-select event). With
+                    asChild, cmdk's role/data-selected/cmdk-item attrs land on
+                    this <button>, but the button still fires a normal native
+                    click event that our onClick reliably hears. cmdk's onSelect
+                    (above) still drives the keyboard-Enter path.
+                  */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePick(agent.item_name);
                     }}
-                  >
-                    <Bot size={13} />
-                  </span>
-                  <span
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      minWidth: 0,
-                      flex: 1,
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      color: 'var(--construct-text-primary)',
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'transparent',
+                      border: 0,
+                      font: 'inherit',
                     }}
                   >
                     <span
                       style={{
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 24,
+                        height: 24,
+                        borderRadius: 6,
+                        background: isSelected
+                          ? 'var(--construct-signal-network-soft)'
+                          : 'color-mix(in srgb, var(--pc-accent-glow) 60%, transparent)',
+                        color: isSelected
+                          ? 'var(--construct-signal-network)'
+                          : 'var(--pc-accent)',
+                        flexShrink: 0,
                       }}
                     >
-                      {agent.item_name}
+                      <Bot size={13} />
                     </span>
-                    {agent.identity && (
+                    <span
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minWidth: 0,
+                        flex: 1,
+                      }}
+                    >
                       <span
                         style={{
-                          fontSize: 10.5,
-                          color: 'var(--construct-text-secondary)',
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {agent.identity}
+                        {agent.item_name}
                       </span>
-                    )}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
-                      fontSize: 9.5,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: 'var(--pc-hover)',
-                      color: 'var(--construct-text-faint)',
-                      flexShrink: 0,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                    }}
-                  >
-                    {agent.agent_type}
-                  </span>
+                      {agent.identity && (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            color: 'var(--construct-text-secondary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {agent.identity}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--pc-font-mono, ui-monospace, monospace)',
+                        fontSize: 9.5,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background: 'var(--pc-hover)',
+                        color: 'var(--construct-text-faint)',
+                        flexShrink: 0,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {agent.agent_type}
+                    </span>
+                  </button>
                 </Command.Item>
               );
             })}
