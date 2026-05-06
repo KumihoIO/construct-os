@@ -236,6 +236,18 @@ export default function AuthProfilePicker({
                       value={`${p.provider} ${p.profile_name} ${p.id} ${p.account_id ?? ''}`}
                       keywords={[p.kind, p.provider, p.account_id ?? '']}
                       onSelect={() => handlePick(p.id)}
+                      // cmdk 1.1 + React 19 + portal: cmdk's internal onPointerDown
+                      // preventDefault suppresses the subsequent click event, so a React
+                      // onClick handler never fires. onPointerDown runs BEFORE the
+                      // preventDefault and reliably reaches our handler. Keyboard
+                      // selection still goes through cmdk's onSelect above.
+                      onPointerDown={(e) => {
+                        // Only main-button pointers (left mouse / single touch / pen tip).
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handlePick(p.id);
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
