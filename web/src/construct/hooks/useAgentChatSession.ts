@@ -16,11 +16,30 @@ import type { ActivityEvent, ChatMessage } from '@/components/chat/types';
 import { operatorPhaseIcon, isTransientPhase, friendlyToolLabel } from '@/components/chat/chat-utils';
 import { copyToClipboard } from '@/construct/lib/clipboard';
 
+/** Tool-result event surfaced to consumers (e.g. ArchitectChatSurface
+ *  needs to react to `propose_workflow_yaml` results). The hook still
+ *  threads the same event into the activities feed for rendering — this
+ *  callback is purely a side-channel for consumers that need the raw
+ *  output. Fired once per `tool_result` WS message. */
+export interface ToolResultEvent {
+  /** Stable id minted at receive time, useful for de-dup in effects. */
+  id: string;
+  /** MCP tool name. */
+  name: string;
+  /** Raw `output` field from the WS message — typically a JSON string
+   *  but may be plain text. Consumers JSON.parse if they expect it. */
+  output: string;
+}
+
 interface UseAgentChatSessionOptions {
   sessionId: string;
   draftKey: string;
   pageContext?: string;
   onUserMessage?: (content: string) => void;
+  /** Fired once per `tool_result` WebSocket message. Lives alongside the
+   *  existing activity-feed integration; consumers that don't need raw
+   *  tool results can ignore it. */
+  onToolResult?: (event: ToolResultEvent) => void;
 }
 
 /** Server-issued attachment metadata plus an optional data-URL thumbnail
@@ -36,6 +55,7 @@ export function useAgentChatSession({
   draftKey,
   pageContext,
   onUserMessage,
+  onToolResult,
 }: UseAgentChatSessionOptions) {
   const { getDraft, setDraft, clearDraft: clearDraftStore } = useContext(DraftContext);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -67,6 +87,8 @@ export function useAgentChatSession({
   const activitiesRef = useRef<ActivityEvent[]>([]);
   const onUserMessageRef = useRef(onUserMessage);
   onUserMessageRef.current = onUserMessage;
+  const onToolResultRef = useRef(onToolResult);
+  onToolResultRef.current = onToolResult;
   const draftKeyRef = useRef(draftKey);
   draftKeyRef.current = draftKey;
 
@@ -270,6 +292,15 @@ export function useAgentChatSession({
             ];
             activitiesRef.current = nextActivities;
             setActivities(nextActivities);
+            // Side-channel for consumers that need the raw tool output
+            // (e.g. Architect's propose_workflow_yaml result → editor).
+            if (onToolResultRef.current && msg.name) {
+              onToolResultRef.current({
+                id: generateUUID(),
+                name: msg.name,
+                output: msg.output ?? '',
+              });
+            }
             break;
           }
 

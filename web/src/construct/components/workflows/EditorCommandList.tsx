@@ -4,7 +4,7 @@
  * Shows the Construct lockup and three primary actions with keyboard shortcuts:
  *   ⌘K — Add Step
  *   ⌘I — Import YAML
- *   ⌘G — Generate from prompt (disabled, P2)
+ *   ⌘G — Generate from prompt (opens Architect with a pre-filled input)
  */
 
 import { Plus, FileUp, Sparkles } from 'lucide-react';
@@ -13,6 +13,9 @@ import { appAssetPath } from '@/lib/basePath';
 interface Props {
   onAddStep: () => void;
   onImportYaml: () => void;
+  /** Open the Architect panel with a pre-filled "describe the workflow…"
+   *  prompt. When omitted, the row is disabled (legacy behavior). */
+  onGenerate?: () => void;
   /** Mac vs non-mac shortcut prefix; default detects from navigator. */
   modKey?: string;
 }
@@ -48,8 +51,14 @@ function ShortcutChip({ keys }: { keys: string[] }) {
   );
 }
 
-export default function EditorCommandList({ onAddStep, onImportYaml, modKey }: Props) {
+export default function EditorCommandList({
+  onAddStep,
+  onImportYaml,
+  onGenerate,
+  modKey,
+}: Props) {
   const mod = modKey ?? (isMac ? '⌘' : 'Ctrl');
+  const generateDisabled = !onGenerate;
 
   return (
     <div
@@ -120,28 +129,33 @@ export default function EditorCommandList({ onAddStep, onImportYaml, modKey }: P
 
           <button
             type="button"
-            disabled
-            title="Coming with Operator copilot (P2)"
-            style={{
-              ...commandRowStyle(),
-              opacity: 0.5,
-              cursor: 'not-allowed',
-            }}
+            onClick={onGenerate}
+            disabled={generateDisabled}
+            title={generateDisabled ? 'Coming with Operator copilot (P2)' : 'Open Architect with a prompt'}
+            style={
+              generateDisabled
+                ? { ...commandRowStyle(), opacity: 0.5, cursor: 'not-allowed' }
+                : commandRowStyle()
+            }
           >
             <span style={iconWrapStyle()}>
               <Sparkles size={14} />
             </span>
             <span style={{ flex: 1, textAlign: 'left' }}>Generate from prompt</span>
-            <span
-              style={{
-                fontSize: 10,
-                color: 'var(--construct-text-faint)',
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-              }}
-            >
-              soon
-            </span>
+            {generateDisabled ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: 'var(--construct-text-faint)',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                soon
+              </span>
+            ) : (
+              <ShortcutChip keys={[mod, 'G']} />
+            )}
           </button>
         </div>
 

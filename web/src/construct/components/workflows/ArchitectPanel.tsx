@@ -4,31 +4,22 @@
  * Slides in from the right of the workflow editor. Reuses
  * `useAgentChatSession` (the same WebSocket-streaming hook the dashboard
  * AssistantPanel uses) so the chat surface, tool-call cards, slash menu,
- * and history persistence all behave identically. The only differences:
+ * and history persistence all behave identically.
  *
- *   1. The panel's pageContext is namespaced as `v2:workflow_editor:architect`
- *      so the Operator can detect it server-side and compose the architect
- *      tools (`revise_workflow`, `get_workflow_metadata`, …) when answering.
- *   2. A scoped slash-command set: `/architect <description>` shows up in
- *      the autocomplete (because the menu is rendered with
- *      `scope='workflow_editor'`), other commands are filtered out unless
- *      flagged for that scope.
- *   3. The first message of every fresh session is a synthetic system
- *      preface with the current workflow's kref + name, so the Operator
- *      knows which workflow to revise without requiring the user to
- *      paste the kref.
+ * Architecture (per the architectural realignment):
  *
- * Stage B.1 deliberately does NOT call `/api/architect/revise` from the
- * client — the Operator does it via the registered MCP tool, and the
- * editor's existing `useWorkflowEvents` SSE subscription auto-applies the
- * resulting revision. That keeps this panel a pure chat surface.
+ *   - Architect generates YAML in memory and pipes it into the editor's
+ *     `definition` state via the `onYamlProposed` callback.
+ *   - The existing yamlSync flow re-parses → DAG canvas re-renders →
+ *     YAML pane updates.
+ *   - Save is user-driven — toolbar Save creates the Kumiho revision when
+ *     the user decides.
+ *   - When base_yaml is non-empty, Architect MERGES (extends with new
+ *     steps), it does not overwrite.
  *
- * When `workflowKref` is null (the user has opened the editor on a fresh
- * canvas and not yet saved), the panel still mounts and the toolbar
- * button is still clickable — but the body renders a quiet "Save your
- * workflow first" inline state instead of the chat surface, and the
- * chat-surface hooks (which depend on the kref) are not called. The
- * chat surface is a sub-component so all its hooks remain unconditional.
+ * Architect must NEVER call `create_workflow` (disk-only) or
+ * `revise_workflow` / `register_workflow` (Kumiho-persisting). The system
+ * preface enforces this.
  */
 
 import {
@@ -39,7 +30,10 @@ import {
   useState,
 } from 'react';
 import { Check, Copy, Loader2, Send, Wand2, X } from 'lucide-react';
-import { useAgentChatSession } from '@/construct/hooks/useAgentChatSession';
+import {
+  useAgentChatSession,
+  type ToolResultEvent,
+} from '@/construct/hooks/useAgentChatSession';
 import {
   matchCommands,
   parseInput,
@@ -57,18 +51,33 @@ interface ArchitectPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** kref of the workflow currently open in the editor, or null when
-   *  the user hasn't saved the workflow yet. */
+   *  the user hasn't saved the workflow yet. Informational only — the
+   *  Architect no longer requires a kref to operate. */
   workflowKref: string | null;
   /** Display name — surfaced in the header badge and the context preface.
    *  Null when the workflow has no name yet. */
   workflowName: string | null;
+  /** The editor's current YAML (the `definition` string). Sent in
+   *  pageContext on each chat turn so Architect can use it as `base_yaml`
+   *  in `propose_workflow_yaml` calls. */
+  currentYaml: string;
+  /** Called when a `propose_workflow_yaml` tool result arrives with
+   *  valid YAML. The parent updates the editor's `definition` state and
+   *  re-parses to nodes/edges. */
+  onYamlProposed: (yaml: string, summary: string) => void;
+  /** When set on first open, pre-fill the chat input with this text.
+   *  The user reviews and can edit before sending — we never auto-send. */
+  initialPrompt?: string;
 }
 
-/** Stable session id per workflow kref. Persisted in sessionStorage so
- *  reopening the panel within the same tab continues the same chat
- *  thread; opening a different workflow gets its own. */
-function architectSessionIdFor(workflowKref: string): string {
-  const key = `construct.architect.session_id:${workflowKref}`;
+/** Stable session id. Persisted in sessionStorage so reopening the panel
+ *  within the same tab continues the same chat thread. Falls back to a
+ *  per-tab id when no kref is available (fresh canvas), so the user can
+ *  still chat with Architect before saving. */
+function architectSessionIdFor(workflowKref: string | null): string {
+  const key = workflowKref
+    ? `construct.architect.session_id:${workflowKref}`
+    : 'construct.architect.session_id:new';
   try {
     const existing = sessionStorage.getItem(key);
     if (existing) return existing;
@@ -79,71 +88,133 @@ function architectSessionIdFor(workflowKref: string): string {
     sessionStorage.setItem(key, fresh);
     return fresh;
   } catch {
-    return `arch-${workflowKref}`;
+    return `arch-${workflowKref ?? 'new'}`;
   }
 }
 
-/** Build the system-style preface that primes every new architect chat
- *  with the workflow context. Rendered as a single `operator`-role
- *  message at the top of the scrollback so the user can see what the
- *  Operator was told. */
-function buildContextPreface(workflowName: string, workflowKref: string): string {
+/** Build the system-style preface that primes every new Architect chat.
+ *  Forbids the persisting tools (`create_workflow`, `revise_workflow`,
+ *  `register_workflow`) — Architect's only proposal channel is
+ *  `propose_workflow_yaml`. */
+function buildContextPreface(workflowName: string): string {
   return [
-    `You are operating in Architect mode for workflow "${workflowName}" (kref: ${workflowKref}).`,
-    'You have access to MCP tools: revise_workflow, get_workflow_metadata, validate_workflow, list_workflows, get_workflow_status.',
-    'When the user describes a workflow change, propose operations and call revise_workflow.',
-    'On success, a new Kumiho revision is created and the editor picks it up live.',
-    'On SkippedItem[] errors (step_not_found, reference_broken, etc.), repair via additional ops.',
+    'You are the Architect for the Construct workflow editor.',
+    '',
+    'Your ONLY tool for proposing workflow YAML is `propose_workflow_yaml`.',
+    'DO NOT call `create_workflow` — that writes a separate file to disk that the user cannot see.',
+    'DO NOT call `revise_workflow` — that creates a Kumiho revision; persistence is the user\'s job, not yours.',
+    'DO NOT call `register_workflow` or `save_workflow_yaml` for the same reason.',
+    '',
+    'How to operate:',
+    '1. If the user describes a workflow, design it from the available primitives.',
+    '2. Use `get_workflow_metadata` first if you need to know what step types, agents, skills, or auth profiles are available.',
+    '3. Use `validate_workflow` if you want to sanity-check before submitting.',
+    '4. Construct the COMPLETE workflow YAML.',
+    '5. If `base_yaml` (the editor\'s current YAML, supplied via the editor-state context block on each user message) is non-empty, EXTEND it. Treat existing steps as fixed. Add new steps after the existing ones. Do NOT remove or modify existing steps unless the user explicitly asks.',
+    '6. Call `propose_workflow_yaml(proposed_yaml=<your YAML>, intent_summary=<one line>, base_yaml=<the current YAML or empty>)`.',
+    '7. The editor will receive your proposal and render it. The user reviews and clicks Save when ready.',
+    '',
+    `Current workflow name: ${workflowName || '(unnamed)'}`,
+    '',
+    'If validation fails (`valid: false` in the response), read the errors and try again.',
   ].join('\n');
 }
 
-/** Inline state shown when the user opens the panel before saving the
- *  workflow. The chat surface depends on `workflowKref` for session id,
- *  pageContext, and the context preface — none of those exist yet. */
-function SaveFirstState() {
-  return (
-    <div
-      style={{
-        padding: '32px 24px',
-        textAlign: 'center',
-        color: 'var(--pc-text-secondary)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        alignItems: 'center',
-      }}
-    >
-      <Wand2 size={28} style={{ color: 'var(--pc-accent)' }} />
-      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--pc-text-primary)' }}>
-        Save your workflow first
-      </div>
-      <div style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 320 }}>
-        Architect proposes revisions to a saved workflow. Give your workflow a
-        name and click Save in the toolbar — then come back and I'll help you
-        build it out.
-      </div>
-    </div>
-  );
+/** Compose the `pageContext` string sent on every chat turn. Includes the
+ *  editor's current YAML so Architect always sees the latest state — and
+ *  can pass it as `base_yaml` when calling `propose_workflow_yaml`. */
+function buildPageContext(
+  workflowName: string,
+  currentYaml: string,
+): string {
+  const indented = currentYaml
+    .split('\n')
+    .map((line) => `  ${line}`)
+    .join('\n');
+  return [
+    'v2:workflow_editor:architect',
+    '<editor-state>',
+    `  <workflow_name>${workflowName || '(unnamed)'}</workflow_name>`,
+    '  <current_yaml>',
+    indented || '    (empty)',
+    '  </current_yaml>',
+    '</editor-state>',
+  ].join('\n');
 }
 
-/** The live chat surface — all hooks that depend on `workflowKref` live
- *  here so the parent can mount this conditionally without violating
- *  the rules of hooks. */
+/** The live chat surface. */
 function ArchitectChatSurface({
   open,
   onOpenChange,
   workflowKref,
   workflowName,
+  currentYaml,
+  onYamlProposed,
+  initialPrompt,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workflowKref: string;
+  workflowKref: string | null;
   workflowName: string;
+  currentYaml: string;
+  onYamlProposed: (yaml: string, summary: string) => void;
+  initialPrompt?: string;
 }) {
   const sessionId = useMemo(() => architectSessionIdFor(workflowKref), [workflowKref]);
-  const pageContext = `v2:workflow_editor:architect:${workflowKref}`;
+  // pageContext recomputes on every YAML change so the next send carries
+  // the latest editor state. The hook reads pageContext via closure on
+  // each handleSend, so this is cheap — no WS reconnect.
+  const pageContext = useMemo(
+    () => buildPageContext(workflowName, currentYaml),
+    [workflowName, currentYaml],
+  );
+  const draftKey = workflowKref
+    ? `construct-architect:${workflowKref}`
+    : 'construct-architect:new';
   const { setTheme } = useTheme();
   const { setLocale } = useT();
+
+  // Track the last propose_workflow_yaml result we've already piped into
+  // the editor — without this, a re-render could re-fire onYamlProposed
+  // for the same proposal.
+  const lastProcessedResultId = useRef<string | null>(null);
+
+  const handleToolResult = useCallback(
+    (evt: ToolResultEvent) => {
+      if (evt.name !== 'propose_workflow_yaml') return;
+      if (lastProcessedResultId.current === evt.id) return;
+      lastProcessedResultId.current = evt.id;
+
+      let parsed: {
+        yaml?: string;
+        summary?: string;
+        valid?: boolean;
+      } | null = null;
+      try {
+        parsed = JSON.parse(evt.output);
+      } catch {
+        // Some servers stringify with extra wrapper text; try a best-effort
+        // brace-match. If that fails, just bail — the activity feed already
+        // showed the raw output.
+        const start = evt.output.indexOf('{');
+        const end = evt.output.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+          try {
+            parsed = JSON.parse(evt.output.slice(start, end + 1));
+          } catch {
+            parsed = null;
+          }
+        }
+      }
+      if (!parsed) return;
+      if (parsed.valid && typeof parsed.yaml === 'string' && parsed.yaml.trim()) {
+        onYamlProposed(parsed.yaml, parsed.summary ?? '');
+      }
+      // Validation failures already surface in the activity feed via the
+      // tool_result card — no extra UI needed here. The LLM should re-roll.
+    },
+    [onYamlProposed],
+  );
 
   const {
     activities,
@@ -163,34 +234,40 @@ function ArchitectChatSurface({
     typing,
   } = useAgentChatSession({
     sessionId,
-    draftKey: `construct-architect:${workflowKref}`,
+    draftKey,
     pageContext,
+    onToolResult: handleToolResult,
   });
 
   // Inject the context preface as a synthetic operator-role message the
-  // first time we observe an empty scrollback for this session. We can't
-  // do this in the hook's setup because it would race the history fetch;
-  // instead we wait for `messages.length === 0` to settle and then prepend
-  // once. The check is intentionally idempotent — restoring a session
-  // with prior history skips the inject and the existing preface (if any)
-  // is preserved.
+  // first time we observe an empty scrollback for this session.
   const prefacedRef = useRef<string | null>(null);
   useEffect(() => {
     if (prefacedRef.current === sessionId) return;
     if (!open) return;
     if (messages.length > 0) {
-      // Either history loaded or the user already started a turn — don't
-      // prepend a stale preface on top.
       prefacedRef.current = sessionId;
       return;
     }
-    appendSystemMessage(buildContextPreface(workflowName, workflowKref));
+    appendSystemMessage(buildContextPreface(workflowName));
     prefacedRef.current = sessionId;
-  }, [open, sessionId, messages.length, appendSystemMessage, workflowName, workflowKref]);
+  }, [open, sessionId, messages.length, appendSystemMessage, workflowName]);
 
-  // ── Slash menu plumbing — same pattern as AssistantPanel/ChatPane,
-  //    but scoped to `workflow_editor` so only `/architect` (and any
-  //    future scoped commands) show up in the autocomplete.
+  // Pre-fill the input on first open if `initialPrompt` was supplied.
+  // We only do this when the input is empty so a user's existing draft
+  // isn't clobbered.
+  const prefilledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (!initialPrompt) return;
+    if (prefilledRef.current === sessionId) return;
+    if (input.trim().length === 0) {
+      setInput(initialPrompt);
+    }
+    prefilledRef.current = sessionId;
+  }, [open, initialPrompt, sessionId, input, setInput]);
+
+  // ── Slash menu plumbing ────────────────────────────────────────────
   const composerRef = useRef<HTMLDivElement>(null);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
@@ -218,10 +295,6 @@ function ArchitectChatSurface({
     () => ({
       clearMessages,
       appendSystemMessage,
-      // The architect surface has no file picker / tab actions; provide
-      // no-op handlers so commands that *would* call them in the global
-      // scope (and slip in via a future scope-multiplexed command)
-      // degrade gracefully instead of crashing.
       openFilePicker: () => {},
       addTab: () => {},
       openNewTabMenu: () => {},
@@ -233,7 +306,7 @@ function ArchitectChatSurface({
         setTheme(theme);
       },
       submitMessage,
-      workflowKref,
+      workflowKref: workflowKref ?? undefined,
       workflowName,
     }),
     [
@@ -289,7 +362,7 @@ function ArchitectChatSurface({
     [slashMatches, slashCtx, setInput, inputRef, appendSystemMessage],
   );
 
-  // Auto-scroll to the bottom on new content, mirroring ChatPane.
+  // Auto-scroll to the bottom on new content.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -310,10 +383,7 @@ function ArchitectChatSurface({
 
   return (
     <>
-      {/* Connection status pill — sits as a slim row at the top of the
-          chat surface (the wrapper's header is layout-fixed and doesn't
-          have access to `connected`). Visually merges into the header
-          via shared border + surface background. */}
+      {/* Connection status pill */}
       <div
         className="flex items-center justify-end border-b px-3 py-1"
         style={{
@@ -376,7 +446,7 @@ function ArchitectChatSurface({
             <pre className="text-xs" style={{ color: 'var(--construct-text-faint)' }}>
 {`┌──────────────────────────────┐
 │  architect ready · describe  │
-│  a change to "${workflowName.length > 14 ? workflowName.slice(0, 12) + '…' : workflowName.padEnd(14)}" │
+│  the workflow you want       │
 └──────────────────────────────┘`}
             </pre>
             <p
@@ -591,12 +661,11 @@ export default function ArchitectPanel({
   onOpenChange,
   workflowKref,
   workflowName,
+  currentYaml,
+  onYamlProposed,
+  initialPrompt,
 }: ArchitectPanelProps) {
-  // Esc closes the panel — same affordance the dashboard AssistantPanel
-  // uses. Listener is only registered while open so it doesn't intercept
-  // Esc on other surfaces. Lives in the wrapper so it works regardless
-  // of whether the chat surface is mounted (e.g. in the Save-first
-  // state, the user can still hit Esc to dismiss).
+  // Esc closes the panel.
   useEffect(() => {
     if (!open) return undefined;
     const handler = (e: KeyboardEvent) => {
@@ -610,9 +679,7 @@ export default function ArchitectPanel({
 
   return (
     <>
-      {/* Scrim — taps outside the panel dismiss it. Stays below the panel
-          but above editor content so a stray click doesn't drop a noodle
-          on the React Flow canvas behind us. */}
+      {/* Scrim */}
       {open && (
         <div
           className="fixed inset-0 z-[80]"
@@ -678,18 +745,15 @@ export default function ArchitectPanel({
           </button>
         </div>
 
-        {workflowKref ? (
-          <ArchitectChatSurface
-            open={open}
-            onOpenChange={onOpenChange}
-            workflowKref={workflowKref}
-            workflowName={displayName}
-          />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <SaveFirstState />
-          </div>
-        )}
+        <ArchitectChatSurface
+          open={open}
+          onOpenChange={onOpenChange}
+          workflowKref={workflowKref}
+          workflowName={displayName}
+          currentYaml={currentYaml}
+          onYamlProposed={onYamlProposed}
+          initialPrompt={initialPrompt}
+        />
 
         {/* Footer attribution */}
         <div
