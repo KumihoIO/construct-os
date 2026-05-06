@@ -239,19 +239,13 @@ export default function AuthProfilePicker({
                       asChild
                     >
                       {/*
-                        cmdk's Item overwrites user-passed onClick with its own
-                        handler. With asChild, the role/data-selected/cmdk-item
-                        attrs forward onto this <button>, which fires a real
-                        native click that our onClick reliably hears. Keyboard
-                        Enter still goes through cmdk's onSelect above.
+                        asChild routes cmdk's Item through Radix Slot, which
+                        merges cmdk's wired onClick (calls onSelect) onto
+                        this button. Do NOT add another onClick here — Slot
+                        would chain both, firing handlePick twice.
                       */}
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handlePick(p.id);
-                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
