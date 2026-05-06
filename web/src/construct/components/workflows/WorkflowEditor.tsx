@@ -1471,18 +1471,25 @@ function WorkflowEditorInner({
               >
                 <Code size={14} />
               </button>
-              {workflow ? (
-                <button
-                  type="button"
-                  onClick={() => setArchitectPanelOpen((prev) => !prev)}
-                  className="construct-button"
-                  data-variant={architectPanelOpen ? 'primary' : undefined}
-                  title={`Architect (${isMac ? '⌘' : 'Ctrl'}+J)`}
-                  style={{ padding: '6px 10px' }}
-                >
-                  <Wand2 size={14} />
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => setArchitectPanelOpen((prev) => !prev)}
+                disabled={!workflow?.kref}
+                className="construct-button"
+                data-variant={architectPanelOpen ? 'primary' : undefined}
+                title={
+                  workflow?.kref
+                    ? `Architect (${isMac ? '⌘' : 'Ctrl'}+J)`
+                    : 'Save the workflow first to use Architect'
+                }
+                style={{
+                  padding: '6px 10px',
+                  opacity: workflow?.kref ? 1 : 0.5,
+                  cursor: workflow?.kref ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <Wand2 size={14} />
+              </button>
             </div>
 
             {/* Revision history strip — only meaningful for saved workflows
