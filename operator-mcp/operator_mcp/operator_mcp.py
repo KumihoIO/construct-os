@@ -1707,6 +1707,37 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="propose_workflow_yaml",
+            description=(
+                "Architect-only: validate a proposed workflow YAML and echo "
+                "it back with a structured response. NEVER persists to disk "
+                "or Kumiho — the editor frontend pipes the YAML into the "
+                "editor's in-memory definition state and the user decides "
+                "when to Save. Returns {yaml, summary, valid, errors, "
+                "warnings, added_step_ids, modified_step_ids, "
+                "removed_step_ids}. When base_yaml is provided, computes a "
+                "step-ID diff so the caller can render added/changed steps."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposed_yaml": {
+                        "type": "string",
+                        "description": "The complete proposed workflow YAML.",
+                    },
+                    "intent_summary": {
+                        "type": "string",
+                        "description": "One-line description of what the user asked for.",
+                    },
+                    "base_yaml": {
+                        "type": "string",
+                        "description": "Current editor YAML if extending; omit or empty for a fresh workflow.",
+                    },
+                },
+                "required": ["proposed_yaml"],
+            },
+        ),
+        Tool(
             name="create_workflow",
             description="Create a new workflow definition and save as YAML to ~/.construct/workflows/.",
             inputSchema={
@@ -2511,6 +2542,9 @@ async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "revise_workflow":
         from .tool_handlers.workflow_revisions import tool_revise_workflow
         return await tool_revise_workflow(args)
+    if name == "propose_workflow_yaml":
+        from .tool_handlers.architect_propose import tool_propose_workflow_yaml
+        return await tool_propose_workflow_yaml(args)
     if name == "create_workflow":
         from .tool_handlers.workflows import tool_create_workflow
         return await tool_create_workflow(args)

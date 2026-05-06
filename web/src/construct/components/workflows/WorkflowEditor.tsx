@@ -311,6 +311,9 @@ function WorkflowEditorInner({
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Architect chat panel — toggled by ⌘J or the Wand2 toolbar button.
   const [architectPanelOpen, setArchitectPanelOpen] = useState(false);
+  // When the empty-state "Generate from prompt" row opens the panel, this
+  // pre-fills the chat input. Cleared after the panel closes.
+  const [architectInitialPrompt, setArchitectInitialPrompt] = useState<string | undefined>(undefined);
   const [paletteContext, setPaletteContext] = useState<
     Pick<AddStepDetail, 'position' | 'source' | 'target'> | undefined
   >(undefined);
@@ -1059,6 +1062,41 @@ function WorkflowEditorInner({
     }, []),
   });
 
+  // ── Architect → editor pipe ─────────────────────────────────────────────
+  // When Architect proposes a YAML via `propose_workflow_yaml`, swap the
+  // canvas to the proposal. The user explicitly invoked Architect with the
+  // merge instruction in the system preface, so overwriting the in-memory
+  // graph is the expected behavior. Save remains user-driven — the toolbar
+  // Save button is still the only path that creates a Kumiho revision.
+  const handleYamlProposed = useCallback(
+    (newYaml: string, summary: string) => {
+      try {
+        const newTasks = parseWorkflowYaml(newYaml);
+        const newMeta = parseWorkflowMeta(newYaml);
+        const { nodes: rawNodes, edges: newEdges } = tasksToFlow(newTasks);
+        const laidOut = layoutNodes(rawNodes, newEdges);
+        setNodes(laidOut);
+        setEdges(newEdges);
+        setWorkflowMeta(newMeta);
+        if (newMeta.name) setName(newMeta.name);
+        if (newMeta.description) setDescription(newMeta.description);
+        taskIdCounter.current = newTasks.length;
+        setError(null);
+        // Reuse the remote-update pill UX — same affordance, different
+        // origin. Auto-dismisses after 4s via the existing effect.
+        setRemotePill({
+          publishedAt: summary || new Date().toISOString(),
+          expiresAt: Date.now() + 4000,
+        });
+      } catch (err) {
+        setWarning(
+          `Couldn't apply Architect proposal: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+    [setNodes, setEdges],
+  );
+
   // ── Save ────────────────────────────────────────────────────────────────
   // Awaits the parent's onSave and surfaces any rejection as an inline error.
   // Without this, server-side validation failures (e.g. shell step missing
@@ -1612,6 +1650,10 @@ function WorkflowEditorInner({
                   <EditorCommandList
                     onAddStep={() => openPalette()}
                     onImportYaml={openYamlPanel}
+                    onGenerate={() => {
+                      setArchitectInitialPrompt('Describe the workflow you want to build…');
+                      setArchitectPanelOpen(true);
+                    }}
                   />
                 )}
 
@@ -1679,14 +1721,20 @@ function WorkflowEditorInner({
         }
       />
 
-      {/* Architect — editor-scoped chat panel. Always mounted; when no
-          workflow.kref exists, the panel renders a Save-first inline
-          state instead of the chat surface. */}
+      {/* Architect — editor-scoped chat panel. Always mounted; works on
+          a fresh canvas (no kref required) because Architect now produces
+          YAML in memory instead of persisting Kumiho revisions. */}
       <ArchitectPanel
         open={architectPanelOpen}
-        onOpenChange={setArchitectPanelOpen}
+        onOpenChange={(o) => {
+          setArchitectPanelOpen(o);
+          if (!o) setArchitectInitialPrompt(undefined);
+        }}
         workflowKref={workflow?.kref ?? null}
         workflowName={workflow?.name ?? name ?? null}
+        currentYaml={currentYaml}
+        onYamlProposed={handleYamlProposed}
+        initialPrompt={architectInitialPrompt}
       />
 
       {/* Shared agent picker — single mount for the entire editor.
